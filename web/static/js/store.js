@@ -29,6 +29,42 @@ function emptyForm() {
  * 在 Vue setup() 中调用此函数，将返回值暴露给模板。
  */
 export function setupStore() {
+    // ─── 主题管理 ───
+    const theme = ref(localStorage.getItem('smp_theme') || 'system');
+    applyTheme(theme.value);
+
+    function applyTheme(t) {
+        const root = document.documentElement;
+        if (t === 'dark') {
+            root.dataset.theme = 'dark';
+        } else if (t === 'light') {
+            root.dataset.theme = 'light';
+        } else {
+            // 跟随系统
+            const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            root.dataset.theme = dark ? 'dark' : 'light';
+        }
+    }
+
+    function setTheme(t) {
+        theme.value = t;
+        localStorage.setItem('smp_theme', t);
+        applyTheme(t);
+        // 持久化到后端
+        fetch('/api/v1/settings/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: t }),
+        }).catch(() => {});
+    }
+
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (theme.value === 'system') {
+            document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+        }
+    });
+
     // ─── 核心数据状态 ───
     const servers = ref([]);
     const selectedServer = ref(null);
@@ -60,6 +96,48 @@ export function setupStore() {
     const softwareLoading = ref(false);          // 正在加载软件状态
     const softwareOperating = reactive({});      // { packageId: true } 正在安装/卸载中
     const softwareCategory = ref('all');         // 当前筛选分类
+
+    // ─── 网站图标 ───
+    const faviconTs = ref(Date.now());
+    const hasCustomFavicon = ref(false);
+
+    async function uploadFavicon(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 1024 * 1024) {
+            toastNotify('图标文件过大（最大 1MB）', true);
+            return;
+        }
+        try {
+            const resp = await fetch('/api/v1/settings/favicon', {
+                method: 'POST',
+                body: file,
+            });
+            if (resp.ok) {
+                faviconTs.value = Date.now();
+                hasCustomFavicon.value = true;
+                // 更新 head 中的 favicon
+                document.querySelector('link[rel="icon"]').href = '/api/v1/settings/favicon?' + faviconTs.value;
+                toastNotify('图标已更新');
+            } else {
+                toastNotify('上传失败', true);
+            }
+        } catch (err) {
+            toastNotify('上传失败: ' + err.message, true);
+        }
+    }
+
+    async function resetFavicon() {
+        try {
+            await fetch('/api/v1/settings/favicon', { method: 'DELETE' });
+            faviconTs.value = Date.now();
+            hasCustomFavicon.value = false;
+            document.querySelector('link[rel="icon"]').href = '/favicon.svg';
+            toastNotify('已恢复默认图标');
+        } catch (err) {
+            toastNotify('操作失败', true);
+        }
+    }
 
     // ─── 软件源管理状态 ───
     const sources = ref([]);
@@ -578,6 +656,8 @@ export function setupStore() {
     // ═══════════════════════════════════════════
 
     return {
+        // 主题与图标
+        theme, setTheme, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
         // 数据状态
         servers, selectedServer, serverStatus, info,
         // UI 状态

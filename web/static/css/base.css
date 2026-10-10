@@ -59,6 +59,45 @@
     --transition-spring: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ─── 暗色主题 ─── */
+[data-theme="dark"] {
+    --sidebar-bg: #0f172a;
+    --sidebar-bg-hover: #1e293b;
+    --sidebar-bg-active: #1e3a5f;
+    --sidebar-text: #e2e8f0;
+    --sidebar-text-dim: #94a3b8;
+    --sidebar-text-muted: #64748b;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-accent: #60a5fa;
+
+    --content-bg: #0f172a;
+    --card-bg: #1e293b;
+    --card-border: #334155;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+
+    --color-blue: #60a5fa;
+    --color-blue-light: #1e3a5f;
+    --color-green: #34d399;
+    --color-green-light: #064e3b;
+    --color-amber: #fbbf24;
+    --color-amber-light: #451a03;
+    --color-violet: #a78bfa;
+    --color-violet-light: #2e1065;
+    --color-red: #f87171;
+    --color-red-light: #450a0a;
+    --color-cyan: #22d3ee;
+
+    --status-ok: #34d399;
+    --status-error: #f87171;
+    --status-loading: #fbbf24;
+    --status-unknown: #64748b;
+}
+
 /* ─── 全局重置 ─── */
 *, *::before, *::after {
     box-sizing: border-box;

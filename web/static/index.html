@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Plane · 服务器管理</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <!-- 样式表：按 base → layout → components → states 顺序加载 -->
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/layout.css">
@@ -272,6 +273,33 @@
                             </div>
                         </div>
                     </div>
+                        <!-- 已安装软件 -->
+                        <div v-if="selectedServer && selectedServer !== 'srv_local' && softwareStatuses.length" style="margin-top:20px;">
+                            <h4 style="font-size:14px;font-weight:600;margin-bottom:12px;">已安装软件</h4>
+                            <div class="sw-status-grid">
+                                <div v-for="sw in softwareStatuses" :key="sw.package.id" class="sw-status-card" :class="{ installed: sw.installed }">
+                                    <span class="sw-status-icon">{{ sw.package.icon }}</span>
+                                    <div class="sw-status-info">
+                                        <strong>{{ sw.package.name }}</strong>
+                                        <small v-if="sw.installed">{{ sw.version || sw.package.version }}</small>
+                                        <small v-else>{{ sw.installable ? '可安装' : '不支持' }}</small>
+                                    </div>
+                                    <div class="sw-status-actions">
+                                        <template v-if="sw.installed">
+                                            <span class="sw-status-badge" :class="sw.status">{{ sw.status === 'running' ? '运行中' : sw.status === 'stopped' ? '已停止' : sw.status === 'none' ? '无服务' : '未知' }}</span>
+                                            <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'start')" :disabled="sw.status === 'running' || softwareOperating[sw.package.id]" title="启动">▶</button>
+                                            <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'stop')" :disabled="sw.status === 'stopped' || softwareOperating[sw.package.id]" title="停止">⏸</button>
+                                            <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'restart')" :disabled="softwareOperating[sw.package.id]" title="重启">↻</button>
+                                            <button class="sw-action-btn danger" @click="uninstallPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]" title="卸载">✗</button>
+                                        </template>
+                                        <template v-else-if="sw.installable">
+                                            <button class="primary-button small" @click="installPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]">{{ softwareOperating[sw.package.id] ? '安装中...' : '安装' }}</button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div v-else-if="loading" class="loading-state" style="padding:40px;">
                         <div class="loading-orbit"><span></span></div><h3>正在连接 {{ currentServerName }}</h3>
                     </div>
@@ -431,17 +459,44 @@
             </section>
 
             <!-- ═══ 系统设置视图 ═══ -->
-            <section v-if="activeMenu === 'settings'" class="placeholder-view">
-                <div class="placeholder-icon">⚙</div>
-                <h2>系统设置</h2>
-                <p>配置面板参数、用户权限、安全策略和系统偏好。</p>
-                <div class="placeholder-features">
-                    <div class="feature-card"><span>👤</span><div><strong>用户管理</strong><small>账户与权限</small></div></div>
-                    <div class="feature-card"><span>🔐</span><div><strong>安全设置</strong><small>密码策略与 2FA</small></div></div>
-                    <div class="feature-card"><span>🔔</span><div><strong>通知配置</strong><small>邮件与 Webhook</small></div></div>
-                    <div class="feature-card"><span>💾</span><div><strong>备份恢复</strong><small>配置与数据备份</small></div></div>
+            <section v-if="activeMenu === 'settings'" class="settings-view">
+                <div class="settings-section">
+                    <h3>外观主题</h3>
+                    <p class="settings-desc">选择界面主题模式</p>
+                    <div class="theme-cards">
+                        <div class="theme-card" :class="{ active: theme === 'light' }" @click="setTheme('light')">
+                            <span class="theme-icon">☀️</span>
+                            <strong>白天模式</strong>
+                            <small>明亮清爽的界面</small>
+                        </div>
+                        <div class="theme-card" :class="{ active: theme === 'dark' }" @click="setTheme('dark')">
+                            <span class="theme-icon">🌙</span>
+                            <strong>夜间模式</strong>
+                            <small>护眼的深色界面</small>
+                        </div>
+                        <div class="theme-card" :class="{ active: theme === 'system' }" @click="setTheme('system')">
+                            <span class="theme-icon">💻</span>
+                            <strong>跟随系统</strong>
+                            <small>自动适配系统主题</small>
+                        </div>
+                    </div>
                 </div>
-                <div class="placeholder-coming-soon">即将推出 · V1.0</div>
+                <div class="settings-section">
+                    <h3>网站图标</h3>
+                    <p class="settings-desc">自定义浏览器标签页图标（支持 SVG/PNG/ICO，最大 1MB）</p>
+                    <div class="favicon-upload">
+                        <div class="favicon-preview">
+                            <img :src="'/api/v1/settings/favicon?' + faviconTs" alt="当前图标">
+                        </div>
+                        <div class="favicon-actions">
+                            <label class="toolbar-button">
+                                📤 上传图标
+                                <input type="file" accept="image/*" hidden @change="uploadFavicon">
+                            </label>
+                            <button class="toolbar-button danger-text" @click="resetFavicon" :disabled="!hasCustomFavicon">↺ 恢复默认</button>
+                        </div>
+                    </div>
+                </div>
             </section>
         </div>
     </main>    <div class="modal-overlay" v-if="formMode" @click.self="closeForm">

@@ -60,6 +60,9 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	softwareHandler := api.NewSoftwareHandler(log, store, swStore)
 	softwareHandler.Register(mux)
 
+	settingsHandler := api.NewSettingsHandler(log, store.DB(), dataDir)
+	settingsHandler.Register(mux)
+
 	// --- WebSocket ---
 	hub := ws.NewHub(log)
 	go hub.Run()
