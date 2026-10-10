@@ -1,4 +1,4 @@
-.PHONY: all build build-linux build-linux-arm64 build-darwin build-windows run dev stop clean test fmt vet deps docker help
+.PHONY: all build build-linux build-linux-arm64 build-darwin build-windows run dev stop status restart clean test fmt vet deps docker help
 
 # ============================================================
 # 变量
@@ -8,6 +8,7 @@ MAIN_PATH     := ./cmd/server
 PORT          ?= 18080
 DOCKER_IMAGE  ?= smash-hq/server-management:latest
 LDFLAGS       := -w -s
+PID_FILE      := /tmp/$(BINARY_NAME).pid
 
 # ============================================================
 # 帮助
@@ -19,7 +20,7 @@ help:
 	@echo "用法: make <目标>"
 	@echo ""
 	@echo "目标:"
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  %-22s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # ============================================================
 # 构建
@@ -58,25 +59,67 @@ build-windows:
 	@echo "==> 编译完成: ./$(BINARY_NAME).exe"
 
 # ============================================================
-# 运行
+# 运行管理
 # ============================================================
-## run: 编译并启动服务
+## run: 编译并启动服务（前台运行）
 run: build
 	@echo "==> 启动服务 (端口 $(PORT))..."
 	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || true
 	@sleep 1
-	./$(BINARY_NAME)
+	@echo "==> 服务已启动: http://localhost:$(PORT)"
+	@./$(BINARY_NAME)
 
-## dev: 开发模式（直接 go run）
+## dev: 开发模式（直接 go run，无编译步骤）
 dev:
 	@echo "==> 开发模式启动 (端口 $(PORT))..."
 	go run $(MAIN_PATH)/main.go
 
-## stop: 停止服务
+## start: 编译并后台启动服务
+start: build
+	@echo "==> 后台启动服务 (端口 $(PORT))..."
+	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || true
+	@sleep 1
+	@nohup ./$(BINARY_NAME) > /tmp/$(BINARY_NAME).log 2>&1 &
+	@echo $$! > $(PID_FILE)
+	@echo "==> 服务已启动: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE))"
+
+## stop: 停止后台服务
 stop:
-	@echo "==> 停止服务 (端口 $(PORT))..."
-	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || echo "端口 $(PORT) 未占用"
-	@rm -f $(BINARY_NAME)
+	@if [ -f $(PID_FILE) ]; then \
+		PID=$$(cat $(PID_FILE)); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "==> 停止服务 (PID: $$PID)"; \
+			kill $$PID; \
+			rm -f $(PID_FILE); \
+			echo "==> 已停止"; \
+		else \
+			echo "==> 进程 $$PID 不存在"; \
+			rm -f $(PID_FILE); \
+		fi \
+	else \
+		echo "==> 通过端口 $(PORT) 查找服务..."; \
+		lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || echo "端口 $(PORT) 未占用"; \
+	fi
+
+## status: 查看服务运行状态
+status:
+	@if [ -f $(PID_FILE) ]; then \
+		PID=$$(cat $(PID_FILE)); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "==> 服务运行中 (PID: $$PID, 端口: $(PORT))"; \
+		else \
+			echo "==> 进程 $$PID 不存在（残留 PID 文件）"; \
+		fi \
+	elif lsof -ti:$(PORT) > /dev/null 2>&1; then \
+		echo "==> 端口 $(PORT) 被占用"; \
+	else \
+		echo "==> 服务未运行"; \
+	fi
+
+## restart: 重启服务
+restart: stop
+	@sleep 1
+	@$(MAKE) start
 
 # ============================================================
 # 质量
@@ -120,6 +163,6 @@ docker:
 clean:
 	@echo "==> 清理..."
 	rm -f $(BINARY_NAME) $(BINARY_NAME)-arm64 $(BINARY_NAME)-darwin $(BINARY_NAME).exe
-	rm -f /tmp/smp-server
+	rm -f $(PID_FILE) /tmp/$(BINARY_NAME).log /tmp/smp-server
 	rm -rf /tmp/go-build-*/ 2>/dev/null || true
 	@echo "==> 清理完成"

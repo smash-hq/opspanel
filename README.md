@@ -58,33 +58,33 @@ go mod download
 ### 启动服务
 
 ```bash
-# 方式一：使用 Makefile（推荐）
+# 方式一：前台运行（推荐开发使用，Ctrl+C 停止）
 make run
 
-# 方式二：使用启动脚本
-./start.sh
+# 方式二：后台运行
+make start
 
-# 方式三：直接运行
-go run ./cmd/server/
+# 方式三：开发模式（无编译步骤，直接 go run）
+make dev
 
-# 方式四：编译后运行
+# 方式四：手动编译后运行
 make build
 ./smp-server
 ```
 
 服务默认监听 `http://localhost:18080`，浏览器访问即可使用。
 
-### 停止服务
+### 停止与重启
 
 ```bash
-# Makefile
+# 停止服务
 make stop
 
-# 启动脚本
-./stop.sh
+# 查看运行状态
+make status
 
-# 直接 kill
-lsof -ti:18080 | xargs kill -9
+# 重启服务
+make restart
 ```
 
 ## 部署指南
@@ -322,37 +322,52 @@ server-management/
 ├── docs/                # 文档
 ├── data/                # 运行时数据（git ignored）
 │   └── servers.example.json  # 服务器配置示例
-├── Makefile             # 构建脚本
+├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建
-├── start.sh             # 启动脚本
-├── stop.sh              # 停止脚本
 ├── go.mod               # Go 模块定义
 └── README.md            # 本文件
 ```
 
 ## 开发指南
 
-```bash
-# 格式化代码
-make fmt
+### Makefile 目标一览
 
-# 静态检查
-make vet
+| 目标 | 说明 |
+|------|------|
+| `make run` | 编译并前台启动服务 |
+| `make start` | 编译并后台启动服务 |
+| `make stop` | 停止后台服务 |
+| `make restart` | 重启服务 |
+| `make status` | 查看运行状态 |
+| `make dev` | 开发模式（直接 go run） |
+| `make build` | 编译当前平台二进制 |
+| `make build-linux` | 编译 Linux amd64 二进制 |
+| `make build-linux-arm64` | 编译 Linux arm64 二进制（鲲鹏/飞腾） |
+| `make build-darwin` | 编译 macOS 二进制 |
+| `make build-windows` | 编译 Windows 二进制 |
+| `make test` | 运行测试 |
+| `make fmt` | 格式化代码 |
+| `make vet` | 静态检查 |
+| `make deps` | 下载并整理依赖 |
+| `make docker` | 构建 Docker 镜像 |
+| `make all` | 格式化 + 检查 + 编译 |
+| `make clean` | 清理构建产物 |
+| `make help` | 显示帮助信息 |
+
+### 常用工作流
+
+```bash
+# 开发循环
+make dev
+
+# 提交前检查
+make all
 
 # 运行测试
 make test
 
-# 开发模式（直接 go run）
-make dev
-
-# 下载并整理依赖
+# 下载依赖
 make deps
-
-# 完整构建（格式化 + 检查 + 编译）
-make all
-
-# 清理构建产物
-make clean
 ```
 
 ### 技术栈
