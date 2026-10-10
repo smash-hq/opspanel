@@ -1,0 +1,17 @@
+name: Feishu Notification
+
+on:
+  pull_request:
+    types: [opened, closed, reopened]
+  issues:
+    types: [opened, closed, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: leo-191/feishu-notify@v1
+        with:
+          feishu_webhook: ${{ secrets.FEISHU_WEBHOOK }}
