@@ -196,3 +196,8 @@ func (m *Manager) ServiceControl(srv *storage.Server, pkg *Package, action strin
 	m.log.Infow("service control", "pkg", pkg.ID, "action", action, "out", out)
 	return nil
 }
+
+// GetLog 获取软件运行日志。
+func (m *Manager) GetLog(srv *storage.Server, service string, lines int) (string, error) {
+	return m.remote.GetLog(toRemoteServer(srv), service, lines)
+}

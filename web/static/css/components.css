@@ -1405,3 +1405,50 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ─── 日志查看器 ─── */
+.log-modal {
+    max-width: 800px;
+}
+
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+}
+
+.log-toolbar select {
+    padding: 4px 8px;
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 4px;
+    background: var(--card-bg, #fff);
+    color: var(--text-primary, #111827);
+    font-size: 0.85rem;
+}
+
+.log-viewer {
+    max-height: 60vh;
+    overflow-y: auto;
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.log-viewer pre {
+    margin: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: #d4d4d4;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-loading {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-muted, #9ca3af);
+}

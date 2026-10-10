@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -96,6 +96,34 @@ export function setupStore() {
     const softwareLoading = ref(false);          // 正在加载软件状态
     const softwareOperating = reactive({});      // { packageId: true } 正在安装/卸载中
     const softwareCategory = ref('all');         // 当前筛选分类
+
+    // ─── 日志查看 ───
+    const logModalVisible = ref(false);
+    const logData = ref({ package: '', server: '', content: '' });
+    const logLoading = ref(false);
+    const logLines = ref(100);
+
+    async function viewLog(packageId) {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') {
+            toastNotify('请先选择远程服务器', true);
+            return;
+        }
+        logModalVisible.value = true;
+        logLoading.value = true;
+        logData.value = { package: packageId, server: selectedServer.value, content: '' };
+        try {
+            const data = await fetchSoftwareLog(selectedServer.value, packageId, logLines.value);
+            logData.value.content = data.log || '暂无日志';
+        } catch (err) {
+            logData.value.content = '获取日志失败: ' + err.message;
+        } finally {
+            logLoading.value = false;
+        }
+    }
+
+    function closeLogModal() {
+        logModalVisible.value = false;
+    }
 
     // ─── 网站图标 ───
     const faviconTs = ref(Date.now());
@@ -658,6 +686,8 @@ export function setupStore() {
     return {
         // 主题与图标
         theme, setTheme, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
+        // 日志查看
+        logModalVisible, logData, logLoading, logLines, viewLog, closeLogModal,
         // 数据状态
         servers, selectedServer, serverStatus, info,
         // UI 状态

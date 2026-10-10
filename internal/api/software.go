@@ -42,6 +42,9 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/software/packages", h.handlePackages)          // GET 列表 / POST 新增
 	mux.HandleFunc("/api/v1/software/packages/", h.handlePackageDetail)    // PUT 更新 / DELETE 删除
 
+	// 日志查看
+	mux.HandleFunc("/api/v1/software/logs", h.handleLogs)                  // GET ?server=&package=&lines=
+
 	// 镜像源管理
 	mux.HandleFunc("/api/v1/software/sources", h.handleSources)            // GET 列表 / POST 新增
 	mux.HandleFunc("/api/v1/software/sources/", h.handleSourceDetail)     // PUT 更新 / DELETE 删除
@@ -319,6 +322,52 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 	default:
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 	}
+}
+
+// --- 日志查看 ---
+
+// handleLogs: GET ?server=<id>&package=<id>&lines=<n> 获取软件运行日志。
+func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server")
+	pkgID := r.URL.Query().Get("package")
+	linesStr := r.URL.Query().Get("lines")
+	lines := 100
+	if linesStr != "" {
+		fmt.Sscanf(linesStr, "%d", &lines)
+	}
+	if lines <= 0 || lines > 1000 {
+		lines = 100
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	pkg, ok := software.Get(pkgID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "package not found")
+		return
+	}
+
+	log, err := h.manager.GetLog(srv, pkg.ID, lines)
+	if err != nil {
+		h.log.Errorw("get log failed", "server", serverID, "pkg", pkgID, "error", err)
+		Fail(w, http.StatusInternalServerError, 500, "failed to get log: "+err.Error())
+		return
+	}
+
+	OK(w, map[string]string{
+		"package": pkgID,
+		"server":  serverID,
+		"log":     log,
+	})
 }
 
 // --- 内部方法 ---

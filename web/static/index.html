@@ -289,6 +289,7 @@
                                             <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'start')" :disabled="sw.status === 'running' || softwareOperating[sw.package.id]" title="启动">▶</button>
                                             <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'stop')" :disabled="sw.status === 'stopped' || softwareOperating[sw.package.id]" title="停止">⏸</button>
                                             <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'restart')" :disabled="softwareOperating[sw.package.id]" title="重启">↻</button>
+                                            <button class="sw-action-btn" @click="viewLog(sw.package.id)" title="日志">📋</button>
                                             <button class="sw-action-btn danger" @click="uninstallPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]" title="卸载">✗</button>
                                         </template>
                                         <template v-else-if="sw.installable">
@@ -556,6 +557,33 @@
             <div class="modal-footer">
                 <button class="toolbar-button" @click="closeSourceForm">取消</button>
                 <button class="primary-button" @click="saveSource" :disabled="sourceSaving">{{ sourceSaving ? '保存中...' : '保存' }}</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 日志查看弹窗 -->
+    <div class="modal-overlay" v-if="logModalVisible" @click.self="closeLogModal">
+        <div class="modal log-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">LOG VIEWER</span><h3>{{ logData.package }} · 运行日志</h3></div>
+                <button class="icon-button" @click="closeLogModal" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-toolbar">
+                    <label>行数：
+                        <select v-model.number="logLines" @change="viewLog(logData.package)">
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                            <option :value="200">200</option>
+                            <option :value="500">500</option>
+                        </select>
+                    </label>
+                    <button class="toolbar-button small" @click="viewLog(logData.package)" :disabled="logLoading">↻ 刷新</button>
+                </div>
+                <div class="log-viewer" v-if="!logLoading">
+                    <pre>{{ logData.content || '暂无日志' }}</pre>
+                </div>
+                <div class="log-loading" v-else>加载中...</div>
             </div>
         </div>
     </div>

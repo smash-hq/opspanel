@@ -201,6 +201,42 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	return info, nil
 }
 
+// GetLog 获取软件运行日志（systemd 服务或 Docker 容器）。
+// lines 指定返回最后多少行，默认 100。
+func (rc *RemoteCollector) GetLog(srv *Server, service string, lines int) (string, error) {
+	if lines <= 0 {
+		lines = 100
+	}
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	// 优先尝试 journalctl（systemd 服务）
+	cmd := fmt.Sprintf("journalctl -u %s --no-pager -n %d 2>/dev/null", service, lines)
+	out := rc.RunOne(conn, cmd)
+	if out != "" {
+		return out, nil
+	}
+
+	// 回退：尝试 docker logs
+	cmd = fmt.Sprintf("docker logs --tail %d %s 2>/dev/null", lines, service)
+	out = rc.RunOne(conn, cmd)
+	if out != "" {
+		return out, nil
+	}
+
+	// 回退：尝试从 /var/log 读取
+	cmd = fmt.Sprintf("tail -n %d /var/log/%s*.log 2>/dev/null || tail -n %d /var/log/%s/%s.log 2>/dev/null", lines, service, lines, service, service)
+	out = rc.RunOne(conn, cmd)
+	if out != "" {
+		return out, nil
+	}
+
+	return "", fmt.Errorf("no log found for service: %s", service)
+}
+
 // TestConnection 测试 SSH 连接并返回远程主机基本信息。
 func (rc *RemoteCollector) TestConnection(srv *Server) (*system.HostInfo, error) {
 	conn, err := rc.Dial(srv)

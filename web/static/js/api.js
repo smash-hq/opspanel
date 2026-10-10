@@ -239,3 +239,13 @@ export async function deleteSource(id) {
     const json = await request(`/software/sources/${id}`, { method: 'DELETE' });
     if (json.code !== 0) throw new Error(json.message || '删除失败');
 }
+
+// --- 日志查看 ---
+
+/** 获取软件运行日志。 */
+export async function fetchSoftwareLog(serverId, packageId, lines) {
+    const params = new URLSearchParams({ server: serverId, package: packageId, lines: lines || 100 });
+    const json = await request(`/software/logs?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '获取日志失败');
+    return json.data;
+}
