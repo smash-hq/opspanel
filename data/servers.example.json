@@ -1,12 +1,12 @@
 [
   {
     "id": "srv_local",
-    "name": "本机",
+    "name": "localhost (linux/amd64)",
     "type": "local",
     "host": "127.0.0.1",
     "port": 22,
     "username": "root",
-    "auth_type": "key",
+    "auth_type": "local",
     "created_at": 1700000000
   },
   {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -20,7 +21,7 @@ type Server struct {
 	Host      string `json:"host"`       // IP 或域名
 	Port      int    `json:"port"`       // SSH 端口，默认 22
 	Username  string `json:"username"`   // SSH 用户名
-	AuthType  string `json:"auth_type"`  // "password" 或 "key"
+	AuthType  string `json:"auth_type"`  // "password" / "key" / "local"
 	Password  string `json:"password,omitempty"`
 	KeyPath   string `json:"key_path,omitempty"` // 私钥路径
 	CreatedAt int64  `json:"created_at"`         // Unix 秒
@@ -28,6 +29,9 @@ type Server struct {
 
 // DefaultSSHPort 是默认 SSH 端口。
 const DefaultSSHPort = 22
+
+// LocalServerID 是本机服务器的固定 ID。
+const LocalServerID = "srv_local"
 
 // Store 是服务器配置的内存缓存 + JSON 持久化。
 type Store struct {
@@ -37,6 +41,7 @@ type Store struct {
 }
 
 // NewStore 创建存储实例并加载已有配置。
+// 如果 data/servers.json 为空或不存在，自动生成本机服务器条目。
 // dataDir 是存放 servers.json 的目录。
 func NewStore(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
@@ -47,7 +52,18 @@ func NewStore(dataDir string) (*Store, error) {
 		servers:  make(map[string]*Server),
 		filePath: filepath.Join(dataDir, "servers.json"),
 	}
-	_ = s.load() // 首次启动可能无文件，忽略错误
+
+	// 加载已有配置（首次启动可能无文件，忽略错误）
+	_ = s.load()
+
+	// 如果为空，自动生成本机服务器并持久化
+	if len(s.servers) == 0 {
+		s.autoAddLocalServer()
+		if err := s.save(); err != nil {
+			return nil, fmt.Errorf("save default local server: %w", err)
+		}
+	}
+
 	return s, nil
 }
 
@@ -120,6 +136,10 @@ func (s *Store) Delete(id string) error {
 	if _, ok := s.servers[id]; !ok {
 		return os.ErrNotExist
 	}
+	// 不允许删除本机条目
+	if id == LocalServerID {
+		return fmt.Errorf("cannot delete local server entry")
+	}
 	delete(s.servers, id)
 	return s.save()
 }
@@ -132,6 +152,34 @@ func (s *Store) Count() int {
 }
 
 // --- 内部方法 ---
+
+// autoAddLocalServer 自动生成本机服务器条目。
+func (s *Store) autoAddLocalServer() {
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "localhost"
+	}
+
+	username := os.Getenv("USER")
+	if username == "" {
+		username = os.Getenv("USERNAME")
+	}
+	if username == "" {
+		username = "root"
+	}
+
+	srv := &Server{
+		ID:        LocalServerID,
+		Name:      fmt.Sprintf("%s (%s/%s)", hostname, runtime.GOOS, runtime.GOARCH),
+		Type:      "local",
+		Host:      "127.0.0.1",
+		Port:      DefaultSSHPort,
+		Username:  username,
+		AuthType:  "local",
+		CreatedAt: time.Now().Unix(),
+	}
+	s.servers[srv.ID] = srv
+}
 
 func (s *Server) clone() *Server {
 	cp := *s
@@ -162,7 +210,7 @@ func (s *Store) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, data, 0644)
+	return os.WriteFile(s.filePath, data, 0600)
 }
 
 // generateID 生成简单唯一 ID（时间戳 + 随机后缀）。

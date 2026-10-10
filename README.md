@@ -228,6 +228,28 @@ make build-darwin
 make build-windows
 ```
 
+## 数据存储
+
+服务器配置存储在 `data/servers.json`，启动时自动加载。
+
+**首次启动**：如果 `data/servers.json` 不存在或为空，系统会自动生成本机服务器条目并写入文件：
+
+```json
+{
+  "id": "srv_local",
+  "name": "myhost (linux/amd64)",
+  "type": "local",
+  "host": "127.0.0.1",
+  "port": 22,
+  "username": "root",
+  "auth_type": "local"
+}
+```
+
+- **本机条目**（`srv_local`）不可删除，保证面板始终有一个可监控的目标
+- 可通过 Web UI 添加远程服务器，配置会实时持久化到 JSON 文件
+- 文件权限为 `0600`，保护敏感凭证
+
 ## 配置
 
 ### 环境变量
@@ -321,6 +343,7 @@ server-management/
 │   └── README.md        # 前端文档
 ├── docs/                # 文档
 ├── data/                # 运行时数据（git ignored）
+│   ├── .gitkeep
 │   └── servers.example.json  # 服务器配置示例
 ├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建
