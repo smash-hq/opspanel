@@ -1,17 +1,72 @@
-name: Feishu Notification
+name: Feishu Notify All Events
 
 on:
-  pull_request:
-    types: [opened, closed, reopened]
-  issues:
-    types: [opened, closed, reopened]
+  # 代码相关 - 所有分支
   push:
-    branches: [main]
+  pull_request:
+    types: [opened, reopened, closed, synchronize]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  create:
+  delete:
+  fork:
+  public:
+  watch:
+    types: [started]
+
+  # Issue / Discussion
+  issues:
+    types: [opened, edited, milestoned, pinned, reopened, closed]
+  issue_comment:
+    types: [created, deleted]
+  discussion:
+    types: [created, edited, answered]
+  discussion_comment:
+    types: [created, deleted]
+
+  # Release
+  release:
+    types: [published]
+  registry_package:
+    types: [published]
+
+  # 项目管理
+  label:
+    types: [created, deleted]
+  milestone:
+    types: [opened, deleted]
+  project:
+    types: [created, deleted, reopened]
+  project_card:
+    types: [created, deleted]
+  project_column:
+    types: [created, deleted]
+
+  # CI/CD
+  check_run:
+    types: [rerequested, completed]
+  check_suite:
+    types: [completed]
+  deployment_status:
+  status:
+  page_build:
+
+  # 安全
+  branch_protection_rule:
+    types: [created, deleted]
+
+  # 定时推送 GitHub Trending（可选，不需要可删掉）
+  schedule:
+    - cron: '30 2 * * *'
 
 jobs:
-  notify:
+  send-event:
+    name: Webhook
     runs-on: ubuntu-latest
     steps:
-      - uses: leo-191/feishu-notify@v1
+      - uses: junka/feishu-bot-webhook-action@main
         with:
-          feishu_webhook: ${{ secrets.FEISHU_WEBHOOK }}
+          webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          signkey: ${{ secrets.FEISHU_BOT_SIGNKEY }}
