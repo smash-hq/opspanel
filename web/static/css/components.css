@@ -1452,3 +1452,143 @@
     text-align: center;
     color: var(--text-muted, #9ca3af);
 }
+
+/* ─── 节点详情 Tab ─── */
+.node-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--card-border, #e5e7eb);
+}
+
+.node-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary, #4b5563);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.node-tab:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+.node-tab.active {
+    color: var(--color-blue, #3b82f6);
+    border-bottom-color: var(--color-blue, #3b82f6);
+}
+
+.tab-icon {
+    font-size: 1rem;
+}
+
+.node-tab-content {
+    animation: fadeIn 0.2s ease;
+}
+
+/* ─── 空状态 ─── */
+.empty-state-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    text-align: center;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.6;
+}
+
+.empty-state-view h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary, #111827);
+}
+
+.empty-state-view p {
+    color: var(--text-muted, #9ca3af);
+    max-width: 400px;
+    margin-bottom: 20px;
+}
+
+.empty-state-hint {
+    padding: 12px 20px;
+    background: var(--color-blue-light, #eff6ff);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--color-blue, #3b82f6);
+}
+
+/* ─── 软件分类筛选 ─── */
+.sw-category-filter {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.sw-category-filter button {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    border: 1px solid var(--card-border, #e5e7eb);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #4b5563);
+    transition: all 0.15s;
+}
+
+.sw-category-filter button:hover {
+    border-color: var(--color-blue, #3b82f6);
+    color: var(--color-blue, #3b82f6);
+}
+
+.sw-category-filter button.active {
+    background: var(--color-blue, #3b82f6);
+    border-color: var(--color-blue, #3b82f6);
+    color: #fff;
+}
+
+.sw-section {
+    margin-bottom: 24px;
+}
+
+.sw-section h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary, #111827);
+}
+
+/* ─── 侧栏底部操作 ─── */
+.sidebar-footer-actions {
+    padding: 0 12px 8px;
+}
+
+.footer-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--text-muted, #9ca3af);
+    transition: all 0.15s;
+}
+
+.footer-btn:hover {
+    background: var(--sidebar-bg-hover, #1f2937);
+    color: var(--sidebar-text, #e5e7eb);
+}
+
+.footer-btn span {
+    font-size: 1rem;
+}

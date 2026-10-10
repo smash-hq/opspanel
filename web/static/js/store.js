@@ -73,7 +73,8 @@ export function setupStore() {
 
     // ─── UI 状态 ───
     const sidebarCollapsed = ref(false);
-    const activeMenu = ref('servers');        // "servers" | "software"
+    const activeMenu = ref('main');           // "main" | "settings"
+    const activeTab = ref('system');          // "system" | "software"
     const searchQuery = ref('');
     const activeFilter = ref('all');
     const loading = ref(false);
@@ -691,7 +692,7 @@ export function setupStore() {
         // 数据状态
         servers, selectedServer, serverStatus, info,
         // UI 状态
-        sidebarCollapsed, activeMenu, searchQuery, activeFilter, filters, loading, loadError, wsConnected,
+        sidebarCollapsed, activeMenu, activeTab, searchQuery, activeFilter, filters, loading, loadError, wsConnected,
         // 表单状态
         formMode, formError, saving, form, toast,
         // 连接测试
