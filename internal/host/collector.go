@@ -26,9 +26,9 @@ func NewCollector(log *logger.Logger, store *Store) *Collector {
 }
 
 // Snapshot 采集指定服务器的系统快照。
-// serverID 为空时默认采集本机。
+// serverID 为空或 srv_local 时采集本机。
 func (c *Collector) Snapshot(serverID string) (*system.Info, error) {
-	if serverID == "" || serverID == "local" {
+	if serverID == "" || serverID == LocalServerID {
 		return c.local.Snapshot()
 	}
 

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
 	"github.com/smash-hq/server-management/internal/system"
 )
@@ -123,10 +125,10 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 从查询参数获取订阅的服务器 ID
+	// 从查询参数获取订阅的服务器 ID，默认本机
 	serverID := r.URL.Query().Get("server")
 	if serverID == "" {
-		serverID = "local"
+		serverID = host.LocalServerID
 	}
 
 	c := &client{
@@ -200,7 +202,7 @@ func (c *client) readPump() {
 			c.hub.mu.Lock()
 			c.serverID = msg.Server
 			if c.serverID == "" {
-				c.serverID = "local"
+				c.serverID = host.LocalServerID
 			}
 			c.hub.mu.Unlock()
 			c.hub.log.Infow("ws client switched server", "server", msg.Server)

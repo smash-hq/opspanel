@@ -99,26 +99,20 @@
 
         <!-- 服务器列表 -->
         <div class="server-list" v-show="activeMenu === 'servers'" :class="{ compact: sidebarCollapsed }">
-            <div class="server-item local-item" :class="{ active: selectedServer === 'local' }" @click="selectServer('local')">
-                <span class="server-avatar local">⌂</span>
-                <span class="server-item-copy" v-show="!sidebarCollapsed"><strong>本机服务器</strong><small>当前管理节点</small></span>
-                <span class="status-dot ok"></span>
-                <div class="server-item-tooltip" v-if="sidebarCollapsed">本机服务器</div>
-            </div>
-            <div v-for="s in filteredServers" :key="s.id" class="server-item" :class="{ active: selectedServer === s.id }" @click="selectServer(s.id)">
+            <div v-for="s in filteredServers" :key="s.id" class="server-item" :class="{ active: selectedServer === s.id, 'local-item': s.type === 'local' }" @click="selectServer(s.id)">
                 <span class="server-avatar" :class="s.type">{{ s.type === 'remote' ? '↗' : '⌂' }}</span>
-                <span class="server-item-copy" v-show="!sidebarCollapsed"><strong>{{ s.name }}</strong><small>{{ serverAddress(s) }}</small></span>
+                <span class="server-item-copy" v-show="!sidebarCollapsed"><strong>{{ s.name }}</strong><small>{{ s.type === 'local' ? '当前管理节点' : serverAddress(s) }}</small></span>
                 <span class="status-dot" :class="serverStatus[s.id] || 'unknown'"></span>
                 <span class="item-actions" v-show="!sidebarCollapsed" @click.stop>
                     <button @click="openEdit(s)" title="编辑服务器">✎</button>
-                    <button class="danger" @click="deleteServer(s.id)" title="删除服务器">×</button>
+                    <button class="danger" @click="deleteServer(s.id)" title="删除服务器" :disabled="s.type === 'local'">×</button>
                 </span>
-                <div class="server-item-tooltip" v-if="sidebarCollapsed">{{ s.name }} · {{ serverAddress(s) }} {{ statusText(serverStatus[s.id]) }}</div>
+                <div class="server-item-tooltip" v-if="sidebarCollapsed">{{ s.name }} · {{ s.type === 'local' ? '当前管理节点' : serverAddress(s) }} {{ statusText(serverStatus[s.id]) }}</div>
             </div>
             <div v-if="!filteredServers.length && !sidebarCollapsed" class="list-empty">
                 <span class="empty-icon">⌁</span>
-                <strong>{{ servers.length ? '没有匹配的服务器' : '还没有远程服务器' }}</strong>
-                <small>{{ servers.length ? '尝试修改搜索条件' : '添加一台服务器开始管理' }}</small>
+                <strong>没有匹配的服务器</strong>
+                <small>尝试修改搜索条件</small>
             </div>
         </div>
 
@@ -151,7 +145,7 @@
                     <button class="primary-button compact-button" @click="openAdd">＋ <span>添加服务器</span></button>
                 </template>
                 <template v-else-if="activeMenu === 'software'">
-                    <button class="toolbar-button" @click="loadSoftwareStatus(selectedServer)" :disabled="softwareLoading || !selectedServer || selectedServer === 'local'" title="刷新软件状态">↻ <span>刷新</span></button>
+                    <button class="toolbar-button" @click="loadSoftwareStatus(selectedServer)" :disabled="softwareLoading || !selectedServer || selectedServer === 'srv_local'" title="刷新软件状态">↻ <span>刷新</span></button>
                 </template>
             </div>
         </header>
@@ -161,19 +155,19 @@
             <section v-if="activeMenu === 'servers'">
                 <!-- 仪表板统计 -->
                 <div class="dashboard-stats">
-                    <div class="dashboard-stat"><span class="dashboard-stat-icon blue">▣</span><div class="dashboard-stat-info"><small>服务器总数</small><strong>{{ servers.length + 1 }}</strong></div></div>
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon blue">▣</span><div class="dashboard-stat-info"><small>服务器总数</small><strong>{{ servers.length }}</strong></div></div>
                     <div class="dashboard-stat"><span class="dashboard-stat-icon green">●</span><div class="dashboard-stat-info"><small>在线服务器</small><strong>{{ onlineCount }}</strong></div></div>
-                    <div class="dashboard-stat"><span class="dashboard-stat-icon amber">↗</span><div class="dashboard-stat-info"><small>远程服务器</small><strong>{{ servers.length }}</strong></div></div>
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon amber">↗</span><div class="dashboard-stat-info"><small>远程服务器</small><strong>{{ servers.filter(s => s.type === 'remote').length }}</strong></div></div>
                     <div class="dashboard-stat"><span class="dashboard-stat-icon violet">📦</span><div class="dashboard-stat-info"><small>已安装软件</small><strong>{{ softwareStatuses.filter(s => s.installed).length }}</strong></div></div>
                 </div>
 
                 <!-- 服务器卡片列表 -->
                 <div class="server-cards">
                     <!-- 本机服务器卡片 -->
-                    <div class="server-card" :class="{ active: selectedServer === 'local' }" @click="selectServer('local')">
+                    <div class="server-card" :class="{ active: selectedServer === 'srv_local' }" @click="selectServer('srv_local')">
                         <div class="server-card-header">
                             <span class="server-card-avatar local">⌂</span>
-                            <div class="server-card-title"><h3>本机服务器</h3><small>localhost · 当前管理节点</small></div>
+                            <div class="server-card-title"><h3>{{ (servers.find(s => s.id === 'srv_local') || {}).name || '本机服务器' }}</h3><small>localhost · 当前管理节点</small></div>
                         </div>
                         <div class="server-card-body">
                             <div class="server-card-metrics">
@@ -190,7 +184,7 @@
                     </div>
 
                     <!-- 远程服务器卡片 -->
-                    <div v-for="s in servers" :key="s.id" class="server-card" :class="{ active: selectedServer === s.id }" @click="selectServer(s.id)">
+                    <div v-for="s in servers.filter(s => s.type === 'remote')" :key="s.id" class="server-card" :class="{ active: selectedServer === s.id }" @click="selectServer(s.id)">
                         <div class="server-card-header">
                             <span class="server-card-avatar" :class="s.type">{{ s.type === 'remote' ? '↗' : '⌂' }}</span>
                             <div class="server-card-title"><h3>{{ s.name }}</h3><small>{{ serverAddress(s) }}</small></div>
@@ -421,7 +415,7 @@
             <div class="modal-body">
                 <div class="form-intro"><span class="form-avatar">{{ form.type === 'remote' ? '↗' : '⌂' }}</span><div><strong>{{ formMode === 'add' ? '配置新的管理节点' : '更新连接信息' }}</strong><small>保存后即可从左侧资产列表连接服务器</small></div></div>
                 <div class="form-section-title">基本信息</div>
-                <div class="form-grid"><label class="field full"><span>显示名称 <em>*</em></span><input v-model.trim="form.name" @input="clearTestResult" placeholder="例如：生产环境 Web-01"></label><label class="field"><span>服务器类型</span><select v-model="form.type" @change="clearTestResult"><option value="remote">远程 SSH</option><option value="local">本机节点</option></select></label><label class="field" v-if="form.type === 'remote'"><span>主机地址 <em>*</em></span><input v-model.trim="form.host" @input="clearTestResult" placeholder="IP 地址或域名"></label></div>
+                <div class="form-grid"><label class="field full"><span>显示名称 <em>*</em></span><input v-model.trim="form.name" @input="clearTestResult" placeholder="例如：生产环境 Web-01"></label><label class="field"><span>服务器类型</span><select v-model="form.type" @change="clearTestResult"><option value="remote">远程 SSH</option></select></label><label class="field" v-if="form.type === 'remote'"><span>主机地址 <em>*</em></span><input v-model.trim="form.host" @input="clearTestResult" placeholder="IP 地址或域名"></label></div>
                 <template v-if="form.type === 'remote'">
                     <div class="form-section-title">SSH 连接</div>
                     <div class="form-grid"><label class="field"><span>SSH 端口</span><input v-model.number="form.port" @input="clearTestResult" type="number" min="1" max="65535" placeholder="22"></label><label class="field"><span>用户名 <em>*</em></span><input v-model.trim="form.username" @input="clearTestResult" placeholder="root"></label><label class="field"><span>认证方式</span><select v-model="form.auth_type" @change="clearTestResult"><option value="password">密码认证</option><option value="key">私钥认证</option></select></label><label class="field" v-if="form.auth_type === 'password'"><span>登录密码 <em v-if="formMode === 'add'">*</em></span><input v-model="form.password" @input="clearTestResult" type="password" :placeholder="formMode === 'edit' ? '留空则保留原密码' : '输入 SSH 密码'"></label><label class="field full" v-if="form.auth_type === 'key'"><span>私钥文件路径 <em>*</em></span><input v-model.trim="form.key_path" @input="clearTestResult" placeholder="例如：/home/admin/.ssh/id_ed25519"></label></div>

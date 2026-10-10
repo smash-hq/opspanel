@@ -52,7 +52,7 @@ func (h *SoftwareHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serverID := r.URL.Query().Get("server")
-	if serverID == "" || serverID == "local" {
+	if serverID == "" || serverID == host.LocalServerID {
 		Fail(w, http.StatusBadRequest, 400, "remote server required")
 		return
 	}
@@ -174,7 +174,7 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 // --- 内部方法 ---
 
 func (h *SoftwareHandler) getServerAndPackage(serverID, pkgID string) (*host.Server, *software.Package, error) {
-	if serverID == "" || serverID == "local" {
+	if serverID == "" || serverID == host.LocalServerID {
 		return nil, nil, fmt.Errorf("software management requires a remote server")
 	}
 	srv, ok := h.store.Get(serverID)

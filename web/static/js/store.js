@@ -79,10 +79,11 @@ export function setupStore() {
     //  计算属性
     // ═══════════════════════════════════════════
 
-    /** 当前选中的服务器对象（含本机虚拟对象）。 */
-    const currentServer = computed(() => selectedServer.value === 'local'
-        ? { id: 'local', name: '本机服务器', type: 'local', host: '', port: 0 }
-        : servers.value.find(s => s.id === selectedServer.value) || null);
+    /** 当前选中的服务器对象。 */
+    const currentServer = computed(() => {
+        if (!selectedServer.value) return null;
+        return servers.value.find(s => s.id === selectedServer.value) || null;
+    });
 
     /** 当前服务器显示名称。 */
     const currentServerName = computed(() => currentServer.value?.name || '');
@@ -100,8 +101,8 @@ export function setupStore() {
         });
     });
 
-    /** 在线服务器数量（含本机）。 */
-    const onlineCount = computed(() => 1 + servers.value.filter(s => serverStatus[s.id] === 'ok').length);
+    /** 在线服务器数量。 */
+    const onlineCount = computed(() => servers.value.filter(s => serverStatus[s.id] === 'ok').length);
 
     /** 是否有详情数据。 */
     const hasInfo = computed(() => Boolean(info.timestamp));
@@ -149,8 +150,8 @@ export function setupStore() {
 
     /** 统计指定筛选标签的服务器数量。 */
     function filterCount(filter) {
-        if (filter === 'all') return servers.value.length + 1;
-        if (filter === 'remote') return servers.value.length;
+        if (filter === 'all') return servers.value.length;
+        if (filter === 'remote') return servers.value.filter(s => s.type === 'remote').length;
         return onlineCount.value;
     }
 
@@ -397,7 +398,7 @@ export function setupStore() {
 
     /** 加载指定服务器的软件状态。 */
     async function loadSoftwareStatus(serverId) {
-        if (!serverId || serverId === 'local') {
+        if (!serverId) {
             softwareStatuses.value = [];
             return;
         }
@@ -416,7 +417,7 @@ export function setupStore() {
     /** 安装软件。 */
     async function installPackage(packageId) {
         const serverId = selectedServer.value;
-        if (!serverId || serverId === 'local') { toastNotify('请先选择远程服务器', true); return; }
+        if (!serverId || serverId === 'srv_local') { toastNotify('请先选择远程服务器', true); return; }
         softwareOperating[packageId] = true;
         try {
             await installSoftware(serverId, packageId);
@@ -431,7 +432,7 @@ export function setupStore() {
     /** 卸载软件。 */
     async function uninstallPackage(packageId) {
         const serverId = selectedServer.value;
-        if (!serverId || serverId === 'local') { toastNotify('请先选择远程服务器', true); return; }
+        if (!serverId || serverId === 'srv_local') { toastNotify('请先选择远程服务器', true); return; }
         if (!confirm('确定要卸载此软件吗？数据可能会丢失。')) return;
         softwareOperating[packageId] = true;
         try {
@@ -447,7 +448,7 @@ export function setupStore() {
     /** 控制服务启停。 */
     async function controlPackageService(packageId, action) {
         const serverId = selectedServer.value;
-        if (!serverId || serverId === 'local') { toastNotify('请先选择远程服务器', true); return; }
+        if (!serverId || serverId === 'srv_local') { toastNotify('请先选择远程服务器', true); return; }
         try {
             await controlService(serverId, packageId, action);
             toastNotify(`服务${action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启'}成功`);
@@ -469,7 +470,6 @@ export function setupStore() {
     onMounted(() => {
         loadServers();
         loadSoftwareCatalog();
-        serverStatus.local = 'ok';
         window.addEventListener('keydown', handleKeydown);
     });
 

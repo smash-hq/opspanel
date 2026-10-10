@@ -112,7 +112,7 @@ func (s *Server) pushLoop() {
 
 	for range ticker.C {
 		// 本机 + 所有已配置服务器
-		serverIDs := []string{"local"}
+		serverIDs := []string{host.LocalServerID}
 		for _, srv := range s.store.List() {
 			serverIDs = append(serverIDs, srv.ID)
 		}
