@@ -2,159 +2,102 @@
 package host
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
-	"sync"
 	"time"
+
+	"github.com/smash-hq/server-management/internal/storage"
 )
 
-// Server 代表一台受管服务器的配置。
-type Server struct {
-	ID        string `json:"id"`         // 唯一标识 (uuid)
-	Name      string `json:"name"`       // 显示名称，如 "生产服务器-01"
-	Type      string `json:"type"`       // "local" 本机 / "remote" 远程 SSH
-	Host      string `json:"host"`       // IP 或域名
-	Port      int    `json:"port"`       // SSH 端口，默认 22
-	Username  string `json:"username"`   // SSH 用户名
-	AuthType  string `json:"auth_type"`  // "password" / "key" / "local"
-	Password  string `json:"password,omitempty"`
-	KeyPath   string `json:"key_path,omitempty"` // 私钥路径
-	CreatedAt int64  `json:"created_at"`         // Unix 秒
-}
+// Server 是 storage.Server 的类型别名，保持向后兼容。
+type Server = storage.Server
 
-// DefaultSSHPort 是默认 SSH 端口。
-const DefaultSSHPort = 22
+// 导出常量供其他包使用。
+const (
+	DefaultSSHPort  = 22
+	LocalServerID   = "srv_local"
+)
 
-// LocalServerID 是本机服务器的固定 ID。
-const LocalServerID = "srv_local"
-
-// Store 是服务器配置的内存缓存 + JSON 持久化。
+// Store 是服务器配置的存储抽象。
+// 底层使用 SQLite 持久化，对外保持与原来 JSON 实现相同的接口。
 type Store struct {
-	mu       sync.RWMutex
-	servers  map[string]*Server
-	filePath string
+	inner *storage.ServerStore
+	db    *storage.DB
 }
 
-// NewStore 创建存储实例并加载已有配置。
-// 如果 data/servers.json 为空或不存在，自动生成本机服务器条目。
-// dataDir 是存放 servers.json 的目录。
+// NewStore 创建存储实例并初始化数据库。
+// 如果数据库为空，自动生成本机服务器条目。
+// dataDir 是存放数据库文件的目录。
 func NewStore(dataDir string) (*Store, error) {
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	db, err := storage.New(dataDir)
+	if err != nil {
 		return nil, err
 	}
 
-	s := &Store{
-		servers:  make(map[string]*Server),
-		filePath: filepath.Join(dataDir, "servers.json"),
+	// 初始化默认数据（本机服务器 + 软件源）
+	if err := db.InitDefaultData(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("init default data: %w", err)
 	}
 
-	// 加载已有配置（首次启动可能无文件，忽略错误）
-	_ = s.load()
+	inner := storage.NewServerStore(db)
 
-	// 如果为空，自动生成本机服务器并持久化
-	if len(s.servers) == 0 {
-		s.autoAddLocalServer()
-		if err := s.save(); err != nil {
-			return nil, fmt.Errorf("save default local server: %w", err)
-		}
+	// 兜底：如果服务器表仍为空，写入本机条目
+	if inner.Count() == 0 {
+		srv := buildLocalServer()
+		_ = inner.Add(srv)
 	}
 
-	return s, nil
+	return &Store{inner: inner, db: db}, nil
 }
 
-// List 返回所有服务器配置（按创建时间排序的副本）。
-func (s *Store) List() []*Server {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// Close 关闭底层数据库连接。
+func (s *Store) Close() error {
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
+}
 
-	result := make([]*Server, 0, len(s.servers))
-	for _, srv := range s.servers {
-		result = append(result, srv.clone())
-	}
-	// 按创建时间升序
-	for i := 0; i < len(result)-1; i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].CreatedAt < result[i].CreatedAt {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
-	return result
+// List 返回所有服务器配置（按创建时间排序）。
+func (s *Store) List() []*Server {
+	return s.inner.List()
 }
 
 // Get 按 ID 查找服务器。
 func (s *Store) Get(id string) (*Server, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	srv, ok := s.servers[id]
-	if !ok {
-		return nil, false
-	}
-	return srv.clone(), true
+	return s.inner.Get(id)
 }
 
 // Add 新增服务器配置。
 func (s *Store) Add(srv *Server) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if srv.ID == "" {
-		srv.ID = generateID()
-	}
-	if srv.Port == 0 {
-		srv.Port = DefaultSSHPort
-	}
-	if srv.CreatedAt == 0 {
-		srv.CreatedAt = time.Now().Unix()
-	}
-	s.servers[srv.ID] = srv
-	return s.save()
+	return s.inner.Add(srv)
 }
 
 // Update 修改已有配置。
 func (s *Store) Update(srv *Server) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.servers[srv.ID]; !ok {
-		return os.ErrNotExist
-	}
-	s.servers[srv.ID] = srv
-	return s.save()
+	return s.inner.Update(srv)
 }
 
 // Delete 移除配置。
 func (s *Store) Delete(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.servers[id]; !ok {
-		return os.ErrNotExist
-	}
-	// 不允许删除本机条目
-	if id == LocalServerID {
-		return fmt.Errorf("cannot delete local server entry")
-	}
-	delete(s.servers, id)
-	return s.save()
+	return s.inner.Delete(id)
 }
 
 // Count 返回服务器数量。
 func (s *Store) Count() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.servers)
+	return s.inner.Count()
+}
+
+// DB 返回底层存储的数据库实例（供软件存储等共享使用）。
+func (s *Store) DB() *storage.DB {
+	return s.db
 }
 
 // --- 内部方法 ---
 
-// autoAddLocalServer 自动生成本机服务器条目。
-func (s *Store) autoAddLocalServer() {
+func buildLocalServer() *Server {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname = "localhost"
@@ -168,7 +111,7 @@ func (s *Store) autoAddLocalServer() {
 		username = "root"
 	}
 
-	srv := &Server{
+	return &Server{
 		ID:        LocalServerID,
 		Name:      fmt.Sprintf("%s (%s/%s)", hostname, runtime.GOOS, runtime.GOARCH),
 		Type:      "local",
@@ -178,48 +121,4 @@ func (s *Store) autoAddLocalServer() {
 		AuthType:  "local",
 		CreatedAt: time.Now().Unix(),
 	}
-	s.servers[srv.ID] = srv
-}
-
-func (s *Server) clone() *Server {
-	cp := *s
-	return &cp
-}
-
-func (s *Store) load() error {
-	data, err := os.ReadFile(s.filePath)
-	if err != nil {
-		return err
-	}
-	var list []*Server
-	if err := json.Unmarshal(data, &list); err != nil {
-		return err
-	}
-	for _, srv := range list {
-		s.servers[srv.ID] = srv
-	}
-	return nil
-}
-
-func (s *Store) save() error {
-	list := make([]*Server, 0, len(s.servers))
-	for _, srv := range s.servers {
-		list = append(list, srv)
-	}
-	data, err := json.MarshalIndent(list, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.filePath, data, 0600)
-}
-
-// generateID 生成简单唯一 ID（时间戳 + 随机后缀）。
-func generateID() string {
-	return fmt.Sprintf("srv_%d_%s", time.Now().UnixNano(), randomStr(6))
-}
-
-func randomStr(n int) string {
-	b := make([]byte, n/2+1)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)[:n]
 }

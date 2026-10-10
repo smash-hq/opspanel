@@ -1,24 +1,12 @@
 // Package software 提供软件包管理与安装能力。
 package software
 
-// Package 定义一个可安装的软件包。
-type Package struct {
-	ID          string   `json:"id"`          // 唯一标识，如 "mysql"
-	Name        string   `json:"name"`        // 显示名称，如 "MySQL"
-	Category    string   `json:"category"`    // 分类：database / web / runtime / tool
-	Description string   `json:"description"` // 简介
-	Version     string   `json:"version"`     // 检测版本用的命令
-	Icon        string   `json:"icon"`        // 图标字符
+import (
+	"github.com/smash-hq/server-management/internal/storage"
+)
 
-	// 各包管理器的安装命令（按优先级）
-	InstallCmd  map[string][]string `json:"install_cmd"`  // key: apt / yum / dnf
-	UninstallCmd map[string][]string `json:"uninstall_cmd"`
-	StatusCmd   string              `json:"status_cmd"`   // 检测是否安装的命令（返回空则未安装）
-	VersionCmd  string              `json:"version_cmd"`  // 获取版本号的命令
-	StartCmd    string              `json:"start_cmd"`    // 启动服务
-	StopCmd     string              `json:"stop_cmd"`     // 停止服务
-	RestartCmd  string              `json:"restart_cmd"`  // 重启服务
-}
+// Package 是 storage.SoftwarePackage 的类型别名。
+type Package = storage.SoftwarePackage
 
 // Category 分类常量。
 const (
@@ -194,4 +182,13 @@ func ListByCategory(category string) []*Package {
 		}
 	}
 	return result
+}
+
+// LoadFromStore 从数据库存储刷新内存索引。
+func LoadFromStore(swStore interface {
+	ListPackages() []*Package
+}) {
+	for _, pkg := range swStore.ListPackages() {
+		PackageIndex[pkg.ID] = pkg
+	}
 }

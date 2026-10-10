@@ -9,6 +9,7 @@ import (
 
 	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
+	"github.com/smash-hq/server-management/internal/remote"
 )
 
 // ServersHandler 提供服务器配置的 CRUD API 与连接测试。
@@ -102,7 +103,17 @@ func (h *ServersHandler) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostInfo, err := h.remote.TestConnection(&srv)
+	hostInfo, err := h.remote.TestConnection(&remote.Server{
+		ID:       srv.ID,
+		Name:     srv.Name,
+		Type:     srv.Type,
+		Host:     srv.Host,
+		Port:     srv.Port,
+		Username: srv.Username,
+		AuthType: srv.AuthType,
+		Password: srv.Password,
+		KeyPath:  srv.KeyPath,
+	})
 	if err != nil {
 		h.log.Errorw("test connection failed", "host", srv.Host, "error", err)
 		OK(w, map[string]any{

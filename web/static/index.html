@@ -40,6 +40,11 @@
                 <span class="menu-label" v-show="!sidebarCollapsed">软件商店</span>
                 <span class="menu-badge" v-show="!sidebarCollapsed">{{ softwareCatalog.length }}</span>
             </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'sources' }" @click="activeMenu = 'sources'">
+                <span class="menu-icon">📦</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">软件源</span>
+                <span class="menu-badge" v-show="!sidebarCollapsed">{{ sources.length }}</span>
+            </button>
             <button class="menu-item" :class="{ active: activeMenu === 'cluster' }" @click="activeMenu = 'cluster'">
                 <span class="menu-icon">⛓</span>
                 <span class="menu-label" v-show="!sidebarCollapsed">集群</span>
@@ -395,6 +400,36 @@
                 <div class="placeholder-coming-soon">即将推出 · V1.0</div>
             </section>
 
+            <!-- ═══ 软件源管理视图 ═══ -->
+            <section v-if="activeMenu === 'sources'">
+                <div class="section-header">
+                    <h2>软件源管理</h2>
+                    <button class="primary-button" @click="openSourceForm('add')">＋ 添加软件源</button>
+                </div>
+                <div class="sources-list">
+                    <div v-for="src in sources" :key="src.id" class="source-card">
+                        <div class="source-info">
+                            <span class="source-type" :class="src.type">{{ src.type === 'mirror' ? '镜像' : '仓库' }}</span>
+                            <strong>{{ src.name }}</strong>
+                            <small>{{ src.url }}</small>
+                        </div>
+                        <div class="source-meta">
+                            <span class="source-priority">优先级: {{ src.priority }}</span>
+                            <span class="source-status" :class="src.enabled ? 'enabled' : 'disabled'">{{ src.enabled ? '启用' : '禁用' }}</span>
+                        </div>
+                        <div class="source-actions">
+                            <button @click="openSourceForm('edit', src)" title="编辑">✎</button>
+                            <button class="danger" @click="handleDeleteSource(src.id)" title="删除">×</button>
+                        </div>
+                    </div>
+                    <div v-if="!sources.length" class="list-empty">
+                        <span class="empty-icon">⌁</span>
+                        <strong>还没有软件源</strong>
+                        <small>添加镜像源或软件仓库地址</small>
+                    </div>
+                </div>
+            </section>
+
             <!-- ═══ 系统设置视图 ═══ -->
             <section v-if="activeMenu === 'settings'" class="placeholder-view">
                 <div class="placeholder-icon">⚙</div>
@@ -449,6 +484,28 @@
             </div>
         </div>
     </div>
+    <!-- 软件源表单弹窗 -->
+    <div class="modal-overlay" v-if="sourceFormMode" @click.self="closeSourceForm">
+        <div class="modal">
+            <div class="modal-header"><div><span class="eyebrow">{{ sourceFormMode === 'add' ? 'NEW SOURCE' : 'EDIT SOURCE' }}</span><h3>{{ sourceFormMode === 'add' ? '添加软件源' : '编辑软件源' }}</h3></div><button class="icon-button" @click="closeSourceForm" title="关闭">×</button></div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <label class="field"><span>ID <em>*</em></span><input v-model.trim="sourceForm.id" placeholder="例如：src_aliyun_mirror" :disabled="sourceFormMode === 'edit'"></label>
+                    <label class="field"><span>名称 <em>*</em></span><input v-model.trim="sourceForm.name" placeholder="例如：阿里云镜像源"></label>
+                    <label class="field"><span>类型</span><select v-model="sourceForm.type"><option value="mirror">镜像源</option><option value="repo">软件仓库</option></select></label>
+                    <label class="field"><span>优先级</span><input v-model.number="sourceForm.priority" type="number" min="0" max="999"></label>
+                    <label class="field full"><span>URL 地址 <em>*</em></span><input v-model.trim="sourceForm.url" placeholder="https://mirrors.example.com/..."></label>
+                    <label class="field"><span>状态</span><select v-model="sourceForm.enabled"><option :value="true">启用</option><option :value="false">禁用</option></select></label>
+                </div>
+                <div class="form-error" v-if="sourceFormError">{{ sourceFormError }}</div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="closeSourceForm">取消</button>
+                <button class="primary-button" @click="saveSource" :disabled="sourceSaving">{{ sourceSaving ? '保存中...' : '保存' }}</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" :class="{ visible: toast.visible, error: toast.error }">{{ toast.message }}</div>
 </div>
 <!-- ES Module 入口：import js/store.js → Vue.createApp → mount -->

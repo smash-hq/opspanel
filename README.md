@@ -230,25 +230,16 @@ make build-windows
 
 ## 数据存储
 
-服务器配置存储在 `data/servers.json`，启动时自动加载。
+使用 **SQLite**（`modernc.org/sqlite`，纯 Go 实现，无需 CGO）作为本地存储引擎，数据库文件位于 `data/smp.db`。
 
-**首次启动**：如果 `data/servers.json` 不存在或为空，系统会自动生成本机服务器条目并写入文件：
-
-```json
-{
-  "id": "srv_local",
-  "name": "myhost (linux/amd64)",
-  "type": "local",
-  "host": "127.0.0.1",
-  "port": 22,
-  "username": "root",
-  "auth_type": "local"
-}
-```
+**首次启动**时自动初始化数据库并写入默认数据：
+- **本机服务器**（`srv_local`）：自动检测 hostname、OS/ARCH、当前用户
+- **软件包目录**：MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js
+- **软件源**：Ubuntu/CentOS/Docker 官方源与阿里云镜像
 
 - **本机条目**（`srv_local`）不可删除，保证面板始终有一个可监控的目标
-- 可通过 Web UI 添加远程服务器，配置会实时持久化到 JSON 文件
-- 文件权限为 `0600`，保护敏感凭证
+- 所有配置变更实时持久化到 SQLite（WAL 模式，支持并发读取）
+- 预留扩展：集群、监控历史、文件索引等数据均可存入同一数据库
 
 ## 配置
 
@@ -308,11 +299,29 @@ log:
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/software/catalog` | 软件目录 |
+| GET | `/api/v1/software/catalog` | 软件目录（数据库） |
 | GET | `/api/v1/software/status?server={id}` | 安装状态 |
 | POST | `/api/v1/software/install` | 安装软件 |
 | POST | `/api/v1/software/uninstall` | 卸载软件 |
 | POST | `/api/v1/software/service` | 服务启停 |
+
+### 软件包管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/software/packages` | 软件包列表 |
+| POST | `/api/v1/software/packages` | 新增软件包 |
+| PUT | `/api/v1/software/packages/{id}` | 更新软件包 |
+| DELETE | `/api/v1/software/packages/{id}` | 删除软件包 |
+
+### 软件源管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/software/sources` | 软件源列表 |
+| POST | `/api/v1/software/sources` | 新增软件源 |
+| PUT | `/api/v1/software/sources/{id}` | 更新软件源 |
+| DELETE | `/api/v1/software/sources/{id}` | 删除软件源 |
 
 ### WebSocket
 
@@ -328,10 +337,12 @@ server-management/
 ├── internal/
 │   ├── api/             # HTTP 处理器
 │   ├── config/          # 配置加载（Viper）
-│   ├── host/            # 服务器存储与 SSH 采集
+│   ├── host/            # 服务器配置抽象与采集调度
+│   ├── remote/          # SSH 远程执行（独立包，避免循环依赖）
+│   ├── storage/         # SQLite 持久化（服务器/软件包/软件源）
 │   ├── middleware/      # 中间件（日志、恢复）
 │   ├── server/          # HTTP 服务组装
-│   ├── software/        # 软件包管理
+│   ├── software/        # 软件包管理与安装
 │   ├── system/          # 系统信息采集（gopsutil）
 │   ├── logger/          # 结构化日志（zap）
 │   └── ws/              # WebSocket 推送
@@ -344,6 +355,7 @@ server-management/
 ├── docs/                # 文档
 ├── data/                # 运行时数据（git ignored）
 │   ├── .gitkeep
+│   ├── smp.db           # SQLite 数据库（自动生成）
 │   └── servers.example.json  # 服务器配置示例
 ├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建

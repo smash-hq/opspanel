@@ -165,3 +165,77 @@ export async function controlService(serverId, packageId, action) {
     if (json.code !== 0) throw new Error(json.message || '操作失败');
     return json.data;
 }
+
+// --- 软件包管理 ---
+
+/** 获取软件包列表。 */
+export async function fetchPackages() {
+    const json = await request('/software/packages');
+    if (json.code !== 0) throw new Error(json.message || '加载软件包失败');
+    return json.data || [];
+}
+
+/** 新增软件包。 */
+export async function createPackage(payload) {
+    const json = await request('/software/packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '创建失败');
+    return json.data;
+}
+
+/** 更新软件包。 */
+export async function updatePackage(id, payload) {
+    const json = await request(`/software/packages/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '更新失败');
+    return json.data;
+}
+
+/** 删除软件包。 */
+export async function deletePackage(id) {
+    const json = await request(`/software/packages/${id}`, { method: 'DELETE' });
+    if (json.code !== 0) throw new Error(json.message || '删除失败');
+}
+
+// --- 镜像源管理 ---
+
+/** 获取软件源列表。 */
+export async function fetchSources() {
+    const json = await request('/software/sources');
+    if (json.code !== 0) throw new Error(json.message || '加载软件源失败');
+    return json.data || [];
+}
+
+/** 新增软件源。 */
+export async function createSource(payload) {
+    const json = await request('/software/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '创建失败');
+    return json.data;
+}
+
+/** 更新软件源。 */
+export async function updateSource(id, payload) {
+    const json = await request(`/software/sources/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '更新失败');
+    return json.data;
+}
+
+/** 删除软件源。 */
+export async function deleteSource(id) {
+    const json = await request(`/software/sources/${id}`, { method: 'DELETE' });
+    if (json.code !== 0) throw new Error(json.message || '删除失败');
+}

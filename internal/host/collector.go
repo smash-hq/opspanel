@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/smash-hq/server-management/internal/logger"
+	"github.com/smash-hq/server-management/internal/remote"
 	"github.com/smash-hq/server-management/internal/system"
 )
 
@@ -39,9 +40,26 @@ func (c *Collector) Snapshot(serverID string) (*system.Info, error) {
 
 	switch srv.Type {
 	case "remote":
-		return c.remote.Snapshot(srv)
+		return c.remote.Snapshot(toRemoteServer(srv))
 	default:
-		// 未知类型回退到本机
 		return c.local.Snapshot()
+	}
+}
+
+// toRemoteServer 将 storage.Server 转换为 remote.Server。
+func toRemoteServer(srv *Server) *remote.Server {
+	if srv == nil {
+		return nil
+	}
+	return &remote.Server{
+		ID:       srv.ID,
+		Name:     srv.Name,
+		Type:     srv.Type,
+		Host:     srv.Host,
+		Port:     srv.Port,
+		Username: srv.Username,
+		AuthType: srv.AuthType,
+		Password: srv.Password,
+		KeyPath:  srv.KeyPath,
 	}
 }

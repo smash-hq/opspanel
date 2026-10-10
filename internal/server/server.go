@@ -14,6 +14,8 @@ import (
 	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
 	"github.com/smash-hq/server-management/internal/middleware"
+	"github.com/smash-hq/server-management/internal/software"
+	"github.com/smash-hq/server-management/internal/storage"
 	"github.com/smash-hq/server-management/internal/ws"
 )
 
@@ -31,11 +33,19 @@ type Server struct {
 func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir string) *Server {
 	mux := http.NewServeMux()
 
-	// --- 服务器配置存储 ---
+	// --- 存储层初始化 ---
 	store, err := host.NewStore(dataDir)
 	if err != nil {
 		log.Fatal("host store init failed", "error", err)
 	}
+
+	// 初始化软件包目录到数据库
+	swStore := storage.NewSoftwareStore(store.DB())
+	if err := swStore.InitDefaultPackages(software.Catalog); err != nil {
+		log.Fatal("software packages init failed", "error", err)
+	}
+	// 刷新内存中的软件包索引
+	software.LoadFromStore(swStore)
 
 	// --- API 处理器 ---
 	healthHandler := api.NewHealthHandler()
@@ -47,7 +57,7 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	serversHandler := api.NewServersHandler(log, store)
 	serversHandler.Register(mux)
 
-	softwareHandler := api.NewSoftwareHandler(log, store)
+	softwareHandler := api.NewSoftwareHandler(log, store, swStore)
 	softwareHandler.Register(mux)
 
 	// --- WebSocket ---
@@ -99,6 +109,14 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Infow("server shutting down")
 	return s.httpSrv.Shutdown(ctx)
+}
+
+// CloseStore 关闭存储层（数据库连接）。
+func (s *Server) CloseStore() error {
+	if s.store != nil {
+		return s.store.Close()
+	}
+	return nil
 }
 
 // pushLoop 定时采集所有服务器的系统快照并按 serverID 分发到 WebSocket 客户端。

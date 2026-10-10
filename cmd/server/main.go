@@ -92,5 +92,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Server.ShutdownTimeout)*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	srv.Shutdown(shutdownCtx)
+	// 关闭数据库连接
+	if storeErr := srv.CloseStore(); storeErr != nil {
+		log.Errorw("store close failed", "error", storeErr)
+	}
+	return nil
 }

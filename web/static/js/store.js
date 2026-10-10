@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -60,6 +60,13 @@ export function setupStore() {
     const softwareLoading = ref(false);          // 正在加载软件状态
     const softwareOperating = reactive({});      // { packageId: true } 正在安装/卸载中
     const softwareCategory = ref('all');         // 当前筛选分类
+
+    // ─── 软件源管理状态 ───
+    const sources = ref([]);
+    const sourceFormMode = ref(null); // null | "add" | "edit"
+    const sourceForm = reactive({ id: '', name: '', type: 'mirror', url: '', enabled: true, priority: 100 });
+    const sourceSaving = ref(false);
+    const sourceFormError = ref('');
 
     // ─── Toast 状态 ───
     const toast = reactive({ visible: false, message: '', error: false });
@@ -464,12 +471,92 @@ export function setupStore() {
     }
 
     // ═══════════════════════════════════════════
+    //  软件源管理
+    // ═══════════════════════════════════════════
+
+    /** 加载软件源列表。 */
+    async function loadSources() {
+        try {
+            sources.value = await fetchSources();
+        } catch (err) {
+            toastNotify('软件源列表加载失败', true);
+        }
+    }
+
+    /** 打开软件源表单。 */
+    function openSourceForm(mode, src) {
+        sourceFormMode.value = mode;
+        sourceFormError.value = '';
+        if (mode === 'edit' && src) {
+            Object.assign(sourceForm, {
+                id: src.id, name: src.name, type: src.type,
+                url: src.url, enabled: src.enabled, priority: src.priority,
+            });
+        } else {
+            Object.assign(sourceForm, { id: '', name: '', type: 'mirror', url: '', enabled: true, priority: 100 });
+        }
+    }
+
+    /** 关闭软件源表单。 */
+    function closeSourceForm() {
+        if (!sourceSaving.value) sourceFormMode.value = null;
+    }
+
+    /** 保存软件源。 */
+    async function saveSource() {
+        sourceFormError.value = '';
+        if (!sourceForm.name.trim()) { sourceFormError.value = '请输入名称'; return; }
+        if (!sourceForm.url.trim()) { sourceFormError.value = '请输入地址'; return; }
+        if (!sourceForm.id.trim()) { sourceFormError.value = '请输入 ID'; return; }
+
+        sourceSaving.value = true;
+        const payload = {
+            id: sourceForm.id,
+            name: sourceForm.name,
+            type: sourceForm.type,
+            url: sourceForm.url,
+            enabled: sourceForm.enabled,
+            priority: sourceForm.priority,
+        };
+
+        try {
+            if (sourceFormMode.value === 'edit') {
+                await updateSource(sourceForm.id, payload);
+                toastNotify('软件源已更新');
+            } else {
+                await createSource(payload);
+                toastNotify('软件源已添加');
+            }
+            await loadSources();
+            sourceFormMode.value = null;
+        } catch (err) {
+            sourceFormError.value = err.message;
+        } finally {
+            sourceSaving.value = false;
+        }
+    }
+
+    /** 删除软件源。 */
+    async function handleDeleteSource(id) {
+        const src = sources.value.find(s => s.id === id);
+        if (!src || !confirm(`确定删除软件源「${src.name}」吗？`)) return;
+        try {
+            await apiDeleteSource(id);
+            await loadSources();
+            toastNotify('软件源已删除');
+        } catch (err) {
+            toastNotify(err.message, true);
+        }
+    }
+
+    // ═══════════════════════════════════════════
     //  生命周期
     // ═══════════════════════════════════════════
 
     onMounted(() => {
         loadServers();
         loadSoftwareCatalog();
+        loadSources();
         window.addEventListener('keydown', handleKeydown);
     });
 
@@ -515,6 +602,10 @@ export function setupStore() {
         filteredSoftware,
         loadSoftwareCatalog, loadSoftwareStatus,
         installPackage, uninstallPackage, controlPackageService, getPackageStatus,
+        // 软件源管理
+        sources, sourceFormMode, sourceForm, sourceSaving, sourceFormError,
+        openSourceForm, closeSourceForm, saveSource,
+        deleteSource: handleDeleteSource,
         nextTick,
     };
 }

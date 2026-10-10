@@ -8,40 +8,54 @@ import (
 	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
 	"github.com/smash-hq/server-management/internal/software"
+	"github.com/smash-hq/server-management/internal/storage"
 )
 
 // SoftwareHandler 提供软件管理 API。
 type SoftwareHandler struct {
-	log     *logger.Logger
-	store   *host.Store
-	manager *software.Manager
+	log      *logger.Logger
+	store    *host.Store
+	swStore  *storage.SoftwareStore
+	manager  *software.Manager
 }
 
 // NewSoftwareHandler 创建软件管理处理器。
-func NewSoftwareHandler(log *logger.Logger, store *host.Store) *SoftwareHandler {
+func NewSoftwareHandler(log *logger.Logger, store *host.Store, swStore *storage.SoftwareStore) *SoftwareHandler {
 	return &SoftwareHandler{
 		log:     log.Named("api.software"),
 		store:   store,
+		swStore: swStore,
 		manager: software.NewManager(log),
 	}
 }
 
 // Register 注册路由。
 func (h *SoftwareHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/software/catalog", h.handleCatalog)           // GET 软件目录
-	mux.HandleFunc("/api/v1/software/status", h.handleStatus)             // GET ?server=<id> 批量查状态
-	mux.HandleFunc("/api/v1/software/install", h.handleInstall)           // POST 安装
-	mux.HandleFunc("/api/v1/software/uninstall", h.handleUninstall)       // POST 卸载
-	mux.HandleFunc("/api/v1/software/service", h.handleService)           // POST 服务启停
+	// 软件目录与安装
+	mux.HandleFunc("/api/v1/software/catalog", h.handleCatalog)
+	mux.HandleFunc("/api/v1/software/status", h.handleStatus)
+	mux.HandleFunc("/api/v1/software/install", h.handleInstall)
+	mux.HandleFunc("/api/v1/software/uninstall", h.handleUninstall)
+	mux.HandleFunc("/api/v1/software/service", h.handleService)
+
+	// 软件包管理
+	mux.HandleFunc("/api/v1/software/packages", h.handlePackages)          // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/software/packages/", h.handlePackageDetail)    // PUT 更新 / DELETE 删除
+
+	// 镜像源管理
+	mux.HandleFunc("/api/v1/software/sources", h.handleSources)            // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/software/sources/", h.handleSourceDetail)     // PUT 更新 / DELETE 删除
 }
 
-// handleCatalog: GET 软件目录列表。
+// --- 软件目录与安装 ---
+
+// handleCatalog: GET 软件目录列表（从数据库读取）。
 func (h *SoftwareHandler) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 		return
 	}
-	OK(w, software.Catalog)
+	OK(w, h.swStore.ListPackages())
 }
 
 // handleStatus: GET ?server=<id> 查询所有软件包的安装状态。
@@ -64,7 +78,7 @@ func (h *SoftwareHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var statuses []*software.SoftwareStatus
-	for _, pkg := range software.Catalog {
+	for _, pkg := range h.swStore.ListPackages() {
 		status := h.manager.CheckStatus(srv, pkg)
 		statuses = append(statuses, status)
 	}
@@ -144,7 +158,7 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		ServerID  string `json:"server_id"`
 		PackageID string `json:"package_id"`
-		Action    string `json:"action"` // start / stop / restart
+		Action    string `json:"action"`
 	}
 	if err := decodeBody(r, &req); err != nil {
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
@@ -171,6 +185,142 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 	OK(w, map[string]string{"status": "ok", "action": req.Action, "package": pkg.ID})
 }
 
+// --- 软件包管理 ---
+
+// handlePackages: GET 列表 / POST 新增。
+func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		OK(w, h.swStore.ListPackages())
+
+	case http.MethodPost:
+		var pkg software.Package
+		if err := decodeBody(r, &pkg); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		if pkg.ID == "" || pkg.Name == "" {
+			Fail(w, http.StatusBadRequest, 400, "id and name are required")
+			return
+		}
+		if err := h.swStore.AddPackage(&pkg); err != nil {
+			h.log.Errorw("add package failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to add package")
+			return
+		}
+		// 刷新内存索引
+		software.LoadFromStore(h.swStore)
+		OK(w, pkg)
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// handlePackageDetail: PUT 更新 / DELETE 删除。
+func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Request) {
+	id := trimPrefix(r.URL.Path, "/api/v1/software/packages/")
+	if id == "" {
+		Fail(w, http.StatusBadRequest, 400, "package id required")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		var pkg software.Package
+		if err := decodeBody(r, &pkg); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		pkg.ID = id
+		if err := h.swStore.UpdatePackage(&pkg); err != nil {
+			h.log.Errorw("update package failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to update package")
+			return
+		}
+		software.LoadFromStore(h.swStore)
+		OK(w, pkg)
+
+	case http.MethodDelete:
+		if err := h.swStore.DeletePackage(id); err != nil {
+			h.log.Errorw("delete package failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to delete package")
+			return
+		}
+		software.LoadFromStore(h.swStore)
+		OK(w, map[string]string{"deleted": id})
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// --- 镜像源管理 ---
+
+// handleSources: GET 列表 / POST 新增。
+func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		OK(w, h.swStore.ListSources())
+
+	case http.MethodPost:
+		var src storage.SourceRecord
+		if err := decodeBody(r, &src); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		if src.ID == "" || src.Name == "" || src.URL == "" {
+			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
+			return
+		}
+		if err := h.swStore.AddSource(&src); err != nil {
+			h.log.Errorw("add source failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
+			return
+		}
+		OK(w, src)
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// handleSourceDetail: PUT 更新 / DELETE 删除。
+func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Request) {
+	id := trimPrefix(r.URL.Path, "/api/v1/software/sources/")
+	if id == "" {
+		Fail(w, http.StatusBadRequest, 400, "source id required")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		var src storage.SourceRecord
+		if err := decodeBody(r, &src); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		src.ID = id
+		if err := h.swStore.UpdateSource(&src); err != nil {
+			h.log.Errorw("update source failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
+			return
+		}
+		OK(w, src)
+
+	case http.MethodDelete:
+		if err := h.swStore.DeleteSource(id); err != nil {
+			h.log.Errorw("delete source failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
+			return
+		}
+		OK(w, map[string]string{"deleted": id})
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
 // --- 内部方法 ---
 
 func (h *SoftwareHandler) getServerAndPackage(serverID, pkgID string) (*host.Server, *software.Package, error) {
@@ -188,7 +338,13 @@ func (h *SoftwareHandler) getServerAndPackage(serverID, pkgID string) (*host.Ser
 	return srv, pkg, nil
 }
 
-// decodeBody 解析 JSON 请求体。
 func decodeBody(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+func trimPrefix(s, prefix string) string {
+	if len(s) > len(prefix) && s[:len(prefix)] == prefix {
+		return s[len(prefix):]
+	}
+	return ""
 }
