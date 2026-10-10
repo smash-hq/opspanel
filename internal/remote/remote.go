@@ -8,15 +8,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/smash-hq/server-management/internal/logger"
 	"github.com/smash-hq/server-management/internal/system"
 	"golang.org/x/crypto/ssh"
 )
-
-// 确保 system 包被使用
-var _ system.Info
 
 // Server 是 SSH 连接的配置。字段与 storage.Server 一致。
 type Server struct {
@@ -42,27 +40,14 @@ func NewRemoteCollector(log *logger.Logger) *RemoteCollector {
 	return &RemoteCollector{log: log.Named("remote")}
 }
 
-// SSHClient 是 SSH 会话接口。
-type SSHClient interface {
-	Close() error
-	Run(cmd string) (string, error)
+// sshConn 封装 *ssh.Client，每次执行命令新建 Session。
+type sshConn struct {
+	client *ssh.Client
+	mu     sync.Mutex
 }
 
-type sshClient struct {
-	session *ssh.Session
-}
-
-func (c *sshClient) Close() error {
-	return c.session.Close()
-}
-
-func (c *sshClient) Run(cmd string) (string, error) {
-	out, err := c.session.CombinedOutput(cmd)
-	return string(out), err
-}
-
-// Dial 建立 SSH 连接。
-func (rc *RemoteCollector) Dial(srv *Server) (SSHClient, error) {
+// newSSHConn 建立 SSH 连接。
+func newSSHConn(srv *Server) (*sshConn, error) {
 	config := &ssh.ClientConfig{
 		User:            srv.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -91,107 +76,125 @@ func (rc *RemoteCollector) Dial(srv *Server) (SSHClient, error) {
 	}
 
 	addr := net.JoinHostPort(srv.Host, strconv.Itoa(srv.Port))
-	conn, err := ssh.Dial("tcp", addr, config)
+	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
 		return nil, fmt.Errorf("ssh dial %s: %w", addr, err)
 	}
 
-	session, err := conn.NewSession()
-	if err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("ssh new session: %w", err)
-	}
+	return &sshConn{client: client}, nil
+}
 
-	return &sshClient{session: session}, nil
+// RunOnce 执行单条命令（每次新建 Session）。
+func (c *sshConn) RunOnce(cmd string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	session, err := c.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	out, err := session.CombinedOutput(cmd)
+	if err != nil {
+		return string(out), err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Close 关闭 SSH 连接。
+func (c *sshConn) Close() error {
+	return c.client.Close()
+}
+
+// Dial 建立 SSH 连接（返回可执行多次命令的连接）。
+func (rc *RemoteCollector) Dial(srv *Server) (*sshConn, error) {
+	return newSSHConn(srv)
 }
 
 // RunOne 在远程服务器上执行单条命令并返回输出。
-func (rc *RemoteCollector) RunOne(client SSHClient, cmd string) string {
-	out, err := client.Run(cmd)
+func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
+	out, err := client.RunOnce(cmd)
 	if err != nil {
 		rc.log.Debugw("remote cmd failed", "cmd", cmd, "error", err)
 		return ""
 	}
-	return strings.TrimSpace(out)
+	return out
 }
 
 // Snapshot 采集远程服务器的完整系统快照。
 func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
-	client, err := rc.Dial(srv)
+	conn, err := rc.Dial(srv)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer conn.Close()
 
 	info := &system.Info{
 		Timestamp: time.Now().UnixMilli(),
 	}
 
 	// 主机信息
-	if h := rc.RunOne(client, "hostname"); h != "" {
-		info.Host.Hostname = h
-	}
-	if o := rc.RunOne(client, "uname -s"); o != "" {
-		info.Host.OS = o
-	}
-	if k := rc.RunOne(client, "uname -r"); k != "" {
-		info.Host.Kernel = k
-	}
-	if a := rc.RunOne(client, "uname -m"); a != "" {
-		info.Host.Arch = a
-	}
+	info.Host.Hostname = rc.RunOne(conn, "hostname")
+	info.Host.OS = rc.RunOne(conn, "uname -s")
+	info.Host.Kernel = rc.RunOne(conn, "uname -r")
+	info.Host.Arch = rc.RunOne(conn, "uname -m")
 
 	// CPU 信息
-	if model := rc.RunOne(client, "grep -m1 'model name' /proc/cpuinfo | cut -d: -f2"); model != "" {
-		info.CPU.Model = strings.TrimSpace(model)
-	}
-	if cores := rc.RunOne(client, "nproc"); cores != "" {
+	info.CPU.Model = rc.RunOne(conn, "grep -m1 'model name' /proc/cpuinfo | cut -d: -f2")
+	info.CPU.Model = strings.TrimSpace(info.CPU.Model)
+	if cores := rc.RunOne(conn, "nproc"); cores != "" {
 		fmt.Sscanf(cores, "%d", &info.CPU.Threads)
 	}
-	if pct := rc.RunOne(client, "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"); pct != "" {
+	// CPU 使用率：使用 top 非阻塞模式
+	if pct := rc.RunOne(conn, "top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}'"); pct != "" {
 		fmt.Sscanf(pct, "%f", &info.CPU.Percent)
 	}
 
-	// 内存信息
-	if mem := rc.RunOne(client, "free -b | awk '/Mem:/{print $2, $3, $4, $7}'"); mem != "" {
-		var total, used, free, available uint64
-		fmt.Sscanf(mem, "%d %d %d %d", &total, &used, &free, &available)
+	// 内存信息（使用 free 命令）
+	if mem := rc.RunOne(conn, "free -b 2>/dev/null | awk '/Mem:/{print $2, $3, $7}'"); mem != "" {
+		var total, used, available uint64
+		fmt.Sscanf(mem, "%d %d %d", &total, &used, &available)
 		info.Memory.Total = total
 		info.Memory.Used = used
-		info.Memory.Free = free
+		info.Memory.Free = available
 		if total > 0 {
 			info.Memory.Percent = float64(used) / float64(total) * 100
 		}
 	}
 
 	// 磁盘信息
-	if disks := rc.RunOne(client, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
+	if disks := rc.RunOne(conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
 		for _, line := range strings.Split(disks, "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 4 {
 				var total, used uint64
 				fmt.Sscanf(fields[1], "%d", &total)
 				fmt.Sscanf(fields[2], "%d", &used)
+				pct := 0.0
+				if total > 0 {
+					pct = float64(used) / float64(total) * 100
+				}
 				info.Disks = append(info.Disks, system.DiskInfo{
 					Device:  fields[0],
 					Total:   total,
 					Used:    used,
 					Mount:   fields[3],
-					Percent: float64(used) / float64(total) * 100,
+					Percent: pct,
 				})
 			}
 		}
 	}
 
 	// 运行时间
-	if uptime := rc.RunOne(client, "cat /proc/uptime | awk '{print $1}'"); uptime != "" {
+	if uptime := rc.RunOne(conn, "cat /proc/uptime | awk '{print $1}'"); uptime != "" {
 		var secs float64
 		fmt.Sscanf(uptime, "%f", &secs)
 		info.Uptime = uint64(secs)
 	}
 
-	// 负载
-	if load := rc.RunOne(client, "cat /proc/loadavg | awk '{print $1, $2, $3}'"); load != "" {
+	// 系统负载
+	if load := rc.RunOne(conn, "cat /proc/loadavg | awk '{print $1, $2, $3}'"); load != "" {
 		fmt.Sscanf(load, "%f %f %f", &info.Load.Load1, &info.Load.Load5, &info.Load.Load15)
 	}
 
@@ -200,24 +203,16 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 
 // TestConnection 测试 SSH 连接并返回远程主机基本信息。
 func (rc *RemoteCollector) TestConnection(srv *Server) (*system.HostInfo, error) {
-	client, err := rc.Dial(srv)
+	conn, err := rc.Dial(srv)
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer conn.Close()
 
 	info := &system.HostInfo{}
-	if h := rc.RunOne(client, "hostname"); h != "" {
-		info.Hostname = h
-	}
-	if o := rc.RunOne(client, "uname -s"); o != "" {
-		info.OS = o
-	}
-	if k := rc.RunOne(client, "uname -r"); k != "" {
-		info.Kernel = k
-	}
-	if a := rc.RunOne(client, "uname -m"); a != "" {
-		info.Arch = a
-	}
+	info.Hostname = rc.RunOne(conn, "hostname")
+	info.OS = rc.RunOne(conn, "uname -s")
+	info.Kernel = rc.RunOne(conn, "uname -r")
+	info.Arch = rc.RunOne(conn, "uname -m")
 	return info, nil
 }
