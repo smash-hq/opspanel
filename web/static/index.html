@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Plane · 服务器管理</title>
+    <!-- 样式表：按 base → layout → components → states 顺序加载 -->
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/layout.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/states.css">
+    <link rel="stylesheet" href="/css/cards.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-header">
+            <div class="brand">
+                <span class="brand-mark">SP</span>
+                <div class="brand-copy" v-show="!sidebarCollapsed">
+                    <strong>Server Plane</strong>
+                    <span>基础设施控制台</span>
+                </div>
+            </div>
+            <button class="icon-button collapse-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开侧栏' : '收起侧栏'">
+                <span class="collapse-icon">{{ sidebarCollapsed ? '⟩' : '⟨' }}</span>
+            </button>
+        </div>
+
+        <!-- 主导航菜单 -->
+        <nav class="sidebar-menu">
+            <button class="menu-item" :class="{ active: activeMenu === 'servers' }" @click="activeMenu = 'servers'">
+                <span class="menu-icon">▤</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">服务器</span>
+                <span class="menu-badge" v-show="!sidebarCollapsed">{{ servers.length + 1 }}</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'software' }" @click="activeMenu = 'software'">
+                <span class="menu-icon">▦</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">软件商店</span>
+                <span class="menu-badge" v-show="!sidebarCollapsed">{{ softwareCatalog.length }}</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'cluster' }" @click="activeMenu = 'cluster'">
+                <span class="menu-icon">⛓</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">集群</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'monitor' }" @click="activeMenu = 'monitor'">
+                <span class="menu-icon">📊</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">监控</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'files' }" @click="activeMenu = 'files'">
+                <span class="menu-icon">📁</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">文件</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'terminal' }" @click="activeMenu = 'terminal'">
+                <span class="menu-icon">⌨</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">终端</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'firewall' }" @click="activeMenu = 'firewall'">
+                <span class="menu-icon">🛡</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">防火墙</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+            <button class="menu-item" :class="{ active: activeMenu === 'settings' }" @click="activeMenu = 'settings'">
+                <span class="menu-icon">⚙</span>
+                <span class="menu-label" v-show="!sidebarCollapsed">设置</span>
+                <span class="menu-tag" v-show="!sidebarCollapsed">即将推出</span>
+            </button>
+        </nav>
+
+        <!-- 服务器列表（仅服务器菜单展开时显示） -->
+        <div class="sidebar-content" v-show="activeMenu === 'servers' && !sidebarCollapsed">
+            <div class="search-box">
+                <span class="search-icon">⌕</span>
+                <input v-model="searchQuery" placeholder="搜索名称、地址..." aria-label="搜索服务器">
+                <kbd v-if="!searchQuery">/</kbd>
+                <button v-else class="clear-search" @click="searchQuery = ''" title="清除搜索">×</button>
+            </div>
+            <div class="filter-tabs">
+                <button v-for="filter in filters" :key="filter.value" :class="{ active: activeFilter === filter.value }" @click="activeFilter = filter.value">
+                    {{ filter.label }} <span>{{ filterCount(filter.value) }}</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 软件商店筛选（仅软件菜单展开时显示） -->
+        <div class="sidebar-content" v-show="activeMenu === 'software' && !sidebarCollapsed">
+            <div class="filter-tabs">
+                <button :class="{ active: softwareCategory === 'all' }" @click="softwareCategory = 'all'">全部</button>
+                <button :class="{ active: softwareCategory === 'database' }" @click="softwareCategory = 'database'">数据库</button>
+                <button :class="{ active: softwareCategory === 'web' }" @click="softwareCategory = 'web'">Web</button>
+                <button :class="{ active: softwareCategory === 'runtime' }" @click="softwareCategory = 'runtime'">运行时</button>
+            </div>
+        </div>
+
+        <!-- 服务器列表 -->
+        <div class="server-list" v-show="activeMenu === 'servers'" :class="{ compact: sidebarCollapsed }">
+            <div class="server-item local-item" :class="{ active: selectedServer === 'local' }" @click="selectServer('local')">
+                <span class="server-avatar local">⌂</span>
+                <span class="server-item-copy" v-show="!sidebarCollapsed"><strong>本机服务器</strong><small>当前管理节点</small></span>
+                <span class="status-dot ok"></span>
+                <div class="server-item-tooltip" v-if="sidebarCollapsed">本机服务器</div>
+            </div>
+            <div v-for="s in filteredServers" :key="s.id" class="server-item" :class="{ active: selectedServer === s.id }" @click="selectServer(s.id)">
+                <span class="server-avatar" :class="s.type">{{ s.type === 'remote' ? '↗' : '⌂' }}</span>
+                <span class="server-item-copy" v-show="!sidebarCollapsed"><strong>{{ s.name }}</strong><small>{{ serverAddress(s) }}</small></span>
+                <span class="status-dot" :class="serverStatus[s.id] || 'unknown'"></span>
+                <span class="item-actions" v-show="!sidebarCollapsed" @click.stop>
+                    <button @click="openEdit(s)" title="编辑服务器">✎</button>
+                    <button class="danger" @click="deleteServer(s.id)" title="删除服务器">×</button>
+                </span>
+                <div class="server-item-tooltip" v-if="sidebarCollapsed">{{ s.name }} · {{ serverAddress(s) }} {{ statusText(serverStatus[s.id]) }}</div>
+            </div>
+            <div v-if="!filteredServers.length && !sidebarCollapsed" class="list-empty">
+                <span class="empty-icon">⌁</span>
+                <strong>{{ servers.length ? '没有匹配的服务器' : '还没有远程服务器' }}</strong>
+                <small>{{ servers.length ? '尝试修改搜索条件' : '添加一台服务器开始管理' }}</small>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <button class="add-button" v-show="activeMenu === 'servers'" @click="openAdd" :class="{ 'compact-add': sidebarCollapsed }">
+                <span>＋</span>
+                <b v-show="!sidebarCollapsed">添加服务器</b>
+            </button>
+            <div class="sidebar-meta" v-show="!sidebarCollapsed"><span class="live-dot"></span><span>本地控制面在线</span><span class="version">v0.1</span></div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div class="breadcrumb">
+                <span>控制台</span><b>/</b>
+                <strong v-if="activeMenu === 'servers'">{{ selectedServer ? currentServerName : '服务器概览' }}</strong>
+                <strong v-else-if="activeMenu === 'software'">软件商店</strong>
+                <strong v-else-if="activeMenu === 'cluster'">集群管理</strong>
+                <strong v-else-if="activeMenu === 'monitor'">监控中心</strong>
+                <strong v-else-if="activeMenu === 'files'">文件管理</strong>
+                <strong v-else-if="activeMenu === 'terminal'">Web 终端</strong>
+                <strong v-else-if="activeMenu === 'firewall'">防火墙</strong>
+                <strong v-else-if="activeMenu === 'settings'">系统设置</strong>
+            </div>
+            <div class="topbar-actions">
+                <template v-if="activeMenu === 'servers'">
+                    <span class="sync-time" v-if="selectedServer && lastUpdate">最后更新 {{ lastUpdate }}</span>
+                    <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新服务器数据">↻ <span>刷新</span></button>
+                    <button class="primary-button compact-button" @click="openAdd">＋ <span>添加服务器</span></button>
+                </template>
+                <template v-else-if="activeMenu === 'software'">
+                    <button class="toolbar-button" @click="loadSoftwareStatus(selectedServer)" :disabled="softwareLoading || !selectedServer || selectedServer === 'local'" title="刷新软件状态">↻ <span>刷新</span></button>
+                </template>
+            </div>
+        </header>
+
+        <div class="content">
+            <!-- ═══ 服务器管理视图 ═══ -->
+            <section v-if="activeMenu === 'servers'">
+                <!-- 仪表板统计 -->
+                <div class="dashboard-stats">
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon blue">▣</span><div class="dashboard-stat-info"><small>服务器总数</small><strong>{{ servers.length + 1 }}</strong></div></div>
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon green">●</span><div class="dashboard-stat-info"><small>在线服务器</small><strong>{{ onlineCount }}</strong></div></div>
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon amber">↗</span><div class="dashboard-stat-info"><small>远程服务器</small><strong>{{ servers.length }}</strong></div></div>
+                    <div class="dashboard-stat"><span class="dashboard-stat-icon violet">📦</span><div class="dashboard-stat-info"><small>已安装软件</small><strong>{{ softwareStatuses.filter(s => s.installed).length }}</strong></div></div>
+                </div>
+
+                <!-- 服务器卡片列表 -->
+                <div class="server-cards">
+                    <!-- 本机服务器卡片 -->
+                    <div class="server-card" :class="{ active: selectedServer === 'local' }" @click="selectServer('local')">
+                        <div class="server-card-header">
+                            <span class="server-card-avatar local">⌂</span>
+                            <div class="server-card-title"><h3>本机服务器</h3><small>localhost · 当前管理节点</small></div>
+                        </div>
+                        <div class="server-card-body">
+                            <div class="server-card-metrics">
+                                <div class="card-metric"><div class="card-metric-value">{{ number(info.cpu && info.cpu.percent) }}%</div><div class="card-metric-label">CPU</div></div>
+                                <div class="card-metric"><div class="card-metric-value">{{ number(info.memory && info.memory.percent) }}%</div><div class="card-metric-label">内存</div></div>
+                                <div class="card-metric"><div class="card-metric-value">{{ fmtUptime(info.uptime) }}</div><div class="card-metric-label">运行时间</div></div>
+                            </div>
+                        </div>
+                        <div class="server-card-tags">
+                            <span class="server-tag ok">● 在线</span>
+                            <span class="server-tag" v-if="info.host && info.host.os">{{ info.host.os }}</span>
+                            <span class="server-tag" v-if="info.cpu && info.cpu.cores">{{ info.cpu.cores }}核 {{ info.cpu.threads }}线程</span>
+                        </div>
+                    </div>
+
+                    <!-- 远程服务器卡片 -->
+                    <div v-for="s in servers" :key="s.id" class="server-card" :class="{ active: selectedServer === s.id }" @click="selectServer(s.id)">
+                        <div class="server-card-header">
+                            <span class="server-card-avatar" :class="s.type">{{ s.type === 'remote' ? '↗' : '⌂' }}</span>
+                            <div class="server-card-title"><h3>{{ s.name }}</h3><small>{{ serverAddress(s) }}</small></div>
+                        </div>
+                        <div class="server-card-body">
+                            <div class="server-card-metrics">
+                                <div class="card-metric"><div class="card-metric-value">{{ statusText(serverStatus[s.id]) }}</div><div class="card-metric-label">状态</div></div>
+                                <div class="card-metric"><div class="card-metric-value">{{ s.type === 'remote' ? 'SSH' : '本地' }}</div><div class="card-metric-label">连接方式</div></div>
+                                <div class="card-metric"><div class="card-metric-value">{{ s.username || '—' }}</div><div class="card-metric-label">用户</div></div>
+                            </div>
+                        </div>
+                        <div class="server-card-tags">
+                            <span class="server-tag" :class="serverStatus[s.id] || 'unknown'">{{ statusText(serverStatus[s.id]) }}</span>
+                        </div>
+                        <div class="server-card-actions">
+                            <button class="toolbar-button small" @click.stop="openEdit(s)">编辑</button>
+                            <button class="toolbar-button small danger-text" @click.stop="deleteServer(s.id)">删除</button>
+                        </div>
+                    </div>
+
+                    <!-- 空状态 -->
+                    <div v-if="!servers.length" style="grid-column:1/-1;text-align:center;padding:40px;">
+                        <div style="font-size:32px;margin-bottom:12px;">🖥️</div>
+                        <strong>还没有远程服务器</strong>
+                        <small style="display:block;margin-top:4px;margin-bottom:16px;">添加一台服务器开始管理</small>
+                        <button class="primary-button" @click="openAdd">＋ 添加服务器</button>
+                    </div>
+                </div>
+
+                <!-- 服务器详情面板（选中服务器时显示） -->
+                <div v-if="selectedServer" class="detail-panel">
+                    <div class="detail-panel-header">
+                        <h3>{{ currentServerName }} · 系统详情</h3>
+                        <button class="toolbar-button small" @click="refreshCurrent" :disabled="loading">↻ 刷新</button>
+                    </div>
+                    <div class="detail-panel-body" v-if="hasInfo">
+                        <!-- 权限警告 -->
+                        <div v-if="info.sudo_used" class="permission-warning" style="margin-bottom:16px;">
+                            <div class="warning-icon">⚠</div>
+                            <div class="warning-content">
+                                <strong>权限不足 — 采集过程使用了 sudo 回退</strong>
+                                <details class="warning-details" style="margin-top:8px;">
+                                    <summary>📖 如何配置 sudo 免密权限</summary>
+                                    <div class="warning-docs">
+                                        <pre><code>sudo visudo -f /etc/sudoers.d/your_username</code></pre>
+                                        <pre><code>your_username ALL=(ALL) NOPASSWD: ALL</code></pre>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+
+                        <!-- 系统指标 -->
+                        <div class="metric-grid" style="margin-bottom:20px;">
+                            <div class="metric-card"><div class="metric-top"><span class="metric-label">CPU 使用率</span><span class="metric-symbol blue">CPU</span></div><div class="metric-value">{{ number(info.cpu && info.cpu.percent) }}<small>%</small></div><div class="metric-bar"><i :style="{ width: bounded(info.cpu && info.cpu.percent) + '%' }" class="blue-fill"></i></div><span class="metric-foot">{{ info.cpu && info.cpu.cores || 0 }} 核心 · {{ info.cpu && info.cpu.threads || 0 }} 线程</span></div>
+                            <div class="metric-card"><div class="metric-top"><span class="metric-label">内存使用</span><span class="metric-symbol violet">RAM</span></div><div class="metric-value">{{ number(info.memory && info.memory.percent) }}<small>%</small></div><div class="metric-bar"><i :style="{ width: bounded(info.memory && info.memory.percent) + '%' }" class="violet-fill"></i></div><span class="metric-foot">{{ fmtBytes(info.memory && info.memory.used) }} / {{ fmtBytes(info.memory && info.memory.total) }}</span></div>
+                            <div class="metric-card"><div class="metric-top"><span class="metric-label">磁盘使用</span><span class="metric-symbol amber">DISK</span></div><div class="metric-value">{{ diskPercent }}<small>%</small></div><div class="metric-bar"><i :style="{ width: diskPercent + '%' }" class="amber-fill"></i></div><span class="metric-foot">{{ diskUsed }} / {{ diskTotal }} · {{ diskCount }} 个挂载点</span></div>
+                            <div class="metric-card"><div class="metric-top"><span class="metric-label">运行时间</span><span class="metric-symbol green">UP</span></div><div class="metric-value metric-time">{{ fmtUptime(info.uptime) }}</div><div class="metric-status"><span class="status-dot ok"></span>系统运行正常</div><span class="metric-foot">负载 {{ loadValue }} · {{ info.processes || 0 }} 个进程</span></div>
+                        </div>
+
+                        <!-- 主机信息 -->
+                        <div class="detail-grid" style="margin-bottom:20px;">
+                            <div class="detail-item"><small>主机名</small><strong>{{ info.host && info.host.hostname || '—' }}</strong></div>
+                            <div class="detail-item"><small>操作系统</small><strong>{{ info.host && info.host.os || '—' }}</strong></div>
+                            <div class="detail-item"><small>平台</small><strong>{{ info.host && info.host.platform || '—' }}</strong></div>
+                            <div class="detail-item"><small>内核版本</small><strong>{{ info.host && info.host.kernel || '—' }}</strong></div>
+                            <div class="detail-item"><small>架构</small><strong>{{ info.host && info.host.arch || '—' }}</strong></div>
+                            <div class="detail-item"><small>CPU 型号</small><strong>{{ info.cpu && info.cpu.model || '—' }}</strong></div>
+                            <div class="detail-item"><small>进程数</small><strong>{{ info.processes || 0 }}</strong></div>
+                        </div>
+
+                        <!-- 磁盘信息 -->
+                        <div v-if="info.disks && info.disks.length" style="margin-top:16px;">
+                            <h4 style="font-size:14px;font-weight:600;margin-bottom:12px;">磁盘空间</h4>
+                            <div class="disk-table">
+                                <div v-for="(d, i) in info.disks" :key="i" class="disk-row">
+                                    <div class="disk-name"><strong>{{ d.mount }}</strong><small>{{ d.device }} · {{ d.fs_type || 'unknown' }}</small></div>
+                                    <div class="disk-progress"><span><i :style="{ width: bounded(d.percent) + '%' }" :class="usageClass(d.percent)"></i></span><b>{{ number(d.percent) }}%</b></div>
+                                    <div class="disk-size">{{ fmtBytes(d.used) }} <small>/ {{ fmtBytes(d.total) }}</small></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else-if="loading" class="loading-state" style="padding:40px;">
+                        <div class="loading-orbit"><span></span></div><h3>正在连接 {{ currentServerName }}</h3>
+                    </div>
+                    <div v-else-if="loadError" class="error-state" style="padding:40px;">
+                        <div class="error-mark">!</div><h3>无法连接服务器</h3><p>{{ loadError }}</p>
+                        <div class="error-actions"><button class="primary-button" @click="retryLoad">重新连接</button><button class="toolbar-button" @click="openEdit(currentServer)">编辑配置</button></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 软件商店视图 ═══ -->
+            <section v-if="activeMenu === 'software'" class="software-view">
+                <div class="software-source-header">
+                    <div><span class="eyebrow">APP MARKET</span><h2>软件商店</h2><p>管理服务器软件包来源、版本和安装。</p></div>
+                </div>
+                <div class="source-list">
+                    <div class="source-card">
+                        <span class="source-card-icon">📦</span>
+                        <div class="source-card-info"><strong>官方软件源</strong><small>系统包管理器 (apt/yum/dnf) · 已启用</small></div>
+                        <div class="source-card-actions"><button class="toolbar-button small">配置</button></div>
+                    </div>
+                    <div class="source-card">
+                        <span class="source-card-icon">🐳</span>
+                        <div class="source-card-info"><strong>Docker Hub</strong><small>容器镜像仓库 · 即将支持</small></div>
+                        <div class="source-card-actions"><button class="toolbar-button small" disabled>即将推出</button></div>
+                    </div>
+                    <div class="source-card">
+                        <span class="source-card-icon">📁</span>
+                        <div class="source-card-info"><strong>自定义源</strong><small>添加第三方软件源 · 即将支持</small></div>
+                        <div class="source-card-actions"><button class="toolbar-button small" disabled>即将推出</button></div>
+                    </div>
+                </div>
+                <div class="installed-list" v-if="softwareStatuses.filter(s => s.installed).length">
+                    <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">已安装软件</h3>
+                    <div class="installed-grid">
+                        <div v-for="status in softwareStatuses.filter(s => s.installed)" :key="status.package.id" class="installed-card">
+                            <span class="installed-card-icon">{{ status.package.icon }}</span>
+                            <div class="installed-card-info"><strong>{{ status.package.name }}</strong><small>{{ status.version || status.package.version }}</small></div>
+                            <div class="installed-card-status"><span class="server-tag" :class="status.status">{{ status.status === 'running' ? '运行中' : status.status === 'stopped' ? '已停止' : '未知' }}</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="installed-list">
+                    <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">可安装软件</h3>
+                    <div class="installed-grid">
+                        <div v-for="pkg in filteredSoftware" :key="pkg.id" class="installed-card">
+                            <span class="installed-card-icon">{{ pkg.icon }}</span>
+                            <div class="installed-card-info"><strong>{{ pkg.name }}</strong><small>{{ pkg.version }} · {{ pkg.description }}</small></div>
+                            <div class="installed-card-status">
+                                <button v-if="getPackageStatus(pkg.id)?.installed" class="toolbar-button small" disabled>已安装</button>
+                                <button v-else-if="softwareOperating[pkg.id]" class="toolbar-button small" disabled>安装中...</button>
+                                <button v-else class="primary-button small" @click="installPackage(pkg.id)">安装</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 集群管理视图 ═══ -->
+            <section v-if="activeMenu === 'cluster'" class="placeholder-view">
+                <div class="placeholder-icon">⛓</div>
+                <h2>集群管理</h2>
+                <p>统一管理多台服务器，实现负载均衡、服务编排和故障转移。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>🖥️</span><div><strong>节点管理</strong><small>添加、移除集群节点</small></div></div>
+                    <div class="feature-card"><span>⚖️</span><div><strong>负载均衡</strong><small>流量分发与调度</small></div></div>
+                    <div class="feature-card"><span>🔄</span><div><strong>服务编排</strong><small>容器与服务部署</small></div></div>
+                    <div class="feature-card"><span>🔔</span><div><strong>故障转移</strong><small>自动检测与恢复</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V2.0</div>
+            </section>
+
+            <!-- ═══ 监控中心视图 ═══ -->
+            <section v-if="activeMenu === 'monitor'" class="placeholder-view">
+                <div class="placeholder-icon">📊</div>
+                <h2>监控中心</h2>
+                <p>实时监控服务器资源使用情况、应用性能和异常告警。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>📈</span><div><strong>性能图表</strong><small>CPU/内存/磁盘/网络</small></div></div>
+                    <div class="feature-card"><span>🔔</span><div><strong>告警通知</strong><small>阈值告警与通知</small></div></div>
+                    <div class="feature-card"><span>📝</span><div><strong>日志分析</strong><small>系统与应用日志</small></div></div>
+                    <div class="feature-card"><span>📉</span><div><strong>趋势分析</strong><small>历史数据与预测</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V2.0</div>
+            </section>
+
+            <!-- ═══ 文件管理视图 ═══ -->
+            <section v-if="activeMenu === 'files'" class="placeholder-view">
+                <div class="placeholder-icon">📁</div>
+                <h2>文件管理</h2>
+                <p>通过 Web 界面管理远程服务器上的文件，支持上传、下载、编辑。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>📤</span><div><strong>文件上传</strong><small>拖拽上传与批量传输</small></div></div>
+                    <div class="feature-card"><span>📥</span><div><strong>文件下载</strong><small>单文件与打包下载</small></div></div>
+                    <div class="feature-card"><span>✏️</span><div><strong>在线编辑</strong><small>代码高亮与实时保存</small></div></div>
+                    <div class="feature-card"><span>🔍</span><div><strong>文件搜索</strong><small>全文检索与过滤</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V1.0</div>
+            </section>
+
+            <!-- ═══ Web 终端视图 ═══ -->
+            <section v-if="activeMenu === 'terminal'" class="placeholder-view">
+                <div class="placeholder-icon">⌨</div>
+                <h2>Web 终端</h2>
+                <p>通过浏览器直接访问远程服务器的命令行界面，无需安装 SSH 客户端。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>💻</span><div><strong>SSH 终端</strong><small>完整的 Shell 体验</small></div></div>
+                    <div class="feature-card"><span>📋</span><div><strong>命令历史</strong><small>历史记录与自动补全</small></div></div>
+                    <div class="feature-card"><span>🖥️</span><div><strong>多标签页</strong><small>同时连接多台服务器</small></div></div>
+                    <div class="feature-card"><span>📋</span><div><strong>剪贴板</strong><small>复制粘贴支持</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V1.0</div>
+            </section>
+
+            <!-- ═══ 防火墙视图 ═══ -->
+            <section v-if="activeMenu === 'firewall'" class="placeholder-view">
+                <div class="placeholder-icon">🛡</div>
+                <h2>防火墙</h2>
+                <p>管理服务器防火墙规则，配置端口转发和访问控制。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>🔌</span><div><strong>端口管理</strong><small>开放/关闭端口</small></div></div>
+                    <div class="feature-card"><span>🚫</span><div><strong>IP 封禁</strong><small>黑名单与白名单</small></div></div>
+                    <div class="feature-card"><span>🔄</span><div><strong>端口转发</strong><small>NAT 与 DNAT</small></div></div>
+                    <div class="feature-card"><span>📋</span><div><strong>规则模板</strong><small>常用规则一键应用</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V1.0</div>
+            </section>
+
+            <!-- ═══ 系统设置视图 ═══ -->
+            <section v-if="activeMenu === 'settings'" class="placeholder-view">
+                <div class="placeholder-icon">⚙</div>
+                <h2>系统设置</h2>
+                <p>配置面板参数、用户权限、安全策略和系统偏好。</p>
+                <div class="placeholder-features">
+                    <div class="feature-card"><span>👤</span><div><strong>用户管理</strong><small>账户与权限</small></div></div>
+                    <div class="feature-card"><span>🔐</span><div><strong>安全设置</strong><small>密码策略与 2FA</small></div></div>
+                    <div class="feature-card"><span>🔔</span><div><strong>通知配置</strong><small>邮件与 Webhook</small></div></div>
+                    <div class="feature-card"><span>💾</span><div><strong>备份恢复</strong><small>配置与数据备份</small></div></div>
+                </div>
+                <div class="placeholder-coming-soon">即将推出 · V1.0</div>
+            </section>
+        </div>
+    </main>    <div class="modal-overlay" v-if="formMode" @click.self="closeForm">
+        <div class="modal">
+            <div class="modal-header"><div><span class="eyebrow">{{ formMode === 'add' ? 'NEW ASSET' : 'EDIT ASSET' }}</span><h3>{{ formMode === 'add' ? '添加服务器' : '编辑服务器配置' }}</h3></div><button class="icon-button" @click="closeForm" title="关闭">×</button></div>
+            <div class="modal-body">
+                <div class="form-intro"><span class="form-avatar">{{ form.type === 'remote' ? '↗' : '⌂' }}</span><div><strong>{{ formMode === 'add' ? '配置新的管理节点' : '更新连接信息' }}</strong><small>保存后即可从左侧资产列表连接服务器</small></div></div>
+                <div class="form-section-title">基本信息</div>
+                <div class="form-grid"><label class="field full"><span>显示名称 <em>*</em></span><input v-model.trim="form.name" @input="clearTestResult" placeholder="例如：生产环境 Web-01"></label><label class="field"><span>服务器类型</span><select v-model="form.type" @change="clearTestResult"><option value="remote">远程 SSH</option><option value="local">本机节点</option></select></label><label class="field" v-if="form.type === 'remote'"><span>主机地址 <em>*</em></span><input v-model.trim="form.host" @input="clearTestResult" placeholder="IP 地址或域名"></label></div>
+                <template v-if="form.type === 'remote'">
+                    <div class="form-section-title">SSH 连接</div>
+                    <div class="form-grid"><label class="field"><span>SSH 端口</span><input v-model.number="form.port" @input="clearTestResult" type="number" min="1" max="65535" placeholder="22"></label><label class="field"><span>用户名 <em>*</em></span><input v-model.trim="form.username" @input="clearTestResult" placeholder="root"></label><label class="field"><span>认证方式</span><select v-model="form.auth_type" @change="clearTestResult"><option value="password">密码认证</option><option value="key">私钥认证</option></select></label><label class="field" v-if="form.auth_type === 'password'"><span>登录密码 <em v-if="formMode === 'add'">*</em></span><input v-model="form.password" @input="clearTestResult" type="password" :placeholder="formMode === 'edit' ? '留空则保留原密码' : '输入 SSH 密码'"></label><label class="field full" v-if="form.auth_type === 'key'"><span>私钥文件路径 <em>*</em></span><input v-model.trim="form.key_path" @input="clearTestResult" placeholder="例如：/home/admin/.ssh/id_ed25519"></label></div>
+                </template>
+                <div class="form-notice">凭据仅用于服务器连接，不会在服务器列表中展示。编辑时留空密码表示保留已保存的凭据。</div>
+
+                <!-- 连接测试结果 -->
+                <div v-if="testResult" class="test-result" :class="{ success: testResult.success, error: !testResult.success }">
+                    <div class="test-result-icon">{{ testResult.success ? '✓' : '✗' }}</div>
+                    <div class="test-result-content">
+                        <strong v-if="testResult.success">连接成功</strong>
+                        <strong v-else>连接失败</strong>
+                        <div v-if="testResult.success && testResult.host" class="test-host-info">
+                            <span><b>主机名</b>{{ testResult.host.hostname || '—' }}</span>
+                            <span><b>操作系统</b>{{ testResult.host.os || '—' }}</span>
+                            <span><b>内核</b>{{ testResult.host.kernel || '—' }}</span>
+                            <span><b>架构</b>{{ testResult.host.arch || '—' }}</span>
+                        </div>
+                        <span v-if="!testResult.success && testResult.error" class="test-error-msg">{{ testResult.error }}</span>
+                    </div>
+                </div>
+
+                <div class="form-error" v-if="formError">{{ formError }}</div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="closeForm">取消</button>
+                <button class="toolbar-button test-button" @click="testServerConnection" :disabled="testing || saving" v-if="form.type === 'remote'">
+                    {{ testing ? '测试中…' : '⚡ 测试连接' }}
+                </button>
+                <button class="primary-button" @click="saveServer" :disabled="saving || testing">{{ saving ? '保存中...' : '保存配置' }}</button>
+            </div>
+        </div>
+    </div>
+    <div class="toast" :class="{ visible: toast.visible, error: toast.error }">{{ toast.message }}</div>
+</div>
+<!-- ES Module 入口：import js/store.js → Vue.createApp → mount -->
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+/* ============================================================
+   cards.css — 卡片式组件
+   服务器卡片、应用卡片、详情展开面板
+   ============================================================ */
+
+/* ─── 服务器卡片列表 ─── */
+.server-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.server-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+    cursor: pointer;
+}
+
+.server-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.server-card.active {
+    border-color: var(--color-blue);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* 服务器卡片头部 */
+.server-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.server-card-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: var(--border-radius-sm);
+    font-size: 20px;
+    font-weight: 600;
+    background: var(--color-blue-light);
+    color: var(--color-blue);
+}
+
+.server-card-avatar.local {
+    background: var(--color-green-light);
+    color: var(--color-green);
+}
+
+.server-card-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.server-card-title h3 {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.server-card-title small {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 服务器卡片内容 — 简略信息 */
+.server-card-body {
+    padding: 16px;
+}
+
+.server-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.card-metric {
+    text-align: center;
+}
+
+.card-metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.card-metric-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* 服务器卡片标签 */
+.server-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 16px 16px;
+}
+
+.server-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.server-tag.ok { background: var(--color-green-light); color: var(--color-green); }
+.server-tag.error { background: var(--color-red-light); color: var(--color-red); }
+.server-tag.loading { background: var(--color-amber-light); color: var(--color-amber); }
+.server-tag.unknown { background: #f3f4f6; color: var(--text-muted); }
+
+/* 服务器卡片操作 */
+.server-card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--card-border);
+    background: #fafbfc;
+}
+
+.server-card-actions button {
+    flex: 1;
+    padding: 7px 12px;
+    font-size: 12px;
+}
+
+/* ─── 详情展开面板 ─── */
+.detail-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin: 24px;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    overflow: hidden;
+    animation: slideDown 0.25s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.detail-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--card-border);
+    background: #fafbfc;
+}
+
+.detail-panel-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.detail-panel-body {
+    padding: 20px;
+}
+
+/* 详情网格 */
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-item small {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.detail-item strong {
+    font-size: 14px;
+    font-weight: 500;
+    word-break: break-all;
+}
+
+/* ─── 应用商店卡片 ─── */
+.software-source-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.software-source-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.source-list {
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.source-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.source-card-icon {
+    font-size: 28px;
+}
+
+.source-card-info {
+    flex: 1;
+}
+
+.source-card-info strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.source-card-info small {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.source-card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* 已安装应用列表 */
+.installed-list {
+    padding: 16px 24px;
+}
+
+.installed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.installed-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.installed-card-icon {
+    font-size: 24px;
+}
+
+.installed-card-info {
+    flex: 1;
+}
+
+.installed-card-info strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.installed-card-info small {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.installed-card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ─── 仪表板式统计 ─── */
+.dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.dashboard-stat {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.dashboard-stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: var(--border-radius-sm);
+    font-size: 18px;
+}
+
+.dashboard-stat-icon.blue { background: var(--color-blue-light); color: var(--color-blue); }
+.dashboard-stat-icon.green { background: var(--color-green-light); color: var(--color-green); }
+.dashboard-stat-icon.amber { background: var(--color-amber-light); color: var(--color-amber); }
+.dashboard-stat-icon.violet { background: var(--color-violet-light); color: var(--color-violet); }
+.dashboard-stat-icon.red { background: var(--color-red-light); color: var(--color-red); }
+
+.dashboard-stat-info small {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.dashboard-stat-info strong {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+/* 响应式 */
+@media (max-width: 1200px) {
+    .dashboard-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .server-cards { grid-template-columns: 1fr; padding: 16px; }
+    .dashboard-stats { grid-template-columns: 1fr 1fr; padding: 16px; }
+    .detail-panel { margin: 16px; }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .installed-grid { grid-template-columns: 1fr; }
+}
