@@ -2376,13 +2376,13 @@
 .col-cpu.warn { color: var(--color-red, #ef4444); font-weight: 600; }
 
 .proc-btn {
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--card-border, #e5e7eb);
-    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 5px;
     background: transparent;
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2391,6 +2391,7 @@
 
 .proc-btn:hover {
     background: var(--content-bg, #f9fafb);
+    border-color: var(--color-blue, #3b82f6);
 }
 
 .proc-btn.danger:hover {
@@ -3074,12 +3075,12 @@
 .docker-image-row,
 .docker-container-row {
     display: grid;
-    grid-template-columns: 24px 1fr 120px 100px 120px 1fr;
+    grid-template-columns: 24px 1fr 100px 80px 100px 180px;
     align-items: center;
-    padding: 10px 16px;
+    padding: 10px 14px;
     border-top: 1px solid var(--card-border, #e2e8f0);
     font-size: 0.85rem;
-    gap: 12px;
+    gap: 10px;
 }
 
 .docker-container-row:first-child {
@@ -3172,8 +3173,16 @@
 
 .docker-ctr-actions {
     display: flex;
-    gap: 4px;
+    gap: 3px;
     justify-content: flex-end;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.docker-ctr-actions .proc-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 0.65rem;
 }
 
 /* 批量操作栏 */
