@@ -1,117 +1,74 @@
-# Server Plane - 服务器管理面板
+# Server Plane ⚡
 
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-supported-2496ED?style=flat&logo=docker)](https://www.docker.com)
+**一个二进制，管理你所有的服务器。**
 
-Go 原生服务器运维平台，提供浏览器控制台管理本机及远程服务器。单机优先，零外部依赖（无需数据库），开箱即用。
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![License: Non-Commercial](https://img.shields.io/badge/license-Non--Commercial-orange.svg)](LICENSE)
+[![Zero Dependency](https://img.shields.io/badge/依赖-零外部服务-success?style=flat)](#为什么选择-server-plane)
+[![Single Binary](https://img.shields.io/badge/交付-单二进制-8A2BE2?style=flat)](#为什么选择-server-plane)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
 
-## ⚠️ 安全声明
+Go 原生服务器运维面板。单二进制 + 内嵌前端 + SQLite，**零外部依赖、零 Agent**——远程服务器只要开着 SSH，浏览器里就是完整的控制台：实时监控、软件商店、Docker、文件、进程，一屏尽览。
 
-**使用本软件前，请仔细阅读以下安全声明：**
+```bash
+git clone https://github.com/smash-hq/server-management.git
+cd server-management && make run
+# 打开 http://localhost:18080 —— 就这么简单
+```
 
-1. **本软件会执行远程命令**：通过 SSH 连接远程服务器并执行系统命令（包括 sudo 操作），可能导致系统配置变更、数据丢失或服务中断。
-2. **凭证存储**：服务器连接信息（密码、私钥）存储在本地 SQLite 数据库中，虽有文件权限保护，但**不应用于生产环境或高安全要求场景**。
-3. **无认证机制**：当前版本**无内置用户认证和访问控制**，任何能访问面板的人都可以执行所有操作。
-4. **责任免除**：**一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏等）均与本项目无关**。使用者需自行承担所有风险。
-5. **使用建议**：仅在内网/开发环境使用，不要暴露到公网，务必配置防火墙和访问控制。
+## 为什么选择 Server Plane
 
----
+| | Server Plane | 传统重型面板 |
+|---|:---:|:---:|
+| 安装交付 | **单二进制，scp 过去就能跑** | 安装脚本 + 面板服务 + Agent 常驻 |
+| 外部依赖 | **无（SQLite 内置，纯 Go 免 CGO）** | MySQL / PostgreSQL |
+| 远程接管 | **只需 SSH，被管机零侵入** | 每台机器装 Agent |
+| 资源占用 | **一个进程，闲时几乎为零** | Agent + 面板双进程 |
+| 国产平台 | **开箱支持 arm64（鲲鹏/飞腾）** | 视发行版而定 |
+| 技术栈 | 原生 Go + 原生前端，无构建链 | Node/Python 混合构建 |
 
-## 目录
+适合：个人开发机、小团队内网服务器、嵌入式/国产化环境的轻量运维。
 
-- [功能特性](#功能特性)
-- [快速开始](#快速开始)
-- [部署指南](#部署指南)
-- [配置](#配置)
-- [API 接口](#api-接口)
-- [项目结构](#项目结构)
-- [开发指南](#开发指南)
-- [安全建议](#安全建议)
-- [许可证](#许可证)
+> ⚠️ **内网工具，请勿暴露公网**：当前版本无内置认证，SSH 凭证存储于本地 SQLite。详见[安全声明](#️-安全声明)。
 
-## 功能特性
+## 功能总览
 
-### 当前版本 (V0.1)
+| 模块 | 能力 |
+|------|------|
+| 🖥️ **实时监控** | CPU / 内存 / 磁盘 / 网络 / 运行时间，WebSocket 3 秒级推送，按需采集降低 SSH 开销 |
+| 📦 **软件商店** | MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js 一键安装卸载，支持自定义软件包与服务控制命令 |
+| 🌐 **语言环境** | 自动检测已安装语言（Go/Java/Python/Node.js/Rust/PHP/Ruby/.NET），多版本安装，支持自定义扩展 |
+| 🐳 **Docker 管理** | 镜像拉取删除、容器启停/终端/日志、批量操作、镜像源切换（Docker Hub/阿里云/腾讯云/DaoCloud 等） |
+| 📁 **文件管理** | 远程目录树形浏览、文本预览、文件下载、sudo 权限检测 |
+| ⚙️ **进程管理** | 全量进程列表（CPU/内存/命令），SIGTERM/SIGKILL 终止，进程日志查看 |
+| 🎨 **界面体验** | 白天/夜间/跟随系统三态主题，标签页图标自定义，桌面与移动端响应式 |
 
-#### 🖥️ 服务器管理
-- **节点管理**：添加、连接、管理本机及远程 SSH 服务器
-- **实时监控**：CPU、内存、磁盘、网络、运行时间等系统指标
-- **WebSocket 推送**：实时数据自动刷新（仅在系统信息页采集，减少 SSH 开销）
+**底层特性**：SSH 连接池（按需建连、空闲回收、断线自动重建、30s 保活）、SQLite WAL 并发读写、优雅启停、多平台交叉编译。
 
-#### 📦 软件管理
-- **软件商店**：一键安装/卸载 MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js
-- **软件包管理**：自定义软件包定义（安装命令、服务控制命令）
-- **软件源管理**：管理镜像源/仓库地址，支持预设和自定义源
-
-#### 📁 文件管理
-- **文件浏览**：远程服务器文件目录浏览（树形导航）
-- **文件操作**：预览文本文件、下载文件、查看文件详情
-- **权限检测**：自动检测 sudo 权限并提示
-
-#### 🐳 Docker 管理
-- **镜像管理**：查看、拉取、删除镜像，批量操作支持
-- **容器管理**：启动、停止、重启、删除容器，批量操作支持
-- **容器终端**：在容器内执行命令
-- **容器日志**：实时查看容器日志
-- **镜像源管理**：常用镜像源预设 + 自定义源
-
-#### ⚙️ 进程管理
-- **进程列表**：查看所有运行进程（PID、用户、CPU、内存、命令）
-- **进程控制**：终止进程（SIGTERM/SIGKILL）
-- **进程日志**：查看进程相关日志
-
-#### 🌐 运行环境
-- **编程语言管理**：检测服务器已安装的语言环境（Go/Java/Python/Node.js/Rust/PHP/Ruby/.NET 等）
-- **一键安装**：从软件商店安装语言环境
-- **自定义扩展**：支持添加自定义语言和安装脚本
-
-#### 🎨 界面
-- **主题切换**：白天/夜间/跟随系统
-- **自定义图标**：浏览器标签页图标自定义
-- **响应式布局**：适配桌面和移动设备
-
-### 即将推出
-
-- **集群管理**：多机负载均衡与服务编排
-- **监控中心**：性能图表、告警通知、日志分析
-- **安全中心**：防火墙规则、端口管理、IP 封禁
-- **定时任务**：Cron 定时任务管理
+**路线图**：集群管理 · 监控中心（图表/告警/日志分析）· 安全中心（防火墙/端口/IP 封禁）· 定时任务
 
 ## 快速开始
 
 ### 环境要求
 
-- Go 1.21+
+- Go 1.26+
 - Linux / macOS / Windows
-- SSH 客户端（连接远程服务器时需要）
+- SSH 客户端（接管远程服务器时需要）
 
-### 安装
-
-```bash
-# 克隆仓库
-git clone https://github.com/smash-hq/server-management.git
-cd server-management
-
-# 下载依赖
-go mod download
-```
-
-### 启动服务
+### 启动
 
 ```bash
-# 方式一：前台运行（推荐开发使用，Ctrl+C 停止）
+# 前台运行（推荐开发使用，Ctrl+C 停止）
 make run
 
-# 方式二：后台运行
+# 后台运行
 make start
 
-# 方式三：开发模式（无编译步骤，直接 go run）
+# 开发模式（无编译步骤，直接 go run，改前端刷新即生效）
 make dev
 
-# 方式四：手动编译后运行
-make build
-./smp-server
+# 手动编译后运行
+make build && ./smp-server
 ```
 
 服务默认监听 `http://localhost:18080`，浏览器访问即可使用。
@@ -119,14 +76,9 @@ make build
 ### 停止与重启
 
 ```bash
-# 停止服务
-make stop
-
-# 查看运行状态
-make status
-
-# 重启服务
-make restart
+make stop      # 停止
+make status    # 查看状态
+make restart   # 重启
 ```
 
 ## 部署指南
@@ -168,7 +120,6 @@ docker run -d \
 ### Docker Compose
 
 ```yaml
-version: "3.8"
 services:
   smp:
     image: smash-hq/server-management:latest
@@ -242,25 +193,15 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable smp-server
 sudo systemctl start smp-server
-
-# 5. 查看状态
-sudo systemctl status smp-server
 ```
 
 ### 跨平台编译
 
 ```bash
-# Linux amd64
-make build-linux
-
-# Linux arm64（国产平台如鲲鹏、飞腾）
-make build-linux-arm64
-
-# macOS
-make build-darwin
-
-# Windows
-make build-windows
+make build-linux          # Linux amd64
+make build-linux-arm64    # Linux arm64（鲲鹏、飞腾等国产平台）
+make build-darwin         # macOS
+make build-windows        # Windows
 ```
 
 ## 数据存储
@@ -268,13 +209,12 @@ make build-windows
 使用 **SQLite**（`modernc.org/sqlite`，纯 Go 实现，无需 CGO）作为本地存储引擎，数据库文件位于 `data/smp.db`。
 
 **首次启动**时自动初始化数据库并写入默认数据：
-- **本机服务器**（`srv_local`）：自动检测 hostname、OS/ARCH、当前用户
-- **软件包目录**：内置常用软件包定义
-- **Docker 镜像源**：Docker Hub/阿里云/腾讯云/DaoCloud/中科大/清华/网易/华为
 
-- **本机条目**（`srv_local`）不可删除，保证面板始终有一个可监控的目标
-- 所有配置变更实时持久化到 SQLite（WAL 模式，支持并发读取）
-- 预留扩展：集群、监控历史、文件索引等数据均可存入同一数据库
+- **本机服务器**（`srv_local`）：自动检测 hostname、OS/ARCH、当前用户，不可删除
+- **软件包目录**：内置常用软件包定义
+- **Docker 镜像源**：Docker Hub / 阿里云 / 腾讯云 / DaoCloud / 中科大 / 清华 / 网易 / 华为
+
+所有配置变更实时持久化到 SQLite（WAL 模式，支持并发读取）。
 
 ## 配置
 
@@ -348,8 +288,7 @@ log:
 | POST | `/api/v1/software/packages` | 新增软件包 |
 | PUT | `/api/v1/software/packages/{id}` | 更新软件包 |
 | DELETE | `/api/v1/software/packages/{id}` | 删除软件包 |
-| GET | `/api/v1/software/sources` | 软件源列表 |
-| POST/PUT/DELETE | `/api/v1/software/sources[/id]` | 软件源 CRUD |
+| GET/POST/PUT/DELETE | `/api/v1/software/sources[/id]` | 软件源 CRUD |
 
 ### 文件管理
 
@@ -379,11 +318,8 @@ log:
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/docker-sources` | 镜像源列表 |
-| POST | `/api/v1/docker-sources` | 新增镜像源 |
-| PUT | `/api/v1/docker-sources/{id}` | 更新镜像源 |
-| DELETE | `/api/v1/docker-sources/{id}` | 删除镜像源 |
-| POST | `/api/v1/docker-sources/{id}` | 设为默认源 |
+| GET/POST | `/api/v1/docker-sources` | 镜像源列表 / 新增 |
+| PUT/DELETE | `/api/v1/docker-sources/{id}` | 更新 / 删除镜像源 |
 
 ### 进程管理
 
@@ -397,10 +333,8 @@ log:
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/languages` | 语言列表 |
-| POST | `/api/v1/languages` | 新增语言 |
-| PUT | `/api/v1/languages/{id}` | 更新语言 |
-| DELETE | `/api/v1/languages/{id}` | 删除语言 |
+| GET/POST | `/api/v1/languages` | 语言列表 / 新增 |
+| PUT/DELETE | `/api/v1/languages/{id}` | 更新 / 删除语言 |
 | GET | `/api/v1/languages/detect?server=` | 检测已安装语言 |
 | POST | `/api/v1/languages/install` | 安装语言环境 |
 
@@ -419,110 +353,56 @@ server-management/
 │   ├── api/             # HTTP 处理器
 │   ├── config/          # 配置加载（Viper）
 │   ├── host/            # 服务器配置抽象与采集调度
-│   ├── remote/          # SSH 远程执行（独立包，避免循环依赖）
+│   ├── remote/          # SSH 连接池与远程执行（独立包，避免循环依赖）
 │   ├── storage/         # SQLite 持久化（服务器/软件包/软件源/镜像源）
-│   ├── middleware/      # 中间件（日志、恢复）
+│   ├── middleware/      # 中间件（日志、恢复、安全头）
 │   ├── server/          # HTTP 服务组装
-│   ├── software/        # 软件包管理与安装
+│   ├── software/        # 软件包与语言环境管理
 │   ├── system/          # 系统信息采集（gopsutil）
 │   ├── logger/          # 结构化日志（zap）
 │   └── ws/              # WebSocket 推送
 ├── web/                 # 前端
-│   ├── static/          # 静态资源（Go embed）
-│   │   ├── css/         # 样式表
-│   │   ├── js/          # 脚本模块
-│   │   └── index.html   # 入口页面
-│   └── README.md        # 前端文档
+│   └── static/          # 静态资源（css/js/html，go:embed 嵌入）
 ├── docs/                # 文档
-├── data/                # 运行时数据（git ignored）
-│   ├── .gitkeep
-│   └── smp.db           # SQLite 数据库（自动生成）
+├── data/                # 运行时数据（git ignored，smp.db 自动生成）
 ├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建
-├── go.mod               # Go 模块定义
-└── README.md            # 本文件
+└── go.mod               # Go 模块定义
 ```
 
-## 开发指南
+## 参与贡献
 
-### Makefile 目标一览
+欢迎提交 PR：软件包目录、语言环境定义、新功能与文档完善都是绝佳的切入点。
 
-| 目标 | 说明 |
-|------|------|
-| `make run` | 编译并前台启动服务 |
-| `make start` | 编译并后台启动服务 |
-| `make stop` | 停止后台服务 |
-| `make restart` | 重启服务 |
-| `make status` | 查看运行状态 |
-| `make dev` | 开发模式（直接 go run） |
-| `make build` | 编译当前平台二进制 |
-| `make build-linux` | 编译 Linux amd64 二进制 |
-| `make build-linux-arm64` | 编译 Linux arm64 二进制（鲲鹏/飞腾） |
-| `make build-darwin` | 编译 macOS 二进制 |
-| `make build-windows` | 编译 Windows 二进制 |
-| `make test` | 运行测试 |
-| `make fmt` | 格式化代码 |
-| `make vet` | 静态检查 |
-| `make deps` | 下载并整理依赖 |
-| `make docker` | 构建 Docker 镜像 |
-| `make all` | 格式化 + 检查 + 编译 |
-| `make clean` | 清理构建产物 |
-| `make help` | 显示帮助信息 |
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)（开发环境、代码规范、提交规范与 PR 流程）。
 
-### 常用工作流
+## ⚠️ 安全声明
 
-```bash
-# 开发循环
-make dev
+**使用本软件前，请仔细阅读以下安全声明：**
 
-# 提交前检查
-make all
+1. **本软件会执行远程命令**：通过 SSH 连接远程服务器并执行系统命令（包括 sudo 操作），可能导致系统配置变更、数据丢失或服务中断。
+2. **凭证存储**：服务器连接信息（密码、私钥）存储在本地 SQLite 数据库中，虽有文件权限保护，但**不应用于生产环境或高安全要求场景**。
+3. **无认证机制**：当前版本**无内置用户认证和访问控制**，任何能访问面板的人都可以执行所有操作。
+4. **责任免除**：**一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏等）均与本项目无关**。使用者需自行承担所有风险。
+5. **维护边界**：开发者仅对正常功能范围内的缺陷提供自愿维护，**不构成服务承诺**；使用环境、误操作、二次开发引入的问题及数据恢复等诉求不在维护范围内，详见[协议第七条](LICENSE)。
+6. **使用建议**：仅在内网/开发环境使用，不要暴露到公网，务必配置防火墙和访问控制。
 
-# 运行测试
-make test
+### 安全清单
 
-# 下载依赖
-make deps
-```
-
-### 技术栈
-
-- **Web 框架**：Go 标准库 `net/http`
-- **配置管理**：Viper（支持配置文件、环境变量、命令行标志）
-- **系统采集**：gopsutil（CPU、内存、磁盘、网络）
-- **SSH 连接**：golang.org/x/crypto/ssh
-- **实时推送**：Gorilla WebSocket
-- **日志**：Uber Zap（结构化日志）
-- **前端**：原生 HTML/CSS/JS（无构建步骤，Go embed 嵌入）
-
-## 安全建议
-
-> **⚠️ 再次强调：使用本软件可能带来严重安全风险，请务必遵守以下建议。**
-
-### 必须遵守
-
-1. **🚫 不要将面板暴露在公网** — 建议仅通过 VPN 或内网访问
-2. **🔒 使用反向代理**（Nginx/Caddy）启用 HTTPS
-3. **🛡️ 配置防火墙**，仅允许信任来源访问面板端口
-4. **🔑 使用强密码**连接远程服务器，推荐使用 SSH 密钥认证
-5. **👤 创建专用用户**运行面板服务，不要使用 root 用户
-
-### 远程服务器安全
-
-6. **🔐 为远程用户配置 NOPASSWD sudo** — 避免 Web 进程拥有完整 root 权限
-7. **📋 定期审计** `data/smp.db` 中的服务器配置和访问日志
-8. **🗑️ 定期清理**不再使用的服务器配置和敏感凭证
-
-### 数据安全
-
-9. **💾 定期备份** `data/smp.db` 数据库文件
-10. **🚫 不要提交 `data/smp.db`** 到版本控制，该文件包含敏感凭证信息
-11. **🔒 文件权限**确保 `data/` 目录权限为 `0700`，数据库文件权限为 `0600`
-
-### 责任声明
-
-**本软件按"原样"提供，不附带任何明示或暗示的保证。一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏、数据丢失等）均与本项目无关。使用者需自行评估风险并承担所有责任。**
+- 🚫 不要将面板暴露在公网 — 仅通过 VPN 或内网访问
+- 🔒 使用反向代理（Nginx/Caddy）启用 HTTPS
+- 🛡️ 配置防火墙，仅允许信任来源访问面板端口
+- 🔑 推荐使用 SSH 密钥认证，避免弱密码
+- 👤 创建专用用户运行面板服务，远程用户仅授予 NOPASSWD sudo 的最小命令集
+- 💾 定期备份 `data/smp.db`，不要将其提交到版本控制
+- 🔒 确保数据目录权限 `0700`、数据库文件权限 `0600`
 
 ## 许可证
 
-[MIT License](LICENSE)
+[非商业使用许可协议](LICENSE)
+
+- ✅ **免费使用**：个人学习、组织内部运维（部署在自有服务器/内网管理自己的业务）
+- 💼 **需要商业授权**：销售/转售、集成到对外收费的产品、基于本项目提供 SaaS 或付费托管等直接营利行为
+- 📮 商业授权请联系项目维护者（联系方式待补充）
+
+本软件按「原样」提供，不附带任何明示或暗示的保证，详见[免责声明](LICENSE)。
