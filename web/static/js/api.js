@@ -305,6 +305,17 @@ export async function installLanguage(serverId, languageId) {
     return json.data;
 }
 
+/** 卸载语言环境。 */
+export async function uninstallLanguage(serverId, languageId) {
+    const json = await request('/languages/uninstall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, language_id: languageId }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '卸载失败');
+    return json.data;
+}
+
 // --- 文件管理 ---
 
 /** 列出目录内容。 */

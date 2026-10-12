@@ -486,6 +486,27 @@ export function setupStore() {
         detectServerLanguages();
     }
 
+    async function uninstallLang(languageId) {
+        if (!selectedServer.value) return;
+        const lang = languages.value.find(l => l.id === languageId);
+        const langName = lang ? lang.name : languageId;
+        if (!confirm(`确定要卸载「${langName}」吗？此操作不可恢复。`)) return;
+        langInstallName.value = langName;
+        langInstallLogVisible.value = true;
+        langInstallLog.value = '正在连接服务器...\n';
+        langInstallStatus.value = 'installing';
+        try {
+            await uninstallLanguage(selectedServer.value, languageId);
+            langInstallLog.value += '\n==> 卸载命令已发送到服务器\n==> 请在服务器上查看实际卸载进度\n';
+            langInstallStatus.value = 'ok';
+            toastNotify('卸载命令已发送，请查看日志');
+        } catch (err) {
+            langInstallLog.value += '\n==> 错误: ' + err.message + '\n';
+            langInstallStatus.value = 'error';
+            toastNotify('卸载失败: ' + err.message, true);
+        }
+    }
+
     // ─── Docker 管理 ───
     const dockerAvailable = ref(false);
     const dockerVersion = ref('');
@@ -1469,7 +1490,7 @@ export function setupStore() {
         detectedLanguages, langDetectLoading,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
         loadLanguages, openLangForm, closeLangForm, saveLanguage,
-        deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang, onLangSourceChange,
+        deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang, uninstallLang,
         viewInstallLog, refreshInstallLog,
         // 文件管理
         files, currentFilePath, filesLoading, fileSearchQuery, fileSudoWarning,

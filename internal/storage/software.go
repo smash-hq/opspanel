@@ -244,15 +244,16 @@ func (s *SoftwareStore) DeleteSource(id string) error {
 
 // LanguageRecord 是数据库中的语言环境行。
 type LanguageRecord struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-	VersionCmd  string `json:"version_cmd"`
-	InstallCmd  string `json:"install_cmd"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Category      string `json:"category"`
+	Description   string `json:"description"`
+	Icon          string `json:"icon"`
+	VersionCmd    string `json:"version_cmd"`
+	InstallCmd    string `json:"install_cmd"`
+	UninstallCmd  string `json:"uninstall_cmd"`
+	CreatedAt     int64  `json:"created_at"`
+	UpdatedAt     int64  `json:"updated_at"`
 }
 
 // LanguageStore 管理编程语言环境定义。
@@ -294,7 +295,7 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 
 // ListLanguages 返回所有语言环境。
 func (s *LanguageStore) ListLanguages() []*LanguageRecord {
-	rows, err := s.db.Raw().Query(`SELECT id, name, category, description, icon, version_cmd, install_cmd, created_at, updated_at FROM languages ORDER BY category, name`)
+	rows, err := s.db.Raw().Query(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at FROM languages ORDER BY category, name`)
 	if err != nil {
 		return nil
 	}
@@ -303,7 +304,7 @@ func (s *LanguageStore) ListLanguages() []*LanguageRecord {
 	var languages []*LanguageRecord
 	for rows.Next() {
 		var lang LanguageRecord
-		if err := rows.Scan(&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.CreatedAt, &lang.UpdatedAt); err != nil {
+		if err := rows.Scan(&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &lang.CreatedAt, &lang.UpdatedAt); err != nil {
 			continue
 		}
 		languages = append(languages, &lang)
@@ -314,8 +315,8 @@ func (s *LanguageStore) ListLanguages() []*LanguageRecord {
 // GetLanguage 按 ID 获取语言环境。
 func (s *LanguageStore) GetLanguage(id string) (*LanguageRecord, bool) {
 	var lang LanguageRecord
-	err := s.db.Raw().QueryRow(`SELECT id, name, category, description, icon, version_cmd, install_cmd, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
-		&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.CreatedAt, &lang.UpdatedAt)
+	err := s.db.Raw().QueryRow(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
+		&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &lang.CreatedAt, &lang.UpdatedAt)
 	if err != nil {
 		return nil, false
 	}
@@ -329,9 +330,9 @@ func (s *LanguageStore) AddLanguage(lang *LanguageRecord) error {
 	}
 	now := time.Now().Unix()
 	_, err := s.db.Raw().Exec(`
-		INSERT INTO languages (id, name, category, description, icon, version_cmd, install_cmd, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, now, now)
+		INSERT INTO languages (id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, now, now)
 	return err
 }
 
@@ -339,9 +340,9 @@ func (s *LanguageStore) AddLanguage(lang *LanguageRecord) error {
 func (s *LanguageStore) UpdateLanguage(lang *LanguageRecord) error {
 	now := time.Now().Unix()
 	_, err := s.db.Raw().Exec(`
-		UPDATE languages SET name=?, category=?, description=?, icon=?, version_cmd=?, install_cmd=?, updated_at=?
+		UPDATE languages SET name=?, category=?, description=?, icon=?, version_cmd=?, install_cmd=?, uninstall_cmd=?, updated_at=?
 		WHERE id=?`,
-		lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, now, lang.ID)
+		lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, now, lang.ID)
 	return err
 }
 

@@ -61,6 +61,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/languages/", h.handleLanguageDetail)           // PUT 更新 / DELETE 删除
 	mux.HandleFunc("/api/v1/languages/detect", h.handleDetectLanguages)    // GET ?server= 检测已安装
 	mux.HandleFunc("/api/v1/languages/install", h.handleInstallLanguage)   // POST 安装语言
+	mux.HandleFunc("/api/v1/languages/uninstall", h.handleUninstallLanguage) // POST 卸载语言
 
 	// 镜像源管理
 	mux.HandleFunc("/api/v1/software/sources", h.handleSources)            // GET 列表 / POST 新增
@@ -1188,6 +1189,54 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 	}()
 
 	OK(w, map[string]string{"status": "installing", "language": lang.ID})
+}
+
+// handleUninstallLanguage: POST {"server_id": "...", "language_id": "..."} 卸载语言环境。
+func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	var req struct {
+		ServerID   string `json:"server_id"`
+		LanguageID string `json:"language_id"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+
+	srv, ok := h.store.Get(req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	langStore := storage.NewLanguageStore(h.db)
+	lang, ok := langStore.GetLanguage(req.LanguageID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "language not found")
+		return
+	}
+	if lang.UninstallCmd == "" {
+		Fail(w, http.StatusBadRequest, 400, "no uninstall command defined")
+		return
+	}
+
+	// 异步执行卸载
+	go func() {
+		// 使用 InstallCmd 作为卸载命令（如果定义了 UninstallCmd 则使用）
+		uninstallCmd := lang.UninstallCmd
+		if uninstallCmd == "" {
+			uninstallCmd = lang.InstallCmd
+		}
+		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), uninstallCmd); err != nil {
+			h.log.Errorw("uninstall language failed", "lang", lang.ID, "error", err)
+		}
+	}()
+
+	OK(w, map[string]string{"status": "uninstalling", "language": lang.ID})
 }
 
 // --- 内部方法 ---

@@ -3704,3 +3704,123 @@
     color: var(--text-muted, #64748b);
     white-space: nowrap;
 }
+
+/* ─── 语言环境卡片 ─── */
+.lang-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.lang-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 12px;
+    background: var(--card-bg, #fff);
+    border: 2px solid var(--card-border, #e2e8f0);
+    border-radius: 12px;
+    transition: all 0.2s;
+    text-align: center;
+    min-height: 140px;
+}
+
+.lang-card:hover {
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
+    transform: translateY(-2px);
+}
+
+.lang-card.installed {
+    border-color: var(--color-green, #10b981);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+}
+
+.lang-card-icon {
+    font-size: 2.2rem;
+    line-height: 1;
+}
+
+.lang-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+}
+
+.lang-card-info strong {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+}
+
+.lang-card-info small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+}
+
+.lang-card-status {
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.lang-card-status.installed {
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.lang-card-status.not_installed {
+    background: var(--content-bg, #f3f4f6);
+    color: var(--text-muted, #94a3b8);
+}
+
+.lang-card-actions {
+    width: 100%;
+}
+
+.lang-btn {
+    width: 100%;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #475569);
+}
+
+.lang-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lang-btn.install {
+    background: var(--color-blue, #3b82f6);
+    border-color: var(--color-blue, #3b82f6);
+    color: #fff;
+}
+
+.lang-btn.install:hover {
+    background: #2563eb;
+}
+
+.lang-btn.uninstall {
+    background: var(--color-red-light, #fef2f2);
+    border-color: var(--color-red, #ef4444);
+    color: var(--color-red, #ef4444);
+}
+
+.lang-btn.uninstall:hover {
+    background: var(--color-red, #ef4444);
+    color: #fff;
+}
+
+.lang-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

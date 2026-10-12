@@ -99,6 +99,7 @@ func (d *DB) migrate() error {
 		icon          TEXT NOT NULL DEFAULT '',
 		version_cmd   TEXT NOT NULL DEFAULT '',
 		install_cmd   TEXT NOT NULL DEFAULT '',
+		uninstall_cmd TEXT NOT NULL DEFAULT '',
 		created_at    INTEGER NOT NULL DEFAULT 0,
 		updated_at    INTEGER NOT NULL DEFAULT 0
 	);
