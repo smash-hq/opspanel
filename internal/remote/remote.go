@@ -139,19 +139,25 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	info.Host.OS = rc.RunOne(conn, "uname -s")
 	info.Host.Kernel = rc.RunOne(conn, "uname -r")
 	info.Host.Arch = rc.RunOne(conn, "uname -m")
+	info.Host.Platform = rc.RunOne(conn, "uname -v")
 
 	// CPU 信息
-	info.CPU.Model = rc.RunOne(conn, "grep -m1 'model name' /proc/cpuinfo | cut -d: -f2")
+	info.CPU.Model = rc.RunOne(conn, "grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2")
 	info.CPU.Model = strings.TrimSpace(info.CPU.Model)
-	if cores := rc.RunOne(conn, "nproc"); cores != "" {
+	// 物理核心数
+	if cores := rc.RunOne(conn, "grep -c ^processor /proc/cpuinfo 2>/dev/null"); cores != "" {
 		fmt.Sscanf(cores, "%d", &info.CPU.Threads)
 	}
-	// CPU 使用率：使用 top 非阻塞模式
+	// 物理核心（cores）
+	if physCores := rc.RunOne(conn, "grep 'cpu cores' /proc/cpuinfo 2>/dev/null | head -1 | awk '{print $4}'"); physCores != "" {
+		fmt.Sscanf(physCores, "%d", &info.CPU.Cores)
+	}
+	// CPU 使用率
 	if pct := rc.RunOne(conn, "top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}'"); pct != "" {
 		fmt.Sscanf(pct, "%f", &info.CPU.Percent)
 	}
 
-	// 内存信息（使用 free 命令）
+	// 内存信息（使用 free 命令，无需 root）
 	if mem := rc.RunOne(conn, "free -b 2>/dev/null | awk '/Mem:/{print $2, $3, $7}'"); mem != "" {
 		var total, used, available uint64
 		fmt.Sscanf(mem, "%d %d %d", &total, &used, &available)
@@ -163,7 +169,13 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 		}
 	}
 
+	// 进程数（无需 root）
+	if procs := rc.RunOne(conn, "ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
+		fmt.Sscanf(strings.TrimSpace(procs), "%d", &info.Processes)
+	}
+
 	// 磁盘信息
+	sudoNeeded := false
 	if disks := rc.RunOne(conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
 		for _, line := range strings.Split(disks, "\n") {
 			fields := strings.Fields(line)
@@ -185,17 +197,60 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 			}
 		}
 	}
+	// 检查是否有权限获取完整磁盘信息（部分挂载点可能需要 root）
+	if len(info.Disks) == 0 {
+		sudoNeeded = true
+		// 尝试用 sudo 获取
+		if disks := rc.RunOne(conn, "sudo -n df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
+			for _, line := range strings.Split(disks, "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 4 {
+					var total, used uint64
+					fmt.Sscanf(fields[1], "%d", &total)
+					fmt.Sscanf(fields[2], "%d", &used)
+					pct := 0.0
+					if total > 0 {
+						pct = float64(used) / float64(total) * 100
+					}
+					info.Disks = append(info.Disks, system.DiskInfo{
+						Device:  fields[0],
+						Total:   total,
+						Used:    used,
+						Mount:   fields[3],
+						Percent: pct,
+					})
+				}
+			}
+		}
+	}
 
-	// 运行时间
-	if uptime := rc.RunOne(conn, "cat /proc/uptime | awk '{print $1}'"); uptime != "" {
+	// 运行时间（无需 root）
+	if uptime := rc.RunOne(conn, "cat /proc/uptime 2>/dev/null | awk '{print $1}'"); uptime != "" {
 		var secs float64
 		fmt.Sscanf(uptime, "%f", &secs)
 		info.Uptime = uint64(secs)
 	}
 
-	// 系统负载
-	if load := rc.RunOne(conn, "cat /proc/loadavg | awk '{print $1, $2, $3}'"); load != "" {
+	// 系统负载（无需 root）
+	if load := rc.RunOne(conn, "cat /proc/loadavg 2>/dev/null | awk '{print $1, $2, $3}'"); load != "" {
 		fmt.Sscanf(load, "%f %f %f", &info.Load.Load1, &info.Load.Load5, &info.Load.Load15)
+	}
+
+	// 检测是否使用了 sudo（权限不足标记）
+	if sudoNeeded {
+		info.SudoUsed = true
+	}
+	// 额外检查：如果进程数异常低，也可能是权限不足
+	if info.Processes > 0 && info.Processes < 10 {
+		// 尝试用 sudo 获取更准确的进程数
+		if procs := rc.RunOne(conn, "sudo -n ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
+			var sudoProcs int
+			fmt.Sscanf(strings.TrimSpace(procs), "%d", &sudoProcs)
+			if sudoProcs > info.Processes {
+				info.Processes = sudoProcs
+				info.SudoUsed = true
+			}
+		}
 	}
 
 	return info, nil
@@ -235,6 +290,134 @@ func (rc *RemoteCollector) GetLog(srv *Server, service string, lines int) (strin
 	}
 
 	return "", fmt.Errorf("no log found for service: %s", service)
+}
+
+// ProcessInfo 表示单个进程的信息。
+type ProcessInfo struct {
+    PID      int    `json:"pid"`
+    User     string `json:"user"`
+    CPU      string `json:"cpu"`
+    Mem      string `json:"mem"`
+    Command  string `json:"command"`
+}
+
+// ListProcesses 获取远程服务器进程列表（类似 top/ps）。
+func (rc *RemoteCollector) ListProcesses(srv *Server, limit int) ([]ProcessInfo, error) {
+    if limit <= 0 {
+        limit = 50
+    }
+    conn, err := rc.Dial(srv)
+    if err != nil {
+        return nil, err
+    }
+    defer conn.Close()
+
+    // 使用 ps 命令获取进程列表，按 CPU 使用率排序
+    cmd := fmt.Sprintf("ps aux --sort=-%%cpu 2>/dev/null | head -n %d", limit+1)
+    out := rc.RunOne(conn, cmd)
+    if out == "" {
+        return nil, fmt.Errorf("failed to list processes")
+    }
+
+    var processes []ProcessInfo
+    lines := strings.Split(out, "\n")
+    // 跳过标题行
+    for i, line := range lines {
+        if i == 0 {
+            continue
+        }
+        fields := strings.Fields(line)
+        if len(fields) < 11 {
+            continue
+        }
+        var pid int
+        fmt.Sscanf(fields[1], "%d", &pid)
+        cmdStr := strings.Join(fields[10:], " ")
+        // 截断过长的命令行
+        if len(cmdStr) > 80 {
+            cmdStr = cmdStr[:77] + "..."
+        }
+        processes = append(processes, ProcessInfo{
+            PID:     pid,
+            User:    fields[0],
+            CPU:     fields[2],
+            Mem:     fields[3],
+            Command: cmdStr,
+        })
+    }
+    return processes, nil
+}
+
+// DetectLanguage 检测指定编程语言的版本。返回空字符串表示未安装。
+func (rc *RemoteCollector) DetectLanguage(srv *Server, versionCmd string) string {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	return rc.RunOne(conn, versionCmd)
+}
+
+// InstallLanguage 执行语言环境安装命令。
+func (rc *RemoteCollector) InstallLanguage(srv *Server, installCmd string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// 执行安装命令
+	out := rc.RunOne(conn, installCmd)
+	rc.log.Infow("install language", "cmd", installCmd, "output", out)
+	return nil
+}
+
+// KillProcess 终止指定 PID 的进程。
+func (rc *RemoteCollector) KillProcess(srv *Server, pid int, force bool) error {
+    conn, err := rc.Dial(srv)
+    if err != nil {
+        return err
+    }
+    defer conn.Close()
+
+    signal := "TERM"
+    if force {
+        signal = "KILL"
+    }
+    cmd := fmt.Sprintf("kill -%s %d 2>&1", signal, pid)
+    out := rc.RunOne(conn, cmd)
+    if out != "" && strings.Contains(out, "Operation not permitted") {
+        return fmt.Errorf("permission denied: try using sudo or running as root")
+    }
+    return nil
+}
+
+// GetProcessLog 获取指定进程的日志（通过 journalctl 或 /proc/{pid}/fd）。
+func (rc *RemoteCollector) GetProcessLog(srv *Server, pid int, lines int) (string, error) {
+    if lines <= 0 {
+        lines = 50
+    }
+    conn, err := rc.Dial(srv)
+    if err != nil {
+        return "", err
+    }
+    defer conn.Close()
+
+    // 尝试通过 journalctl 获取进程日志
+    cmd := fmt.Sprintf("journalctl _PID=%d --no-pager -n %d 2>/dev/null", pid, lines)
+    out := rc.RunOne(conn, cmd)
+    if out != "" {
+        return out, nil
+    }
+
+    // 回退：尝试读取 /proc/{pid}/fd/1 和 fd/2（stdout/stderr）
+    cmd = fmt.Sprintf("sudo -n tail -n %d /proc/%d/fd/1 2>/dev/null; sudo -n tail -n %d /proc/%d/fd/2 2>/dev/null", lines, pid, lines, pid)
+    out = rc.RunOne(conn, cmd)
+    if out != "" {
+        return out, nil
+    }
+
+    return "", fmt.Errorf("no log found for PID: %d", pid)
 }
 
 // TestConnection 测试 SSH 连接并返回远程主机基本信息。

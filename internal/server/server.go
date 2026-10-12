@@ -47,6 +47,12 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	// 刷新内存中的软件包索引
 	software.LoadFromStore(swStore)
 
+	// 初始化编程语言环境到数据库
+	langStore := storage.NewLanguageStore(store.DB())
+	if err := langStore.InitDefaultLanguages(); err != nil {
+		log.Fatal("languages init failed", "error", err)
+	}
+
 	// --- API 处理器 ---
 	healthHandler := api.NewHealthHandler()
 	healthHandler.Register(mux)
@@ -57,7 +63,7 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	serversHandler := api.NewServersHandler(log, store)
 	serversHandler.Register(mux)
 
-	softwareHandler := api.NewSoftwareHandler(log, store, swStore)
+	softwareHandler := api.NewSoftwareHandler(log, store, swStore, store.DB())
 	softwareHandler.Register(mux)
 
 	settingsHandler := api.NewSettingsHandler(log, store.DB(), dataDir)

@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -48,6 +48,7 @@ export function setupStore() {
 
     function setTheme(t) {
         theme.value = t;
+        themeVal.value = t;
         localStorage.setItem('smp_theme', t);
         applyTheme(t);
         // 持久化到后端
@@ -74,7 +75,56 @@ export function setupStore() {
     // ─── UI 状态 ───
     const sidebarCollapsed = ref(false);
     const activeMenu = ref('main');           // "main" | "settings"
-    const activeTab = ref('system');          // "system" | "software"
+    const activeTab = ref('system');          // "system" | "software" | "cluster" | ...
+    const configTab = ref('sources');         // "sources" | "packages" | "startup" | "favicon"
+    const showDoc = ref(false);
+    const themeVal = ref(theme.value);
+    const settingsForm = reactive({
+        panelName: '',
+        adminEmail: '',
+        pushInterval: 3,
+        defaultSSHPort: 22,
+        welcomeMessage: '',
+    });
+    const settingsSaving = ref(false);
+
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/v1/settings/');
+            const json = await res.json();
+            if (json.code === 0 && json.data) {
+                settingsForm.panelName = json.data.panel_name || '';
+                settingsForm.adminEmail = json.data.admin_email || '';
+                settingsForm.pushInterval = parseInt(json.data.push_interval) || 3;
+                settingsForm.defaultSSHPort = parseInt(json.data.default_ssh_port) || 22;
+                settingsForm.welcomeMessage = json.data.welcome_message || '';
+            }
+        } catch (err) {
+            // 使用默认值
+        }
+    }
+
+    async function saveSettings() {
+        settingsSaving.value = true;
+        try {
+            await fetch('/api/v1/settings/', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    panel_name: settingsForm.panelName,
+                    admin_email: settingsForm.adminEmail,
+                    push_interval: settingsForm.pushInterval,
+                    default_ssh_port: settingsForm.defaultSSHPort,
+                    welcome_message: settingsForm.welcomeMessage,
+                }),
+            });
+            toastNotify('设置已保存');
+        } catch (err) {
+            toastNotify('保存失败: ' + err.message, true);
+        } finally {
+            settingsSaving.value = false;
+        }
+    }
     const searchQuery = ref('');
     const activeFilter = ref('all');
     const loading = ref(false);
@@ -126,6 +176,231 @@ export function setupStore() {
         logModalVisible.value = false;
     }
 
+    // ─── 软件包管理 ───
+    const packageFormMode = ref(null);
+    const packageForm = reactive({ id: '', name: '', category: 'tool', description: '', version: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
+    const packageSaving = ref(false);
+    const packageFormError = ref('');
+
+    function openPackageForm(mode, pkg) {
+        packageFormMode.value = mode;
+        packageFormError.value = '';
+        if (mode === 'edit' && pkg) {
+            Object.assign(packageForm, {
+                id: pkg.id, name: pkg.name, category: pkg.category,
+                description: pkg.description || '', version: pkg.version || '', icon: pkg.icon || '',
+                install_cmd: JSON.stringify(pkg.InstallCmd || {}, null, 2),
+                uninstall_cmd: JSON.stringify(pkg.UninstallCmd || {}, null, 2),
+                status_cmd: pkg.StatusCmd || '', version_cmd: pkg.VersionCmd || '',
+                start_cmd: pkg.StartCmd || '', stop_cmd: pkg.StopCmd || '', restart_cmd: pkg.RestartCmd || '',
+            });
+        } else {
+            Object.assign(packageForm, { id: '', name: '', category: 'tool', description: '', version: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
+        }
+    }
+
+    function closePackageForm() {
+        if (!packageSaving.value) packageFormMode.value = null;
+    }
+
+    async function savePackage() {
+        packageFormError.value = '';
+        if (!packageForm.name.trim()) { packageFormError.value = '请输入名称'; return; }
+        if (!packageForm.id.trim()) { packageFormError.value = '请输入 ID'; return; }
+        let installCmd, uninstallCmd;
+        try {
+            installCmd = JSON.parse(packageForm.install_cmd || '{}');
+            uninstallCmd = JSON.parse(packageForm.uninstall_cmd || '{}');
+        } catch (e) {
+            packageFormError.value = '安装/卸载命令必须是有效的 JSON';
+            return;
+        }
+        packageSaving.value = true;
+        const payload = {
+            id: packageForm.id, name: packageForm.name, category: packageForm.category,
+            description: packageForm.description, version: packageForm.version, icon: packageForm.icon,
+            install_cmd: installCmd, uninstall_cmd: uninstallCmd,
+            status_cmd: packageForm.status_cmd, version_cmd: packageForm.version_cmd,
+            start_cmd: packageForm.start_cmd, stop_cmd: packageForm.stop_cmd, restart_cmd: packageForm.restart_cmd,
+        };
+        try {
+            if (packageFormMode.value === 'edit') {
+                await updatePackage(packageForm.id, payload);
+            } else {
+                await createPackage(payload);
+            }
+            await loadSoftwareCatalog();
+            software.LoadFromStore(swStore);
+            packageFormMode.value = null;
+            toastNotify(packageFormMode.value === 'edit' ? '软件包已更新' : '软件包已添加');
+        } catch (err) {
+            packageFormError.value = err.message;
+        } finally {
+            packageSaving.value = false;
+        }
+    }
+
+    async function handleDeletePackage(id) {
+        if (!confirm(`确定删除软件包「${id}」吗？`)) return;
+        try {
+            await deletePackage(id);
+            await loadSoftwareCatalog();
+            toastNotify('软件包已删除');
+        } catch (err) {
+            toastNotify(err.message, true);
+        }
+    }
+
+    // ─── 编程语言环境 ───
+    const languages = ref([]);
+    const langFormMode = ref(null);
+    const langForm = reactive({ id: '', name: '', category: 'runtime', description: '', icon: '', version_cmd: '', install_cmd: '', install_source: 'official' });
+    const langSaving = ref(false);
+    const langFormError = ref('');
+    const detectedLanguages = ref([]);
+    const langDetectLoading = ref(false);
+    const langInstallLogVisible = ref(false);
+    const langInstallLog = ref('');
+    const langInstallName = ref('');
+    const langInstallStatus = ref('');
+
+    async function loadLanguages() {
+        try {
+            languages.value = await fetchLanguages();
+        } catch (err) {
+            toastNotify('语言列表加载失败', true);
+        }
+    }
+
+    function openLangForm(mode, lang) {
+        langFormMode.value = mode;
+        langFormError.value = '';
+        if (mode === 'edit' && lang) {
+            Object.assign(langForm, {
+                id: lang.id, name: lang.name, category: lang.category || 'runtime',
+                description: lang.description || '', icon: lang.icon || '',
+                version_cmd: lang.versionCmd || lang.version_cmd || '',
+                install_cmd: lang.installCmd || lang.install_cmd || '',
+            });
+        } else {
+            Object.assign(langForm, { id: '', name: '', category: 'runtime', description: '', icon: '', version_cmd: '', install_cmd: '' });
+        }
+    }
+
+    function closeLangForm() {
+        if (!langSaving.value) langFormMode.value = null;
+    }
+
+    // 根据选择的安装源自动生成安装脚本
+    function onLangSourceChange() {
+        const id = langForm.id.toLowerCase()
+        const sources = {
+            mirror_aliyun: {
+                go: 'curl -fsSL https://mirrors.aliyun.com/golang/install.sh | bash',
+                java: 'curl -fsSL https://mirrors.aliyun.com/opensource/JDK/install.sh | bash',
+                python3: 'curl -fsSL https://mirrors.aliyun.com/pypi/get-pip.py | python3',
+                nodejs: 'curl -fsSL https://mirrors.aliyun.com/nvm/install.sh | bash',
+            },
+            mirror_tsinghua: {
+                go: 'curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/golang/install.sh | bash',
+                python3: 'pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple --upgrade pip',
+                nodejs: 'curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/nvm/install.sh | bash',
+            },
+            mirror_ustc: {
+                go: 'curl -fsSL https://mirrors.ustc.edu.cn/golang/install.sh | bash',
+                python3: 'pip3 install -i https://pypi.mirrors.ustc.edu.cn/simple --upgrade pip',
+                nodejs: 'curl -fsSL https://mirrors.ustc.edu.cn/nvm/install.sh | bash',
+            },
+            sdkman: {
+                java: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install java 17.0.9-tem',
+                kotlin: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install kotlin',
+                scala: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install scala',
+            }
+        }
+        const src = sources[langForm.install_source]
+        if (src && src[id]) {
+            langForm.install_cmd = src[id]
+        }
+    }
+
+    async function saveLanguage() {
+        langFormError.value = '';
+        if (!langForm.name.trim()) { langFormError.value = '请输入名称'; return; }
+        if (!langForm.id.trim()) { langFormError.value = '请输入 ID'; return; }
+        langSaving.value = true;
+        const payload = {
+            id: langForm.id, name: langForm.name, category: langForm.category,
+            description: langForm.description, icon: langForm.icon,
+            version_cmd: langForm.version_cmd, install_cmd: langForm.install_cmd,
+        };
+        try {
+            if (langFormMode.value === 'edit') {
+                await updateLanguage(langForm.id, payload);
+            } else {
+                await createLanguage(payload);
+            }
+            await loadLanguages();
+            langFormMode.value = null;
+            toastNotify(langFormMode.value === 'edit' ? '语言已更新' : '语言已添加');
+        } catch (err) {
+            langFormError.value = err.message;
+        } finally {
+            langSaving.value = false;
+        }
+    }
+
+    async function handleDeleteLanguage(id) {
+        if (!confirm(`确定删除语言环境「${id}」吗？`)) return;
+        try {
+            await apiDeleteLanguage(id);
+            await loadLanguages();
+            toastNotify('语言已删除');
+        } catch (err) {
+            toastNotify(err.message, true);
+        }
+    }
+
+    async function detectServerLanguages() {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        langDetectLoading.value = true;
+        try {
+            detectedLanguages.value = await detectLanguages(selectedServer.value);
+        } catch (err) {
+            toastNotify('检测失败: ' + err.message, true);
+        } finally {
+            langDetectLoading.value = false;
+        }
+    }
+
+    async function installLang(languageId) {
+        if (!selectedServer.value) return;
+        // 查找语言名称
+        const lang = languages.value.find(l => l.id === languageId);
+        langInstallName.value = lang ? lang.name : languageId;
+        langInstallLogVisible.value = true;
+        langInstallLog.value = '正在连接服务器...\n';
+        langInstallStatus.value = 'installing';
+        try {
+            await installLanguage(selectedServer.value, languageId);
+            langInstallLog.value += '\n==> 安装命令已发送到服务器\n==> 请在服务器上查看实际安装进度\n';
+            langInstallStatus.value = 'ok';
+            toastNotify('安装命令已发送，请查看日志');
+        } catch (err) {
+            langInstallLog.value += '\n==> 错误: ' + err.message + '\n';
+            langInstallStatus.value = 'error';
+            toastNotify('安装失败: ' + err.message, true);
+        }
+    }
+
+    function viewInstallLog() {
+        langInstallLogVisible.value = true;
+    }
+
+    function refreshInstallLog() {
+        // 重新检测已安装的语言
+        detectServerLanguages();
+    }
+
     // ─── 网站图标 ───
     const faviconTs = ref(Date.now());
     const hasCustomFavicon = ref(false);
@@ -174,6 +449,56 @@ export function setupStore() {
     const sourceForm = reactive({ id: '', name: '', type: 'mirror', url: '', enabled: true, priority: 100 });
     const sourceSaving = ref(false);
     const sourceFormError = ref('');
+
+    // ─── 进程管理状态 ───
+    const processes = ref([]);
+    const processLoading = ref(false);
+    const processLogVisible = ref(false);
+    const processLogData = ref({ pid: 0, content: '' });
+    const processLogLoading = ref(false);
+
+    async function loadProcesses(lines) {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        processLoading.value = true;
+        try {
+            processes.value = await fetchProcesses(selectedServer.value, lines || 50);
+        } catch (err) {
+            toastNotify('进程列表加载失败: ' + err.message, true);
+        } finally {
+            processLoading.value = false;
+        }
+    }
+
+    async function handleKillProcess(pid, force) {
+        if (!selectedServer.value) return;
+        if (!confirm(`确定要终止进程 PID: ${pid} 吗？${force ? '（强制终止）' : ''}`)) return;
+        try {
+            await killProcess(selectedServer.value, pid, force);
+            toastNotify(`进程 ${pid} 已终止`);
+            loadProcesses();
+        } catch (err) {
+            toastNotify('终止失败: ' + err.message, true);
+        }
+    }
+
+    async function viewProcessLog(pid) {
+        if (!selectedServer.value) return;
+        processLogVisible.value = true;
+        processLogLoading.value = true;
+        processLogData.value = { pid, content: '' };
+        try {
+            const data = await fetchProcessLog(selectedServer.value, pid, 50);
+            processLogData.value.content = data.log || '暂无日志';
+        } catch (err) {
+            processLogData.value.content = '获取日志失败: ' + err.message;
+        } finally {
+            processLogLoading.value = false;
+        }
+    }
+
+    function closeProcessLog() {
+        processLogVisible.value = false;
+    }
 
     // ─── Toast 状态 ───
     const toast = reactive({ visible: false, message: '', error: false });
@@ -309,6 +634,8 @@ export function setupStore() {
     /** 选中服务器：加载详情 + 切换 WebSocket + 软件状态。 */
     function selectServer(id) {
         selectedServer.value = id;
+        activeMenu.value = 'main';
+        activeTab.value = 'system';
         fetchServerInfo(id);
         reconnectWS();
         loadSoftwareStatus(id);
@@ -664,6 +991,8 @@ export function setupStore() {
         loadServers();
         loadSoftwareCatalog();
         loadSources();
+        loadSettings();
+        loadLanguages();
         window.addEventListener('keydown', handleKeydown);
     });
 
@@ -686,13 +1015,15 @@ export function setupStore() {
 
     return {
         // 主题与图标
-        theme, setTheme, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
+        theme, setTheme, themeVal, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
+        // 设置
+        settingsForm, settingsSaving, loadSettings, saveSettings,
         // 日志查看
         logModalVisible, logData, logLoading, logLines, viewLog, closeLogModal,
         // 数据状态
         servers, selectedServer, serverStatus, info,
         // UI 状态
-        sidebarCollapsed, activeMenu, activeTab, searchQuery, activeFilter, filters, loading, loadError, wsConnected,
+        sidebarCollapsed, activeMenu, activeTab, configTab, themeVal, showDoc, searchQuery, activeFilter, filters, loading, loadError, wsConnected,
         // 表单状态
         formMode, formError, saving, form, toast,
         // 连接测试
@@ -717,6 +1048,20 @@ export function setupStore() {
         sources, sourceFormMode, sourceForm, sourceSaving, sourceFormError,
         openSourceForm, closeSourceForm, saveSource,
         deleteSource: handleDeleteSource,
+        // 软件包管理
+        packageFormMode, packageForm, packageSaving, packageFormError,
+        openPackageForm, closePackageForm, savePackage,
+        deletePackage: handleDeletePackage,
+        // 进程管理
+        processes, processLoading, processLogVisible, processLogData, processLogLoading,
+        loadProcesses, killProcess: handleKillProcess, viewProcessLog, closeProcessLog,
+        // 语言环境管理
+        languages, langFormMode, langForm, langSaving, langFormError,
+        detectedLanguages, langDetectLoading,
+        langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
+        loadLanguages, openLangForm, closeLangForm, saveLanguage,
+        deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang,
+        viewInstallLog, refreshInstallLog,
         nextTick,
     };
 }

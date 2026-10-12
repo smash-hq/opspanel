@@ -355,8 +355,7 @@ server-management/
 ├── docs/                # 文档
 ├── data/                # 运行时数据（git ignored）
 │   ├── .gitkeep
-│   ├── smp.db           # SQLite 数据库（自动生成）
-│   └── servers.example.json  # 服务器配置示例
+│   └── smp.db           # SQLite 数据库（自动生成）
 ├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建
 ├── go.mod               # Go 模块定义
@@ -421,9 +420,9 @@ make deps
 2. **使用反向代理**（Nginx/Caddy）启用 HTTPS
 3. **配置防火墙**，仅允许信任来源访问
 4. **使用强密码**连接远程服务器
-5. **定期备份** `data/servers.json` 配置文件
+5. **定期备份** `data/smp.db` 数据库文件
 6. **为远程用户配置 NOPASSWD sudo**，避免 Web 进程拥有完整 root 权限
-7. **不要提交 `data/servers.json`**，该文件包含敏感凭证信息
+7. **不要提交 `data/smp.db`**，该文件包含敏感凭证信息
 
 ## 许可证
 

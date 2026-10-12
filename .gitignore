@@ -24,7 +24,6 @@ go.sum.bak
 # ============================================================
 /data/*
 !/data/.gitkeep
-!/data/servers.example.json
 *.json.bak
 *.db
 *.db-journal

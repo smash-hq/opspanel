@@ -14,20 +14,30 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
+// DetectedLanguage 表示检测到的编程语言信息。
+type DetectedLanguage struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Icon    string `json:"icon"`
+	Version string `json:"version"`
+	Status  string `json:"status"` // installed / not_installed
+}
+
 // Info 是单次采集得到的完整系统快照。
 type Info struct {
-	Timestamp   int64       `json:"timestamp"`    // Unix 毫秒时间戳
-	Host        HostInfo    `json:"host"`         // 主机基本信息
-	CPU         CPUInfo     `json:"cpu"`          // CPU 信息
-	Memory      MemoryInfo  `json:"memory"`       // 内存信息
-	Disks       []DiskInfo  `json:"disks"`        // 磁盘信息
-	Network     NetworkInfo `json:"network"`      // 网络信息
-	Load        LoadInfo    `json:"load"`         // 负载信息
-	Processes   int         `json:"processes"`    // 进程数
-	Uptime      uint64      `json:"uptime"`       // 运行秒数
-	GoVersion   string      `json:"go_version"`   // Go 运行时版本
-	Goroutines  int         `json:"goroutines"`   // 当前 goroutine 数
-	SudoUsed    bool        `json:"sudo_used"`    // 采集过程使用了 sudo（权限不足标记）
+	Timestamp   int64              `json:"timestamp"`    // Unix 毫秒时间戳
+	Host        HostInfo           `json:"host"`         // 主机基本信息
+	CPU         CPUInfo            `json:"cpu"`          // CPU 信息
+	Memory      MemoryInfo         `json:"memory"`       // 内存信息
+	Disks       []DiskInfo         `json:"disks"`        // 磁盘信息
+	Network     NetworkInfo        `json:"network"`      // 网络信息
+	Load        LoadInfo           `json:"load"`         // 负载信息
+	Processes   int                `json:"processes"`    // 进程数
+	Uptime      uint64             `json:"uptime"`       // 运行秒数
+	GoVersion   string             `json:"go_version"`   // Go 运行时版本
+	Goroutines  int                `json:"goroutines"`   // 当前 goroutine 数
+	SudoUsed    bool               `json:"sudo_used"`    // 采集过程使用了 sudo（权限不足标记）
+	Languages   []DetectedLanguage `json:"languages"`    // 检测到的编程语言
 }
 
 // HostInfo 主机基本信息。

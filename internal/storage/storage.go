@@ -91,6 +91,18 @@ func (d *DB) migrate() error {
 		updated_at  INTEGER NOT NULL DEFAULT 0
 	);
 
+	CREATE TABLE IF NOT EXISTS languages (
+		id            TEXT PRIMARY KEY,
+		name          TEXT NOT NULL,
+		category      TEXT NOT NULL DEFAULT 'runtime',
+		description   TEXT NOT NULL DEFAULT '',
+		icon          TEXT NOT NULL DEFAULT '',
+		version_cmd   TEXT NOT NULL DEFAULT '',
+		install_cmd   TEXT NOT NULL DEFAULT '',
+		created_at    INTEGER NOT NULL DEFAULT 0,
+		updated_at    INTEGER NOT NULL DEFAULT 0
+	);
+
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL DEFAULT ''
@@ -100,6 +112,7 @@ func (d *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_servers_created ON servers(created_at);
 	CREATE INDEX IF NOT EXISTS idx_sw_packages_category ON software_packages(category);
 	CREATE INDEX IF NOT EXISTS idx_sw_sources_type ON software_sources(type);
+	CREATE INDEX IF NOT EXISTS idx_languages_category ON languages(category);
 	`
 
 	_, err := d.db.Exec(schema)
