@@ -1,15 +1,5 @@
 [
   {
-    "id": "srv_local",
-    "name": "localhost (linux/amd64)",
-    "type": "local",
-    "host": "127.0.0.1",
-    "port": 22,
-    "username": "root",
-    "auth_type": "local",
-    "created_at": 1700000000
-  },
-  {
     "id": "srv_remote_demo",
     "name": "远程示例",
     "type": "remote",
