@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -500,8 +500,11 @@ export function setupStore() {
     const dockerSubTab = ref('images');
     const dockerPullInput = ref('');
     const dockerShowAll = ref(true);
+    const selectedMirror = ref('');
     // Docker 镜像源管理
     const dockerSources = ref([]);
+    const serverMirror = ref({ mirror: '', registry: '' });
+    const serverMirrorLoading = ref(false);
     const dockerSourceFormVisible = ref(false);
     const dockerSourceForm = reactive({ id: '', name: '', url: '', enabled: true });
     const dockerSourceSaving = ref(false);
@@ -688,6 +691,31 @@ export function setupStore() {
             toastNotify('已设为默认镜像源');
         } catch (err) {
             toastNotify('设置失败: ' + err.message, true);
+        }
+    }
+
+    // ─── 服务器镜像源 ───
+    async function loadServerMirror() {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        serverMirrorLoading.value = true;
+        try {
+            const data = await fetchServerMirror(selectedServer.value);
+            serverMirror.value = data;
+        } catch (err) {
+            // 静默失败
+        } finally {
+            serverMirrorLoading.value = false;
+        }
+    }
+
+    async function applyMirrorToServer(mirror) {
+        if (!selectedServer.value) return;
+        try {
+            await applyServerMirror(selectedServer.value, mirror);
+            serverMirror.value.mirror = mirror;
+            toastNotify('镜像源已应用到服务器，Docker 正在重启');
+        } catch (err) {
+            toastNotify('应用失败: ' + err.message, true);
         }
     }
 
@@ -1454,7 +1482,7 @@ export function setupStore() {
         dockerAvailable, dockerVersion, dockerTabEnabled,
         dockerImages, dockerContainers, dockerLoading,
         dockerExecVisible, dockerExecData, dockerLogsVisible, dockerLogsData,
-        dockerSubTab, dockerPullInput, dockerShowAll,
+        dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror,
         dockerSources, dockerSourceFormVisible, dockerSourceForm, dockerSourceSaving,
         selectedImages, selectedContainers, batchActionLoading,
         checkDockerEnv, loadDockerImages, loadDockerContainers,
@@ -1462,6 +1490,8 @@ export function setupStore() {
         dockerRemoveContainer, dockerExecCommand, dockerViewLogs,
         loadDockerSources, openDockerSourceForm, closeDockerSourceForm, saveDockerSource,
         removeDockerSource, setDefaultSource,
+        serverMirror, serverMirrorLoading,
+        loadServerMirror, applyMirrorToServer,
         toggleImageSelection, toggleContainerSelection, batchDeleteImages, batchContainerAction,
         nextTick,
     };

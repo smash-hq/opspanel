@@ -491,6 +491,26 @@ export async function setDefaultDockerSource(id) {
     return json.data;
 }
 
+// --- 服务器镜像源配置 ---
+
+/** 获取服务器当前镜像源配置。 */
+export async function fetchServerMirror(serverId) {
+    const json = await request(`/docker/mirror?server=${encodeURIComponent(serverId)}`);
+    if (json.code !== 0) throw new Error(json.message || '获取镜像源失败');
+    return json.data;
+}
+
+/** 应用镜像源到服务器。 */
+export async function applyServerMirror(serverId, mirror) {
+    const json = await request('/docker/mirror?server=' + encodeURIComponent(serverId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mirror }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '应用失败');
+    return json.data;
+}
+
 // --- 进程管理 ---
 
 /** 获取进程列表。 */

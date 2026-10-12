@@ -114,6 +114,10 @@
                         <span class="config-menu-label">软件源</span>
                         <span class="config-menu-badge">{{ sources.length }}</span>
                     </div>
+                    <div class="config-menu-item" :class="{ active: configTab === 'docker-sources' }" @click="configTab = 'docker-sources'; loadDockerSources()">
+                        <span class="config-menu-label">Docker 镜像源</span>
+                        <span class="config-menu-badge">{{ dockerSources.length }}</span>
+                    </div>
                     <div class="config-menu-item" :class="{ active: configTab === 'packages' }" @click="configTab = 'packages'">
                         <span class="config-menu-label">软件包</span>
                         <span class="config-menu-badge">{{ softwareCatalog.length }}</span>
@@ -212,6 +216,33 @@
                         <div v-for="lang in languages.filter(l => l._expanded)" :key="'detail-'+lang.id" class="lang-expand-detail">
                             <div class="lang-detail-row"><span class="detail-label">版本检测:</span><code>{{ lang.version_cmd || '未配置' }}</code></div>
                             <div class="lang-detail-row"><span class="detail-label">安装脚本:</span><pre>{{ lang.install_cmd || '未配置' }}</pre></div>
+                        </div>
+                    </div>
+                    <!-- Docker 镜像源管理 -->
+                    <div v-if="configTab === 'docker-sources'">
+                        <h3>Docker 镜像源管理</h3>
+                        <p class="settings-desc">管理 Docker 镜像加速器源（全局生效，可应用到各服务器）</p>
+                        <div class="section-header">
+                            <button class="primary-button small" @click="openDockerSourceForm()">＋ 添加镜像源</button>
+                        </div>
+                        <div class="docker-source-list">
+                            <div v-for="src in dockerSources" :key="src.id" class="docker-source-row">
+                                <span class="src-default" v-if="src.is_default">★</span>
+                                <span class="src-default empty" v-else>☆</span>
+                                <span class="src-name">{{ src.name }}</span>
+                                <span class="src-url">{{ src.url }}</span>
+                                <span class="src-status" :class="src.enabled ? 'enabled' : 'disabled'">{{ src.enabled ? '启用' : '禁用' }}</span>
+                                <span class="src-actions">
+                                    <button class="proc-btn" @click="setDefaultSource(src.id)" title="设为默认" v-if="!src.is_default">★</button>
+                                    <button class="proc-btn" @click="openDockerSourceForm(src)" title="编辑">✎</button>
+                                    <button class="proc-btn danger" @click="removeDockerSource(src.id)" title="删除" v-if="!src.is_default">×</button>
+                                </span>
+                            </div>
+                            <div v-if="!dockerSources.length" class="list-empty">
+                                <span class="empty-icon">⌁</span>
+                                <strong>还没有镜像源</strong>
+                                <small>添加 Docker 镜像加速器源</small>
+                            </div>
                         </div>
                     </div>
                     <!-- 启动信息 -->
@@ -614,10 +645,19 @@
                     <div class="docker-tabs">
                         <button class="docker-tab" :class="{ active: dockerSubTab === 'images' }" @click="dockerSubTab = 'images'; loadDockerImages()">镜像管理</button>
                         <button class="docker-tab" :class="{ active: dockerSubTab === 'containers' }" @click="dockerSubTab = 'containers'; loadDockerContainers(true)">容器管理</button>
-                        <button class="docker-tab" :class="{ active: dockerSubTab === 'sources' }" @click="dockerSubTab = 'sources'; loadDockerSources()">镜像源</button>
                     </div>
                     <!-- 镜像管理 -->
                     <div v-if="dockerSubTab === 'images'">
+                        <!-- 镜像源选择 -->
+                        <div class="mirror-selector" v-if="selectedServer !== 'srv_local'">
+                            <span class="mirror-label">镜像源:</span>
+                            <select v-model="selectedMirror" @change="loadServerMirror()">
+                                <option value="">加载中...</option>
+                                <option v-for="src in dockerSources.filter(s => s.enabled)" :key="src.id" :value="src.url">{{ src.name }}</option>
+                            </select>
+                            <span class="mirror-current" v-if="serverMirror.mirror">当前: {{ serverMirror.mirror }}</span>
+                            <button class="primary-button small" @click="applyMirrorToServer(selectedMirror)" :disabled="!selectedMirror || serverMirrorLoading">应用到此服务器</button>
+                        </div>
                         <div class="docker-toolbar">
                             <input v-model="dockerPullInput" placeholder="输入镜像名，如：nginx:latest" @keyup.enter="dockerPullImage(dockerPullInput); dockerPullInput = ''">
                             <button class="primary-button small" @click="dockerPullImage(dockerPullInput); dockerPullInput = ''">⬇ 拉取</button>
@@ -682,26 +722,6 @@
                                     <button v-if="c.state === 'running'" class="proc-btn" @click="dockerExecCommand(c.id, 'sh')" title="执行">⌨</button>
                                     <button class="proc-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
                                     <button class="proc-btn danger" @click="dockerRemoveContainer(c.id)" title="删除">×</button>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 镜像源管理 -->
-                    <div v-if="dockerSubTab === 'sources'">
-                        <div class="docker-toolbar">
-                            <button class="primary-button small" @click="openDockerSourceForm()">＋ 添加镜像源</button>
-                        </div>
-                        <div class="docker-source-list">
-                            <div v-for="src in dockerSources" :key="src.id" class="docker-source-row">
-                                <span class="src-default" v-if="src.is_default">★</span>
-                                <span class="src-default empty" v-else>☆</span>
-                                <span class="src-name">{{ src.name }}</span>
-                                <span class="src-url">{{ src.url }}</span>
-                                <span class="src-status" :class="src.enabled ? 'enabled' : 'disabled'">{{ src.enabled ? '启用' : '禁用' }}</span>
-                                <span class="src-actions">
-                                    <button class="proc-btn" @click="setDefaultSource(src.id)" title="设为默认" v-if="!src.is_default">★</button>
-                                    <button class="proc-btn" @click="openDockerSourceForm(src)" title="编辑">✎</button>
-                                    <button class="proc-btn danger" @click="removeDockerSource(src.id)" title="删除" v-if="!src.is_default">×</button>
                                 </span>
                             </div>
                         </div>

@@ -3,6 +3,7 @@
 package remote
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -818,5 +819,63 @@ func (rc *RemoteCollector) RemoveContainer(srv *Server, id string) error {
 	cmd := fmt.Sprintf("docker rm -f %q 2>&1", id)
 	out := rc.RunWithSudo(conn, cmd)
 	rc.log.Infow("docker rm", "id", id, "output", out)
+	return nil
+}
+
+// MirrorSourceConfig 表示服务器上的镜像源配置。
+type MirrorSourceConfig struct {
+	Mirror   string `json:"mirror"`
+	Registry string `json:"registry"`
+}
+
+// GetMirrorSources 获取服务器当前的 Docker 镜像源配置。
+func (rc *RemoteCollector) GetMirrorSources(srv *Server) (*MirrorSourceConfig, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// 读取 daemon.json
+	out := rc.RunWithSudo(conn, "cat /etc/docker/daemon.json 2>/dev/null || echo '{}'")
+
+	config := &MirrorSourceConfig{}
+	if out == "" || out == "{}" {
+		return config, nil
+	}
+
+	// 简单解析 JSON 中的 registry-mirrors 或 mirror 字段
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &data); err == nil {
+		if mirrors, ok := data["registry-mirrors"].([]interface{}); ok && len(mirrors) > 0 {
+			if m, ok := mirrors[0].(string); ok {
+				config.Mirror = m
+			}
+		}
+	}
+	return config, nil
+}
+
+// ApplyMirrorSource 应用镜像源配置到服务器。
+func (rc *RemoteCollector) ApplyMirrorSource(srv *Server, mirrorURL string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// 构建新的 daemon.json
+	daemonJSON := fmt.Sprintf(`{
+	"registry-mirrors": [%q]
+}`, mirrorURL)
+
+	// 写入配置文件并重启 Docker
+	cmd := fmt.Sprintf(`sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+%s
+EOF
+sudo systemctl restart docker 2>/dev/null || sudo service docker restart 2>/dev/null`, daemonJSON)
+
+	out := rc.RunWithSudo(conn, cmd)
+	rc.log.Infow("apply mirror source", "mirror", mirrorURL, "output", out)
 	return nil
 }

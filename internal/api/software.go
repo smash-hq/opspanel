@@ -87,6 +87,9 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	// Docker 镜像源管理
 	mux.HandleFunc("/api/v1/docker-sources", h.handleDockerSources)        // GET 列表 / POST 新增
 	mux.HandleFunc("/api/v1/docker-sources/", h.handleDockerSourceDetail)  // PUT 更新 / DELETE 删除 / POST 设为默认
+
+	// 服务器镜像源配置
+	mux.HandleFunc("/api/v1/docker/mirror", h.handleDockerMirror)          // GET 获取服务器当前镜像源 / POST 应用镜像源
 }
 
 // --- 软件目录与安装 ---
@@ -875,6 +878,55 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 			return
 		}
 		OK(w, map[string]string{"default": id})
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// --- 服务器镜像源配置 ---
+
+// handleDockerMirror: GET 获取服务器当前镜像源 / POST 应用镜像源到服务器。
+func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Request) {
+	serverID := r.URL.Query().Get("server")
+	if serverID == "" {
+		Fail(w, http.StatusBadRequest, 400, "server required")
+		return
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		config, err := h.remoteCollector.GetMirrorSources(toRemoteServer(srv))
+		if err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
+			return
+		}
+		OK(w, config)
+
+	case http.MethodPost:
+		var req struct {
+			Mirror string `json:"mirror"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		if req.Mirror == "" {
+			Fail(w, http.StatusBadRequest, 400, "mirror url required")
+			return
+		}
+		if err := h.remoteCollector.ApplyMirrorSource(toRemoteServer(srv), req.Mirror); err != nil {
+			h.log.Errorw("apply mirror failed", "server", serverID, "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to apply mirror: "+err.Error())
+			return
+		}
+		OK(w, map[string]string{"status": "ok", "mirror": req.Mirror})
 
 	default:
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
