@@ -10,10 +10,10 @@ import (
 
 // Collector 根据服务器类型调度本地或远程采集。
 type Collector struct {
-	log      *logger.Logger
-	local    *system.Collector
-	remote   *RemoteCollector
-	store    *Store
+	log    *logger.Logger
+	local  *system.Collector
+	remote *RemoteCollector
+	store  *Store
 }
 
 // NewCollector 创建统一采集器。

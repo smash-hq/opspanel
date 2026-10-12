@@ -15,23 +15,23 @@ import (
 
 // SoftwareHandler 提供软件管理 API。
 type SoftwareHandler struct {
-	log            *logger.Logger
-	store          *host.Store
-	swStore        *storage.SoftwareStore
-	manager        *software.Manager
+	log             *logger.Logger
+	store           *host.Store
+	swStore         *storage.SoftwareStore
+	manager         *software.Manager
 	remoteCollector *remote.RemoteCollector
-	db             *storage.DB
+	db              *storage.DB
 }
 
 // NewSoftwareHandler 创建软件管理处理器。
 func NewSoftwareHandler(log *logger.Logger, store *host.Store, swStore *storage.SoftwareStore, db *storage.DB) *SoftwareHandler {
 	return &SoftwareHandler{
-		log:            log.Named("api.software"),
-		store:          store,
-		swStore:        swStore,
-		manager:        software.NewManager(log),
+		log:             log.Named("api.software"),
+		store:           store,
+		swStore:         swStore,
+		manager:         software.NewManager(log),
 		remoteCollector: remote.NewRemoteCollector(log),
-		db:             db,
+		db:              db,
 	}
 }
 
@@ -45,52 +45,52 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/software/service", h.handleService)
 
 	// 软件包管理
-	mux.HandleFunc("/api/v1/software/packages", h.handlePackages)          // GET 列表 / POST 新增
-	mux.HandleFunc("/api/v1/software/packages/", h.handlePackageDetail)    // PUT 更新 / DELETE 删除
+	mux.HandleFunc("/api/v1/software/packages", h.handlePackages)       // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/software/packages/", h.handlePackageDetail) // PUT 更新 / DELETE 删除
 
 	// 日志查看
-	mux.HandleFunc("/api/v1/software/logs", h.handleLogs)                  // GET ?server=&package=&lines=
+	mux.HandleFunc("/api/v1/software/logs", h.handleLogs) // GET ?server=&package=&lines=
 
 	// 进程管理
-	mux.HandleFunc("/api/v1/processes", h.handleProcesses)                 // GET ?server=&lines= 进程列表
-	mux.HandleFunc("/api/v1/processes/kill", h.handleKillProcess)          // POST 终止进程
-	mux.HandleFunc("/api/v1/processes/log", h.handleProcessLog)            // GET ?server=&pid=&lines= 进程日志
+	mux.HandleFunc("/api/v1/processes", h.handleProcesses)        // GET ?server=&lines= 进程列表
+	mux.HandleFunc("/api/v1/processes/kill", h.handleKillProcess) // POST 终止进程
+	mux.HandleFunc("/api/v1/processes/log", h.handleProcessLog)   // GET ?server=&pid=&lines= 进程日志
 
 	// 编程语言环境
-	mux.HandleFunc("/api/v1/languages", h.handleLanguages)                 // GET 列表 / POST 新增
-	mux.HandleFunc("/api/v1/languages/", h.handleLanguageDetail)           // PUT 更新 / DELETE 删除
-	mux.HandleFunc("/api/v1/languages/detect", h.handleDetectLanguages)    // GET ?server= 检测已安装
-	mux.HandleFunc("/api/v1/languages/install", h.handleInstallLanguage)   // POST 安装语言
+	mux.HandleFunc("/api/v1/languages", h.handleLanguages)                   // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/languages/", h.handleLanguageDetail)             // PUT 更新 / DELETE 删除
+	mux.HandleFunc("/api/v1/languages/detect", h.handleDetectLanguages)      // GET ?server= 检测已安装
+	mux.HandleFunc("/api/v1/languages/install", h.handleInstallLanguage)     // POST 安装语言
 	mux.HandleFunc("/api/v1/languages/uninstall", h.handleUninstallLanguage) // POST 卸载语言
 
 	// 镜像源管理
-	mux.HandleFunc("/api/v1/software/sources", h.handleSources)            // GET 列表 / POST 新增
-	mux.HandleFunc("/api/v1/software/sources/", h.handleSourceDetail)     // PUT 更新 / DELETE 删除
+	mux.HandleFunc("/api/v1/software/sources", h.handleSources)       // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/software/sources/", h.handleSourceDetail) // PUT 更新 / DELETE 删除
 
 	// 文件管理
-	mux.HandleFunc("/api/v1/files", h.handleFiles)                         // GET ?server=&path= 列出目录
-	mux.HandleFunc("/api/v1/files/info", h.handleFileInfo)                 // GET ?server=&path= 文件详情
-	mux.HandleFunc("/api/v1/files/preview", h.handleFilePreview)           // GET ?server=&path=&lines= 文件预览
-	mux.HandleFunc("/api/v1/files/download", h.handleFileDownload)         // GET ?server=&path= 下载文件
+	mux.HandleFunc("/api/v1/files", h.handleFiles)                 // GET ?server=&path= 列出目录
+	mux.HandleFunc("/api/v1/files/info", h.handleFileInfo)         // GET ?server=&path= 文件详情
+	mux.HandleFunc("/api/v1/files/preview", h.handleFilePreview)   // GET ?server=&path=&lines= 文件预览
+	mux.HandleFunc("/api/v1/files/download", h.handleFileDownload) // GET ?server=&path= 下载文件
 
 	// Docker 管理
-	mux.HandleFunc("/api/v1/docker", h.handleDockerCheck)                  // GET ?server= Docker 环境检测
-	mux.HandleFunc("/api/v1/docker/images", h.handleDockerImages)          // GET ?server= 镜像列表
-	mux.HandleFunc("/api/v1/docker/images/pull", h.handleDockerPull)       // POST 拉取镜像
-	mux.HandleFunc("/api/v1/docker/images/", h.handleDockerImageDetail)    // DELETE 删除镜像
-	mux.HandleFunc("/api/v1/docker/images/batch-delete", h.handleBatchDeleteImages)  // POST 批量删除镜像
-	mux.HandleFunc("/api/v1/docker/containers", h.handleDockerContainers)  // GET ?server=&all= 容器列表
-	mux.HandleFunc("/api/v1/docker/containers/", h.handleDockerContainer)  // POST 操作/DELETE 删除
-	mux.HandleFunc("/api/v1/docker/containers/batch", h.handleBatchContainerAction)   // POST 批量容器操作
-	mux.HandleFunc("/api/v1/docker/exec", h.handleDockerExec)              // POST 执行命令
-	mux.HandleFunc("/api/v1/docker/logs", h.handleDockerLogs)              // GET ?server=&id=&lines= 容器日志
+	mux.HandleFunc("/api/v1/docker", h.handleDockerCheck)                           // GET ?server= Docker 环境检测
+	mux.HandleFunc("/api/v1/docker/images", h.handleDockerImages)                   // GET ?server= 镜像列表
+	mux.HandleFunc("/api/v1/docker/images/pull", h.handleDockerPull)                // POST 拉取镜像
+	mux.HandleFunc("/api/v1/docker/images/", h.handleDockerImageDetail)             // DELETE 删除镜像
+	mux.HandleFunc("/api/v1/docker/images/batch-delete", h.handleBatchDeleteImages) // POST 批量删除镜像
+	mux.HandleFunc("/api/v1/docker/containers", h.handleDockerContainers)           // GET ?server=&all= 容器列表
+	mux.HandleFunc("/api/v1/docker/containers/", h.handleDockerContainer)           // POST 操作/DELETE 删除
+	mux.HandleFunc("/api/v1/docker/containers/batch", h.handleBatchContainerAction) // POST 批量容器操作
+	mux.HandleFunc("/api/v1/docker/exec", h.handleDockerExec)                       // POST 执行命令
+	mux.HandleFunc("/api/v1/docker/logs", h.handleDockerLogs)                       // GET ?server=&id=&lines= 容器日志
 
 	// Docker 镜像源管理
-	mux.HandleFunc("/api/v1/docker-sources", h.handleDockerSources)        // GET 列表 / POST 新增
-	mux.HandleFunc("/api/v1/docker-sources/", h.handleDockerSourceDetail)  // PUT 更新 / DELETE 删除 / POST 设为默认
+	mux.HandleFunc("/api/v1/docker-sources", h.handleDockerSources)       // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/docker-sources/", h.handleDockerSourceDetail) // PUT 更新 / DELETE 删除 / POST 设为默认
 
 	// 服务器镜像源配置
-	mux.HandleFunc("/api/v1/docker/mirror", h.handleDockerMirror)          // GET 获取服务器当前镜像源 / POST 应用镜像源
+	mux.HandleFunc("/api/v1/docker/mirror", h.handleDockerMirror) // GET 获取服务器当前镜像源 / POST 应用镜像源
 }
 
 // --- 软件目录与安装 ---
@@ -142,6 +142,7 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		ServerID  string `json:"server_id"`
 		PackageID string `json:"package_id"`
+		Version   string `json:"version"`
 	}
 	if err := decodeBody(r, &req); err != nil {
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
@@ -155,7 +156,7 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 	}
 
 	go func() {
-		if err := h.manager.Install(srv, pkg); err != nil {
+		if err := h.manager.Install(srv, pkg, req.Version); err != nil {
 			h.log.Errorw("install failed", "pkg", pkg.ID, "error", err)
 		}
 	}()
@@ -1029,9 +1030,9 @@ func (h *SoftwareHandler) handleProcessLog(w http.ResponseWriter, r *http.Reques
 	}
 
 	OK(w, map[string]string{
-		"pid":     fmt.Sprintf("%d", pid),
-		"server":  serverID,
-		"log":     log,
+		"pid":    fmt.Sprintf("%d", pid),
+		"server": serverID,
+		"log":    log,
 	})
 }
 
@@ -1158,6 +1159,7 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 	var req struct {
 		ServerID   string `json:"server_id"`
 		LanguageID string `json:"language_id"`
+		Version    string `json:"version"`
 	}
 	if err := decodeBody(r, &req); err != nil {
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
@@ -1183,7 +1185,7 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 
 	// 异步执行安装
 	go func() {
-		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), lang.InstallCmd); err != nil {
+		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), lang.InstallCmd, req.Version); err != nil {
 			h.log.Errorw("install language failed", "lang", lang.ID, "error", err)
 		}
 	}()
@@ -1226,12 +1228,8 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 
 	// 异步执行卸载
 	go func() {
-		// 使用 InstallCmd 作为卸载命令（如果定义了 UninstallCmd 则使用）
-		uninstallCmd := lang.UninstallCmd
-		if uninstallCmd == "" {
-			uninstallCmd = lang.InstallCmd
-		}
-		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), uninstallCmd); err != nil {
+		// 使用 UninstallCmd 作为卸载命令
+		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), lang.UninstallCmd, ""); err != nil {
 			h.log.Errorw("uninstall language failed", "lang", lang.ID, "error", err)
 		}
 	}()

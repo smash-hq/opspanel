@@ -123,11 +123,11 @@ export async function fetchSoftwareStatus(serverId) {
  * @param {string} packageId - 软件包 ID
  * @returns {Object} { status: "installing", package: "xxx" }
  */
-export async function installSoftware(serverId, packageId) {
+export async function installSoftware(serverId, packageId, version) {
     const json = await request('/software/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, package_id: packageId }),
+        body: JSON.stringify({ server_id: serverId, package_id: packageId, version: version || '' }),
     });
     if (json.code !== 0) throw new Error(json.message || '安装失败');
     return json.data;
@@ -295,11 +295,11 @@ export async function detectLanguages(serverId) {
 }
 
 /** 安装语言环境。 */
-export async function installLanguage(serverId, languageId) {
+export async function installLanguage(serverId, languageId, version) {
     const json = await request('/languages/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, language_id: languageId }),
+        body: JSON.stringify({ server_id: serverId, language_id: languageId, version: version || '' }),
     });
     if (json.code !== 0) throw new Error(json.message || '安装失败');
     return json.data;

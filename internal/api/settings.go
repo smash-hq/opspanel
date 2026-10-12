@@ -20,9 +20,9 @@ type PushController interface {
 
 // SettingsHandler 提供系统设置管理 API。
 type SettingsHandler struct {
-	log     *logger.Logger
-	db      *storage.DB
-	dataDir string
+	log      *logger.Logger
+	db       *storage.DB
+	dataDir  string
 	pushCtrl PushController
 }
 

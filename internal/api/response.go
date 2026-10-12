@@ -8,9 +8,9 @@ import (
 
 // Response 是统一的 API 响应信封。
 type Response struct {
-	Code    int    `json:"code"`              // 0 = 成功，非 0 = 业务错误
-	Message string `json:"message"`           // 可读提示
-	Data    any    `json:"data,omitempty"`    // 业务数据
+	Code    int    `json:"code"`           // 0 = 成功，非 0 = 业务错误
+	Message string `json:"message"`        // 可读提示
+	Data    any    `json:"data,omitempty"` // 业务数据
 }
 
 // JSON 写入统一 JSON 响应。

@@ -15,6 +15,7 @@ import (
 	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
 	"github.com/smash-hq/server-management/internal/middleware"
+	"github.com/smash-hq/server-management/internal/remote"
 	"github.com/smash-hq/server-management/internal/software"
 	"github.com/smash-hq/server-management/internal/storage"
 	"github.com/smash-hq/server-management/internal/ws"
@@ -22,13 +23,13 @@ import (
 
 // Server 封装 HTTP 服务生命周期。
 type Server struct {
-	cfg           *config.Config
-	log           *logger.Logger
-	httpSrv       *http.Server
-	hub           *ws.Hub
-	store         *host.Store
-	collector     *host.Collector
-	pushPaused    atomic.Bool  // 暂停推送循环（用户不在系统信息页时）
+	cfg        *config.Config
+	log        *logger.Logger
+	httpSrv    *http.Server
+	hub        *ws.Hub
+	store      *host.Store
+	collector  *host.Collector
+	pushPaused atomic.Bool // 暂停推送循环（用户不在系统信息页时）
 }
 
 // New 创建服务实例，注册全部路由与中间件。
@@ -128,7 +129,10 @@ func (s *Server) Start() error {
 // Shutdown 优雅关闭 HTTP 服务。
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Infow("server shutting down")
-	return s.httpSrv.Shutdown(ctx)
+	err := s.httpSrv.Shutdown(ctx)
+	// HTTP 服务关闭后，优雅关闭全部池化 SSH 连接
+	remote.CloseAllSSH()
+	return err
 }
 
 // CloseStore 关闭存储层（数据库连接）。

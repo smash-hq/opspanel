@@ -23,10 +23,10 @@ var upgrader = websocket.Upgrader{
 
 // client 代表一条 WebSocket 连接。
 type client struct {
-	hub       *Hub
-	conn      *websocket.Conn
-	send      chan []byte
-	serverID  string // 该客户端订阅的服务器 ID
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	serverID string // 该客户端订阅的服务器 ID
 }
 
 // Hub 维护所有活跃连接并按服务器分发消息。
@@ -209,4 +209,3 @@ func (c *client) readPump() {
 		}
 	}
 }
-

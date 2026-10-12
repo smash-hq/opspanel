@@ -297,7 +297,7 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; currentFilePath = '/'; loadFiles('/')">文件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
-                    <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="dockerTabEnabled && (activeTab = 'docker', checkDockerEnv(), loadDockerImages(), loadDockerContainers(true))" :title="dockerTabEnabled ? '' : '暂无 Docker 环境'">Docker</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="dockerTabEnabled && (activeTab = 'docker', checkDockerEnv(), loadDockerImages(), loadDockerContainers(true), loadServerMirror())" :title="dockerTabEnabled ? '' : '暂无 Docker 环境'">Docker</button>
                     <button class="bc-tab disabled" title="即将推出">集群管理</button>
                     <button class="bc-tab disabled" title="即将推出">安全</button>
                     <button class="bc-tab disabled" title="即将推出">定时任务</button>
@@ -380,6 +380,10 @@
                                     <span class="info-value">{{ info.host && info.host.arch || '—' }}</span>
                                 </div>
                                 <div class="info-row">
+                                    <span class="info-key">语言环境</span>
+                                    <span class="info-value">{{ info.host && info.host.locale || '—' }}</span>
+                                </div>
+                                <div class="info-row">
                                     <span class="info-key">CPU 型号</span>
                                     <span class="info-value info-model">{{ info.cpu && info.cpu.model || '—' }}</span>
                                 </div>
@@ -426,45 +430,64 @@
                     <!-- 已安装软件 -->
                     <div class="sw-section" v-if="softwareStatuses.filter(s => s.installed).length">
                         <h4>已安装软件（{{ softwareStatuses.filter(s => s.installed).length }}）</h4>
-                        <div class="sw-status-grid">
-                            <div v-for="sw in softwareStatuses.filter(s => s.installed)" :key="sw.package.id" class="sw-status-card installed">
-                                <span class="sw-status-icon">{{ sw.package.icon }}</span>
-                                <div class="sw-status-info">
+                        <div class="sw-installed-table">
+                            <div class="sw-installed-header">
+                                <span class="sw-col-name">软件</span>
+                                <span class="sw-col-version">版本</span>
+                                <span class="sw-col-status">状态</span>
+                                <span class="sw-col-service">服务控制</span>
+                                <span class="sw-col-actions">操作</span>
+                            </div>
+                            <div v-for="sw in softwareStatuses.filter(s => s.installed)" :key="sw.package.id" class="sw-installed-row">
+                                <span class="sw-col-name">
+                                    <span class="sw-row-icon">{{ sw.package.icon }}</span>
                                     <strong>{{ sw.package.name }}</strong>
-                                    <small>{{ sw.version || sw.package.version }}</small>
-                                </div>
-                                <div class="sw-status-actions">
+                                </span>
+                                <span class="sw-col-version">{{ sw.version || sw.package.version || '—' }}</span>
+                                <span class="sw-col-status">
                                     <span class="sw-status-badge" :class="sw.status">{{ sw.status === 'running' ? '运行中' : sw.status === 'stopped' ? '已停止' : sw.status === 'none' ? '无服务' : '未知' }}</span>
-                                    <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'start')" :disabled="sw.status === 'running' || softwareOperating[sw.package.id]" title="启动">▶</button>
-                                    <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'stop')" :disabled="sw.status === 'stopped' || softwareOperating[sw.package.id]" title="停止">⏸</button>
-                                    <button v-if="sw.status !== 'none'" class="sw-action-btn" @click="controlPackageService(sw.package.id, 'restart')" :disabled="softwareOperating[sw.package.id]" title="重启">↻</button>
-                                    <button class="sw-action-btn" @click="viewLog(sw.package.id)" title="日志">📋</button>
-                                    <button class="sw-action-btn danger" @click="uninstallPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]" title="卸载">✗</button>
-                                </div>
+                                </span>
+                                <span class="sw-col-service">
+                                    <div class="sw-service-btns" v-if="sw.status !== 'none'">
+                                        <button class="sw-svc-btn" @click="controlPackageService(sw.package.id, 'start')" :disabled="sw.status === 'running' || softwareOperating[sw.package.id]" title="启动">▶</button>
+                                        <button class="sw-svc-btn" @click="controlPackageService(sw.package.id, 'stop')" :disabled="sw.status === 'stopped' || softwareOperating[sw.package.id]" title="停止">⏸</button>
+                                        <button class="sw-svc-btn" @click="controlPackageService(sw.package.id, 'restart')" :disabled="softwareOperating[sw.package.id]" title="重启">↻</button>
+                                        <button class="sw-svc-btn" @click="viewLog(sw.package.id)" title="日志">📋</button>
+                                    </div>
+                                    <span v-else class="text-muted">—</span>
+                                </span>
+                                <span class="sw-col-actions">
+                                    <button class="sw-btn sw-btn-danger" @click="uninstallPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]">
+                                        {{ softwareOperating[sw.package.id] ? '卸载中...' : '卸载' }}
+                                    </button>
+                                </span>
                             </div>
                         </div>
                     </div>
-                    <!-- 可安装软件 -->
-                    <div class="sw-section">
-                        <h4>可安装软件</h4>
-                        <div class="sw-category-filter">
-                            <button :class="{ active: softwareCategory === 'all' }" @click="softwareCategory = 'all'">全部</button>
-                            <button :class="{ active: softwareCategory === 'database' }" @click="softwareCategory = 'database'">数据库</button>
-                            <button :class="{ active: softwareCategory === 'web' }" @click="softwareCategory = 'web'">Web</button>
-                            <button :class="{ active: softwareCategory === 'runtime' }" @click="softwareCategory = 'runtime'">运行时</button>
+                    <!-- 可安装软件（仅展示未安装的） -->
+                    <div class="sw-section" v-if="availableSoftware.length">
+                        <div class="sw-section-toolbar">
+                            <h4>可安装软件（{{ availableSoftwareFiltered.length }} / {{ availableSoftware.length }}）</h4>
+                            <input class="sw-search-input" v-model="softwareSearch" placeholder="搜索名称、描述...">
                         </div>
-                        <div class="sw-status-grid">
-                            <div v-for="pkg in filteredSoftware" :key="pkg.id" class="sw-status-card">
-                                <span class="sw-status-icon">{{ pkg.icon }}</span>
-                                <div class="sw-status-info">
-                                    <strong>{{ pkg.name }}</strong>
-                                    <small>{{ pkg.version }} · {{ pkg.description }}</small>
+                        <div class="sw-card-grid">
+                            <div v-for="pkg in availableSoftwareFiltered" :key="pkg.id" class="sw-card">
+                                <div class="sw-card-icon">{{ pkg.icon }}</div>
+                                <div class="sw-card-body">
+                                    <strong class="sw-card-name">{{ pkg.name }}</strong>
+                                    <small class="sw-card-desc">{{ pkg.description }}</small>
                                 </div>
-                                <div class="sw-status-actions">
-                                    <button v-if="getPackageStatus(pkg.id)?.installed" class="toolbar-button small" disabled>已安装</button>
-                                    <button v-else-if="softwareOperating[pkg.id]" class="toolbar-button small" disabled>安装中...</button>
-                                    <button v-else-if="selectedServer === 'srv_local'" class="toolbar-button small" disabled>仅远程</button>
-                                    <button v-else class="primary-button small" @click="installPackage(pkg.id)">安装</button>
+                                <div class="sw-card-version">
+                                    <select v-model="selectedVersions[pkg.id]" class="sw-version-select">
+                                        <option v-for="v in (pkg.versions || [])" :key="v" :value="v">{{ v }}</option>
+                                        <option value="__custom__">自定义...</option>
+                                    </select>
+                                    <input v-if="selectedVersions[pkg.id] === '__custom__'" v-model="selectedVersions[pkg.id + '_custom']" placeholder="输入版本" class="sw-version-custom">
+                                </div>
+                                <div class="sw-card-footer">
+                                    <button class="sw-btn sw-btn-primary" @click="installPackage(pkg.id, selectedVersions[pkg.id] === '__custom__' ? (selectedVersions[pkg.id + '_custom'] || '') : (selectedVersions[pkg.id] || ''))" :disabled="softwareOperating[pkg.id] || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                        {{ softwareOperating[pkg.id] ? '安装中...' : '安装' }}
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -472,6 +495,10 @@
                     <!-- 加载中 -->
                     <div v-if="softwareLoading" class="loading-state" style="padding:20px;">
                         <div class="loading-orbit small"><span></span></div><span>正在加载软件状态...</span>
+                    </div>
+                    <!-- 空状态 -->
+                    <div v-else-if="!softwareStatuses.filter(s => s.installed).length && !availableSoftware.length" class="list-empty" style="padding:40px;">
+                        <span class="empty-icon">⌁</span><strong>暂无可管理或安装的软件</strong>
                     </div>
                 </div>
 
@@ -482,24 +509,67 @@
                         <button class="toolbar-button" @click="detectServerLanguages()" :disabled="langDetectLoading">↻ 刷新检测</button>
                     </div>
                     <div v-if="langDetectLoading" class="loading-state" style="padding:20px;">检测中...</div>
-                    <div v-else-if="!detectedLanguages.length" class="list-empty">
+                    <div v-else-if="!detectedLanguages.length" class="list-empty" style="padding:40px;">
                         <span class="empty-icon">⌁</span><strong>暂无检测数据</strong>
+                        <small>点击右上角「刷新检测」按钮开始检测服务器已安装的语言环境</small>
                     </div>
-                    <div class="lang-card-grid" v-else>
-                        <div v-for="lang in detectedLanguages" :key="lang.id" class="lang-card" :class="{ installed: lang.status === 'installed' }">
-                            <span class="lang-card-icon">{{ lang.icon || '📦' }}</span>
-                            <div class="lang-card-info">
-                                <strong>{{ lang.name }}</strong>
-                                <small v-if="lang.status === 'installed'">{{ lang.version }}</small>
-                            </div>
-                            <span class="lang-card-status" :class="lang.status">{{ lang.status === 'installed' ? '已安装' : '未安装' }}</span>
-                            <div class="lang-card-actions">
-                                <button v-if="lang.status === 'installed'" class="lang-btn uninstall" @click="uninstallLang(lang.id)">卸载</button>
-                                <button v-else-if="selectedServer !== 'srv_local'" class="lang-btn install" @click="installLang(lang.id)">安装</button>
-                                <button v-else class="lang-btn" disabled>仅远程</button>
+                    <template v-else>
+                        <!-- 已安装语言 -->
+                        <div class="sw-section" v-if="detectedLanguages.filter(l => l.status === 'installed').length">
+                            <h4>已安装（{{ detectedLanguages.filter(l => l.status === 'installed').length }}）</h4>
+                            <div class="sw-installed-table lang-table-4col">
+                                <div class="sw-installed-header">
+                                    <span class="sw-col-name">语言</span>
+                                    <span class="sw-col-version">版本</span>
+                                    <span class="sw-col-status">状态</span>
+                                    <span class="sw-col-actions">操作</span>
+                                </div>
+                                <div v-for="lang in detectedLanguages.filter(l => l.status === 'installed')" :key="lang.id" class="sw-installed-row">
+                                    <span class="sw-col-name">
+                                        <span class="sw-row-icon">{{ lang.icon || '📦' }}</span>
+                                        <strong>{{ lang.name }}</strong>
+                                    </span>
+                                    <span class="sw-col-version">{{ lang.version || '—' }}</span>
+                                    <span class="sw-col-status">
+                                        <span class="sw-status-badge running">已安装</span>
+                                    </span>
+                                    <span class="sw-col-actions">
+                                        <button class="sw-btn sw-btn-danger" @click="uninstallLang(lang.id)" :disabled="langInstallStatus === 'installing'">
+                                            卸载
+                                        </button>
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                        <!-- 未安装语言 -->
+                        <div class="sw-section" v-if="detectedLanguages.filter(l => l.status !== 'installed').length">
+                            <div class="sw-section-toolbar">
+                                <h4>可安装（{{ detectedLanguagesFiltered.length }} / {{ detectedLanguages.filter(l => l.status !== 'installed').length }}）</h4>
+                                <input class="sw-search-input" v-model="langSearch" placeholder="搜索名称...">
+                            </div>
+                            <div class="sw-card-grid">
+                                <div v-for="lang in detectedLanguagesFiltered" :key="lang.id" class="sw-card">
+                                    <div class="sw-card-icon">{{ lang.icon || '📦' }}</div>
+                                    <div class="sw-card-body">
+                                        <strong class="sw-card-name">{{ lang.name }}</strong>
+                                        <small class="sw-card-desc">{{ lang.id }}</small>
+                                    </div>
+                                    <div class="sw-card-version">
+                                        <select v-model="selectedVersions[lang.id]" class="sw-version-select">
+                                            <option v-for="v in (lang.versions || [])" :key="v" :value="v">{{ v }}</option>
+                                            <option value="__custom__">自定义...</option>
+                                        </select>
+                                        <input v-if="selectedVersions[lang.id] === '__custom__'" v-model="selectedVersions[lang.id + '_custom']" placeholder="输入版本" class="sw-version-custom">
+                                    </div>
+                                    <div class="sw-card-footer">
+                                        <button class="sw-btn sw-btn-primary" @click="installLang(lang.id, selectedVersions[lang.id] === '__custom__' ? (selectedVersions[lang.id + '_custom'] || '') : (selectedVersions[lang.id] || ''))" :disabled="langInstallStatus === 'installing' || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                            安装
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
 
                 <!-- 进程管理 Tab -->
@@ -641,25 +711,17 @@
                         <div class="docker-stats">
                             <span class="docker-stat">镜像: <strong>{{ dockerImages.length }}</strong></span>
                             <span class="docker-stat">容器: <strong>{{ dockerContainers.length }}</strong></span>
+                            <span class="docker-stat" v-if="selectedServer !== 'srv_local' && serverMirror.mirror">镜像源: <strong>{{ serverMirror.mirror }}</strong></span>
                         </div>
                     </div>
                     <!-- Docker 子 Tab -->
                     <div class="docker-tabs">
                         <button class="docker-tab" :class="{ active: dockerSubTab === 'images' }" @click="dockerSubTab = 'images'; loadDockerImages()">镜像管理</button>
                         <button class="docker-tab" :class="{ active: dockerSubTab === 'containers' }" @click="dockerSubTab = 'containers'; loadDockerContainers(true)">容器管理</button>
+                        <button class="docker-tab" :class="{ active: dockerSubTab === 'mirror' }" @click="dockerSubTab = 'mirror'; loadServerMirror(); loadDockerSources()">镜像源管理</button>
                     </div>
                     <!-- 镜像管理 -->
                     <div v-if="dockerSubTab === 'images'">
-                        <!-- 镜像源选择 -->
-                        <div class="mirror-selector" v-if="selectedServer !== 'srv_local'">
-                            <span class="mirror-label">镜像源:</span>
-                            <select v-model="selectedMirror" @change="loadServerMirror()">
-                                <option value="">加载中...</option>
-                                <option v-for="src in dockerSources.filter(s => s.enabled)" :key="src.id" :value="src.url">{{ src.name }}</option>
-                            </select>
-                            <span class="mirror-current" v-if="serverMirror.mirror">当前: {{ serverMirror.mirror }}</span>
-                            <button class="primary-button small" @click="applyMirrorToServer(selectedMirror)" :disabled="!selectedMirror || serverMirrorLoading">应用到此服务器</button>
-                        </div>
                         <div class="docker-toolbar">
                             <input v-model="dockerPullInput" placeholder="输入镜像名，如：nginx:latest" @keyup.enter="dockerPullImage(dockerPullInput); dockerPullInput = ''">
                             <button class="primary-button small" @click="dockerPullImage(dockerPullInput); dockerPullInput = ''">⬇ 拉取</button>
@@ -717,14 +779,108 @@
                                 <span class="docker-ctr-time">{{ c.running_for || '—' }}</span>
                                 <span class="docker-ctr-ports">{{ c.ports || '—' }}</span>
                                 <span class="docker-ctr-actions">
-                                    <button v-if="c.state === 'running' || c.state === 'restarting' || c.state === 'paused'" class="proc-btn" @click="dockerContainerAction(c.id, 'stop')" title="停止">⏸</button>
-                                    <button v-if="c.state === 'restarting'" class="proc-btn danger" @click="dockerContainerAction(c.id, 'kill')" title="强制终止">■</button>
-                                    <button v-if="c.state !== 'running' && c.state !== 'restarting'" class="proc-btn" @click="dockerContainerAction(c.id, 'start')" title="启动">▶</button>
-                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'restart')" title="重启">↻</button>
-                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerExecCommand(c.id, 'sh')" title="执行">⌨</button>
-                                    <button class="proc-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
-                                    <button class="proc-btn danger" @click="dockerRemoveContainer(c.id)" title="删除">×</button>
+                                    <template v-if="c.state === 'running'">
+                                        <button class="ctr-btn" @click="dockerContainerAction(c.id, 'stop')" title="停止">⏸</button>
+                                        <button class="ctr-btn" @click="dockerContainerAction(c.id, 'restart')" title="重启">↻</button>
+                                        <button class="ctr-btn" @click="dockerExecCommand(c.id, 'sh')" title="终端">⌨</button>
+                                        <button class="ctr-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
+                                    </template>
+                                    <template v-else-if="c.state === 'restarting'">
+                                        <button class="ctr-btn danger" @click="dockerContainerAction(c.id, 'kill')" title="强制终止">■</button>
+                                        <button class="ctr-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
+                                    </template>
+                                    <template v-else>
+                                        <button class="ctr-btn" @click="dockerContainerAction(c.id, 'start')" title="启动">▶</button>
+                                        <button class="ctr-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
+                                    </template>
+                                    <button class="ctr-btn danger" @click="dockerRemoveContainer(c.id)" title="删除">×</button>
                                 </span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 镜像源管理 -->
+                    <div v-if="dockerSubTab === 'mirror'">
+                        <!-- 服务器当前镜像源 -->
+                        <div class="mirror-server-panel" v-if="selectedServer !== 'srv_local'">
+                            <div class="mirror-section-header">
+                                <h3>服务器 Docker 镜像源配置</h3>
+                                <button class="toolbar-button" @click="loadServerMirror()" :disabled="serverMirrorLoading">↻ 刷新</button>
+                            </div>
+                            <div v-if="serverMirrorLoading" class="loading-state" style="padding:20px;">读取中...</div>
+                            <div v-else class="mirror-server-info">
+                                <div class="mirror-info-row" v-if="serverMirror.mirror">
+                                    <span class="mirror-info-label">registry-mirrors:</span>
+                                    <code class="mirror-info-value">{{ serverMirror.mirror }}</code>
+                                </div>
+                                <div class="mirror-info-row" v-if="serverMirror.registry">
+                                    <span class="mirror-info-label">insecure-registries:</span>
+                                    <code class="mirror-info-value">{{ serverMirror.registry }}</code>
+                                </div>
+                                <div class="mirror-info-row" v-if="serverMirror.raw_json && !serverMirror.mirror && !serverMirror.registry">
+                                    <span class="mirror-info-label">daemon.json:</span>
+                                    <pre class="mirror-info-raw">{{ serverMirror.raw_json }}</pre>
+                                </div>
+                                <div class="mirror-info-row" v-if="serverMirror.raw_json && (serverMirror.mirror || serverMirror.registry)">
+                                    <span class="mirror-info-label">原始配置:</span>
+                                    <details class="mirror-raw-details">
+                                        <summary>查看 daemon.json</summary>
+                                        <pre class="mirror-info-raw">{{ serverMirror.raw_json }}</pre>
+                                    </details>
+                                </div>
+                                <p class="mirror-info-hint" v-if="!serverMirror.mirror && !serverMirror.registry && !serverMirror.raw_json">该服务器未配置镜像源，使用 Docker Hub 默认拉取</p>
+                            </div>
+                        </div>
+                        <!-- 快速应用镜像源 -->
+                        <div class="mirror-apply-panel">
+                            <div class="mirror-section-header">
+                                <h3>快速应用镜像源到当前服务器</h3>
+                            </div>
+                            <div class="mirror-selector">
+                                <span class="mirror-label">选择镜像源:</span>
+                                <select v-model="mirrorSelectMode" @change="onMirrorSelectModeChange">
+                                    <option value="preset">预设镜像源</option>
+                                    <option value="custom">自定义</option>
+                                </select>
+                                <select v-if="mirrorSelectMode === 'preset'" v-model="selectedMirror" class="mirror-preset-select">
+                                    <option value="">请选择镜像源...</option>
+                                    <option v-for="src in dockerSources.filter(s => s.enabled)" :key="src.id" :value="src.url">{{ src.name }}</option>
+                                </select>
+                                <input v-else v-model="selectedMirror" placeholder="输入自定义镜像源地址，如 https://registry.example.com" class="mirror-custom-input">
+                                <button class="primary-button small" @click="applyMirrorToServer(selectedMirror)" :disabled="!selectedMirror || serverMirrorLoading">应用到此服务器</button>
+                            </div>
+                            <p class="mirror-info-hint">应用后会自动写入 daemon.json 并重启 Docker 服务</p>
+                        </div>
+                        <!-- 预设镜像源列表管理 -->
+                        <div class="mirror-sources-panel">
+                            <div class="mirror-section-header">
+                                <h3>预设镜像源列表</h3>
+                                <button class="primary-button small" @click="openDockerSourceForm()">＋ 添加镜像源</button>
+                            </div>
+                            <div class="mirror-sources-table">
+                                <div class="mirror-sources-header">
+                                    <span class="ms-col-name">名称</span>
+                                    <span class="ms-col-url">地址</span>
+                                    <span class="ms-col-status">状态</span>
+                                    <span class="ms-col-actions">操作</span>
+                                </div>
+                                <div v-for="src in dockerSources" :key="src.id" class="mirror-source-row">
+                                    <span class="ms-col-name">
+                                        <strong>{{ src.name }}</strong>
+                                        <span v-if="src.is_default" class="ms-default-badge">默认</span>
+                                    </span>
+                                    <span class="ms-col-url"><code>{{ src.url }}</code></span>
+                                    <span class="ms-col-status">
+                                        <span class="ms-status-badge" :class="src.enabled ? 'enabled' : 'disabled'">{{ src.enabled ? '启用' : '禁用' }}</span>
+                                    </span>
+                                    <span class="ms-col-actions">
+                                        <button class="ms-action-btn" @click="openDockerSourceForm(src)" title="编辑">✎</button>
+                                        <button class="ms-action-btn" v-if="!src.is_default" @click="setDefaultSource(src.id)" title="设为默认">⭐</button>
+                                        <button class="ms-action-btn danger" @click="removeDockerSource(src.id)" title="删除">×</button>
+                                    </span>
+                                </div>
+                                <div v-if="!dockerSources.length" class="list-empty">
+                                    <span class="empty-icon">⌁</span><strong>暂无预设镜像源</strong>
+                                </div>
                             </div>
                         </div>
                     </div>

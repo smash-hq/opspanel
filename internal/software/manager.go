@@ -53,11 +53,11 @@ type SoftwareStatus struct {
 
 // DetectPkgManager 检测远程服务器使用的包管理器。
 func (m *Manager) DetectPkgManager(srv *storage.Server) (string, error) {
-	client, err := m.remote.Dial(toRemoteServer(srv))
+	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return "", err
 	}
-	defer client.Close()
+	defer m.remote.Release(srv.ID)
 
 	for _, pm := range []string{"apt", "dnf", "yum"} {
 		out := m.remote.RunOne(client, "which "+pm)
@@ -75,11 +75,11 @@ func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus
 		Status:  "unknown",
 	}
 
-	client, err := m.remote.Dial(toRemoteServer(srv))
+	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return status
 	}
-	defer client.Close()
+	defer m.remote.Release(srv.ID)
 
 	out := m.remote.RunOne(client, pkg.StatusCmd)
 	if strings.TrimSpace(out) == "" {
@@ -116,8 +116,8 @@ func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus
 	return status
 }
 
-// Install 安装软件包。
-func (m *Manager) Install(srv *storage.Server, pkg *Package) error {
+// Install 安装软件包。version 为空则不替换版本占位符。
+func (m *Manager) Install(srv *storage.Server, pkg *Package, version string) error {
 	pm, err := m.DetectPkgManager(srv)
 	if err != nil {
 		return err
@@ -128,15 +128,18 @@ func (m *Manager) Install(srv *storage.Server, pkg *Package) error {
 		return fmt.Errorf("package %s not installable with %s", pkg.ID, pm)
 	}
 
-	client, err := m.remote.Dial(toRemoteServer(srv))
+	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer m.remote.Release(srv.ID)
 
 	for _, cmd := range cmds {
+		if version != "" {
+			cmd = strings.ReplaceAll(cmd, "{{VERSION}}", version)
+		}
 		out := m.remote.RunWithSudo(client, cmd)
-		m.log.Infow("install cmd", "pkg", pkg.ID, "cmd", cmd, "out", out)
+		m.log.Infow("install cmd", "pkg", pkg.ID, "cmd", cmd, "version", version, "out", out)
 	}
 
 	return nil
@@ -154,11 +157,11 @@ func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
 		return fmt.Errorf("package %s not uninstallable with %s", pkg.ID, pm)
 	}
 
-	client, err := m.remote.Dial(toRemoteServer(srv))
+	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer m.remote.Release(srv.ID)
 
 	for _, cmd := range cmds {
 		out := m.remote.RunWithSudo(client, cmd)
@@ -170,11 +173,11 @@ func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
 
 // ServiceControl 控制服务启停。
 func (m *Manager) ServiceControl(srv *storage.Server, pkg *Package, action string) error {
-	client, err := m.remote.Dial(toRemoteServer(srv))
+	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer m.remote.Release(srv.ID)
 
 	var cmd string
 	switch action {

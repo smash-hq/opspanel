@@ -14,9 +14,9 @@ import (
 
 // ServersHandler 提供服务器配置的 CRUD API 与连接测试。
 type ServersHandler struct {
-	log      *logger.Logger
-	store    *host.Store
-	remote   *host.RemoteCollector
+	log    *logger.Logger
+	store  *host.Store
+	remote *host.RemoteCollector
 }
 
 // NewServersHandler 创建处理器。
@@ -30,9 +30,9 @@ func NewServersHandler(log *logger.Logger, store *host.Store) *ServersHandler {
 
 // Register 注册路由。
 func (h *ServersHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/servers", h.handleServers)           // GET 列表 / POST 新增
-	mux.HandleFunc("/api/v1/servers/test", h.handleTest)         // POST 连接测试（不保存）
-	mux.HandleFunc("/api/v1/servers/", h.handleServerDetail)     // PUT 更新 / DELETE 删除
+	mux.HandleFunc("/api/v1/servers", h.handleServers)       // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/servers/test", h.handleTest)     // POST 连接测试（不保存）
+	mux.HandleFunc("/api/v1/servers/", h.handleServerDetail) // PUT 更新 / DELETE 删除
 }
 
 // handleServers: GET 列表，POST 新增。
@@ -171,6 +171,8 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 			}
 			return
 		}
+		// 配置已变更：优雅关闭旧连接，下次使用时按新配置重建
+		h.remote.CloseConn(id)
 		srv.Password = ""
 		OK(w, srv)
 
@@ -179,6 +181,8 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 			Fail(w, http.StatusNotFound, 404, "server not found")
 			return
 		}
+		// 优雅关闭该服务器的池化连接
+		h.remote.CloseConn(id)
 		OK(w, map[string]string{"deleted": id})
 
 	default:
@@ -206,9 +210,9 @@ func validateServer(srv *host.Server) error {
 }
 
 var (
-	errEmptyName   = &validationError{"name is required"}
-	errInvalidType = &validationError{"type must be 'local' or 'remote'"}
-	errEmptyHost   = &validationError{"host is required for remote server"}
+	errEmptyName     = &validationError{"name is required"}
+	errInvalidType   = &validationError{"type must be 'local' or 'remote'"}
+	errEmptyHost     = &validationError{"host is required for remote server"}
 	errEmptyUsername = &validationError{"username is required for remote server"}
 )
 

@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror, uninstallLanguage } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -146,7 +146,6 @@ export function setupStore() {
     const softwareStatuses = ref([]);            // 当前选中服务器的软件状态
     const softwareLoading = ref(false);          // 正在加载软件状态
     const softwareOperating = reactive({});      // { packageId: true } 正在安装/卸载中
-    const softwareCategory = ref('all');         // 当前筛选分类
 
     // ─── 日志查看 ───
     const logModalVisible = ref(false);
@@ -259,10 +258,22 @@ export function setupStore() {
     const langFormError = ref('');
     const detectedLanguages = ref([]);
     const langDetectLoading = ref(false);
+    const langSearch = ref('');
     const langInstallLogVisible = ref(false);
     const langInstallLog = ref('');
     const langInstallName = ref('');
     const langInstallStatus = ref('');
+
+    /** 模糊匹配后的未安装语言。 */
+    const detectedLanguagesFiltered = computed(() => {
+        const uninstalled = detectedLanguages.value.filter(l => l.status !== 'installed');
+        const q = langSearch.value.trim().toLowerCase();
+        if (!q) return uninstalled;
+        return uninstalled.filter(l =>
+            l.name.toLowerCase().includes(q) ||
+            (l.id || '').toLowerCase().includes(q)
+        );
+    });
 
     // ─── 文件管理 ───
     const files = ref([]);
@@ -457,16 +468,19 @@ export function setupStore() {
         }
     }
 
-    async function installLang(languageId) {
+    async function installLang(languageId, version) {
         if (!selectedServer.value) return;
         // 查找语言名称
         const lang = languages.value.find(l => l.id === languageId);
-        langInstallName.value = lang ? lang.name : languageId;
+        const langName = lang ? lang.name : languageId;
+        if (!confirm(`确定要安装「${langName}」吗？`)) return;
+        if (!confirm(`再次确认：安装「${langName}」将执行安装脚本，是否继续？`)) return;
+        langInstallName.value = langName;
         langInstallLogVisible.value = true;
         langInstallLog.value = '正在连接服务器...\n';
         langInstallStatus.value = 'installing';
         try {
-            await installLanguage(selectedServer.value, languageId);
+            await installLanguage(selectedServer.value, languageId, version);
             langInstallLog.value += '\n==> 安装命令已发送到服务器\n==> 请在服务器上查看实际安装进度\n';
             langInstallStatus.value = 'ok';
             toastNotify('安装命令已发送，请查看日志');
@@ -522,6 +536,7 @@ export function setupStore() {
     const dockerPullInput = ref('');
     const dockerShowAll = ref(true);
     const selectedMirror = ref('');
+    const mirrorSelectMode = ref('preset'); // "preset" | "custom"
     // Docker 镜像源管理
     const dockerSources = ref([]);
     const serverMirror = ref({ mirror: '', registry: '' });
@@ -731,6 +746,7 @@ export function setupStore() {
 
     async function applyMirrorToServer(mirror) {
         if (!selectedServer.value) return;
+        if (!confirm(`确定要将镜像源「${mirror}」应用到当前服务器吗？Docker 将会重启。`)) return;
         try {
             await applyServerMirror(selectedServer.value, mirror);
             serverMirror.value.mirror = mirror;
@@ -738,6 +754,10 @@ export function setupStore() {
         } catch (err) {
             toastNotify('应用失败: ' + err.message, true);
         }
+    }
+
+    function onMirrorSelectModeChange() {
+        selectedMirror.value = '';
     }
 
     // ─── Docker 批量操作 ───
@@ -1208,10 +1228,42 @@ export function setupStore() {
     //  软件管理
     // ═══════════════════════════════════════════
 
-    /** 按分类筛选的软件目录。 */
-    const filteredSoftware = computed(() => {
-        if (softwareCategory.value === 'all') return softwareCatalog.value;
-        return softwareCatalog.value.filter(p => p.category === softwareCategory.value);
+    /** 搜索关键字（可安装软件）。 */
+    const softwareSearch = ref('');
+
+    /** 每个软件/语言选择的安装版本 { id: version }。 */
+    const selectedVersions = reactive({});
+
+    /** 获取某个软件/语言的默认版本（第一个预定义版本）。 */
+    function getDefaultVersion(versions) {
+        if (Array.isArray(versions) && versions.length > 0) {
+            return versions[0];
+        }
+        return '';
+    }
+
+    /** 获取某个软件/语言当前选择的版本。 */
+    function getSelectedVersion(id, versions) {
+        return selectedVersions[id] || getDefaultVersion(versions);
+    }
+
+    /** 未安装的软件目录。 */
+    const availableSoftware = computed(() => {
+        const installedIds = new Set(
+            softwareStatuses.value.filter(s => s.installed).map(s => s.package.id)
+        );
+        return softwareCatalog.value.filter(p => !installedIds.has(p.id));
+    });
+
+    /** 模糊匹配后的可安装软件。 */
+    const availableSoftwareFiltered = computed(() => {
+        const q = softwareSearch.value.trim().toLowerCase();
+        if (!q) return availableSoftware.value;
+        return availableSoftware.value.filter(p =>
+            p.name.toLowerCase().includes(q) ||
+            (p.description || '').toLowerCase().includes(q) ||
+            p.id.toLowerCase().includes(q)
+        );
     });
 
     // 文件管理辅助函数
@@ -1276,12 +1328,12 @@ export function setupStore() {
     }
 
     /** 安装软件。 */
-    async function installPackage(packageId) {
+    async function installPackage(packageId, version) {
         const serverId = selectedServer.value;
         if (!serverId || serverId === 'srv_local') { toastNotify('请先选择远程服务器', true); return; }
         softwareOperating[packageId] = true;
         try {
-            await installSoftware(serverId, packageId);
+            await installSoftware(serverId, packageId, version);
             toastNotify('正在安装中，请稍后刷新查看状态');
         } catch (err) {
             toastNotify(err.message, true);
@@ -1426,6 +1478,23 @@ export function setupStore() {
         }).catch(() => {});
     });
 
+    // 初始化默认版本选择
+    watch(availableSoftware, (list) => {
+        list.forEach(pkg => {
+            if (!selectedVersions[pkg.id]) {
+                selectedVersions[pkg.id] = getDefaultVersion(pkg.versions);
+            }
+        });
+    });
+
+    watch(detectedLanguages, (list) => {
+        list.forEach(lang => {
+            if (lang.status !== 'installed' && !selectedVersions[lang.id]) {
+                selectedVersions[lang.id] = getDefaultVersion(lang.versions);
+            }
+        });
+    });
+
     onUnmounted(() => {
         clearTimeout(toastTimer);
         if (wsController) wsController.disconnect();
@@ -1470,8 +1539,9 @@ export function setupStore() {
         deleteServer: handleDeleteServer,
         testServerConnection, clearTestResult,
         // 软件管理
-        softwareCatalog, softwareStatuses, softwareLoading, softwareOperating, softwareCategory,
-        filteredSoftware,
+        softwareCatalog, softwareStatuses, softwareLoading, softwareOperating,
+        softwareSearch, selectedVersions, getSelectedVersion,
+        availableSoftware, availableSoftwareFiltered,
         loadSoftwareCatalog, loadSoftwareStatus,
         installPackage, uninstallPackage, controlPackageService, getPackageStatus,
         // 软件源管理
@@ -1487,7 +1557,7 @@ export function setupStore() {
         loadProcesses, killProcess: handleKillProcess, viewProcessLog, closeProcessLog,
         // 语言环境管理
         languages, langFormMode, langForm, langSaving, langFormError,
-        detectedLanguages, langDetectLoading,
+        detectedLanguages, langDetectLoading, langSearch, detectedLanguagesFiltered,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
         loadLanguages, openLangForm, closeLangForm, saveLanguage,
         deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang, uninstallLang,
@@ -1503,7 +1573,7 @@ export function setupStore() {
         dockerAvailable, dockerVersion, dockerTabEnabled,
         dockerImages, dockerContainers, dockerLoading,
         dockerExecVisible, dockerExecData, dockerLogsVisible, dockerLogsData,
-        dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror,
+        dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror, mirrorSelectMode,
         dockerSources, dockerSourceFormVisible, dockerSourceForm, dockerSourceSaving,
         selectedImages, selectedContainers, batchActionLoading,
         checkDockerEnv, loadDockerImages, loadDockerContainers,
@@ -1512,7 +1582,7 @@ export function setupStore() {
         loadDockerSources, openDockerSourceForm, closeDockerSourceForm, saveDockerSource,
         removeDockerSource, setDefaultSource,
         serverMirror, serverMirrorLoading,
-        loadServerMirror, applyMirrorToServer,
+        loadServerMirror, applyMirrorToServer, onMirrorSelectModeChange,
         toggleImageSelection, toggleContainerSelection, batchDeleteImages, batchContainerAction,
         nextTick,
     };

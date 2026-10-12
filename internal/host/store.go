@@ -15,8 +15,8 @@ type Server = storage.Server
 
 // 导出常量供其他包使用。
 const (
-	DefaultSSHPort  = 22
-	LocalServerID   = "srv_local"
+	DefaultSSHPort = 22
+	LocalServerID  = "srv_local"
 )
 
 // Store 是服务器配置的存储抽象。

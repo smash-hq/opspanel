@@ -8,19 +8,20 @@ import (
 
 // SoftwarePackage 是软件包定义（存储层）。
 type SoftwarePackage struct {
-	ID            string              `json:"id"`
-	Name          string              `json:"name"`
-	Category      string              `json:"category"`
-	Description   string              `json:"description"`
-	Version       string              `json:"version"`
-	Icon          string              `json:"icon"`
-	InstallCmd    map[string][]string `json:"install_cmd"`
-	UninstallCmd  map[string][]string `json:"uninstall_cmd"`
-	StatusCmd     string              `json:"status_cmd"`
-	VersionCmd    string              `json:"version_cmd"`
-	StartCmd      string              `json:"start_cmd"`
-	StopCmd       string              `json:"stop_cmd"`
-	RestartCmd    string              `json:"restart_cmd"`
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Category     string              `json:"category"`
+	Description  string              `json:"description"`
+	Version      string              `json:"version"`
+	Versions     []string            `json:"versions"` // 预定义可选版本列表
+	Icon         string              `json:"icon"`
+	InstallCmd   map[string][]string `json:"install_cmd"`
+	UninstallCmd map[string][]string `json:"uninstall_cmd"`
+	StatusCmd    string              `json:"status_cmd"`
+	VersionCmd   string              `json:"version_cmd"`
+	StartCmd     string              `json:"start_cmd"`
+	StopCmd      string              `json:"stop_cmd"`
+	RestartCmd   string              `json:"restart_cmd"`
 }
 
 // SoftwareStore 管理软件包定义与镜像源。
@@ -39,13 +40,14 @@ func (s *SoftwareStore) InitDefaultPackages(packages []*SoftwarePackage) error {
 	for _, pkg := range packages {
 		installJSON, _ := json.Marshal(pkg.InstallCmd)
 		uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
+		versionsJSON, _ := json.Marshal(pkg.Versions)
 
 		_, err := s.db.Raw().Exec(`
 			INSERT OR REPLACE INTO software_packages
-			(id, name, category, description, version, icon, install_cmd, uninstall_cmd,
+			(id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 			 status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			pkg.ID, pkg.Name, pkg.Category, pkg.Description, pkg.Version, pkg.Icon,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			pkg.ID, pkg.Name, pkg.Category, pkg.Description, pkg.Version, string(versionsJSON), pkg.Icon,
 			string(installJSON), string(uninstallJSON),
 			pkg.StatusCmd, pkg.VersionCmd, pkg.StartCmd, pkg.StopCmd, pkg.RestartCmd,
 			now, now)
@@ -59,7 +61,7 @@ func (s *SoftwareStore) InitDefaultPackages(packages []*SoftwarePackage) error {
 // ListPackages 返回所有软件包。
 func (s *SoftwareStore) ListPackages() []*SoftwarePackage {
 	rows, err := s.db.Raw().Query(`
-		SELECT id, name, category, description, version, icon, install_cmd, uninstall_cmd,
+		SELECT id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 		       status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd
 		FROM software_packages ORDER BY category, name`)
 	if err != nil {
@@ -70,9 +72,9 @@ func (s *SoftwareStore) ListPackages() []*SoftwarePackage {
 	var packages []*SoftwarePackage
 	for rows.Next() {
 		var id, name, category, description, version, icon string
-		var installJSON, uninstallJSON string
+		var installJSON, uninstallJSON, versionsJSON string
 		var statusCmd, versionCmd, startCmd, stopCmd, restartCmd string
-		if err := rows.Scan(&id, &name, &category, &description, &version, &icon,
+		if err := rows.Scan(&id, &name, &category, &description, &version, &versionsJSON, &icon,
 			&installJSON, &uninstallJSON, &statusCmd, &versionCmd,
 			&startCmd, &stopCmd, &restartCmd); err != nil {
 			continue
@@ -92,6 +94,7 @@ func (s *SoftwareStore) ListPackages() []*SoftwarePackage {
 		}
 		_ = json.Unmarshal([]byte(installJSON), &pkg.InstallCmd)
 		_ = json.Unmarshal([]byte(uninstallJSON), &pkg.UninstallCmd)
+		_ = json.Unmarshal([]byte(versionsJSON), &pkg.Versions)
 		packages = append(packages, pkg)
 	}
 	return packages
@@ -112,13 +115,14 @@ func (s *SoftwareStore) GetPackage(id string) (*SoftwarePackage, bool) {
 func (s *SoftwareStore) UpdatePackage(pkg *SoftwarePackage) error {
 	installJSON, _ := json.Marshal(pkg.InstallCmd)
 	uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
+	versionsJSON, _ := json.Marshal(pkg.Versions)
 	now := time.Now().Unix()
 
 	_, err := s.db.Raw().Exec(`
-		UPDATE software_packages SET name=?, category=?, description=?, version=?, icon=?,
+		UPDATE software_packages SET name=?, category=?, description=?, version=?, versions=?, icon=?,
 			install_cmd=?, uninstall_cmd=?, status_cmd=?, version_cmd=?, start_cmd=?, stop_cmd=?,
 			restart_cmd=?, updated_at=? WHERE id=?`,
-		pkg.Name, pkg.Category, pkg.Description, pkg.Version, pkg.Icon,
+		pkg.Name, pkg.Category, pkg.Description, pkg.Version, string(versionsJSON), pkg.Icon,
 		string(installJSON), string(uninstallJSON),
 		pkg.StatusCmd, pkg.VersionCmd, pkg.StartCmd, pkg.StopCmd, pkg.RestartCmd,
 		now, pkg.ID)
@@ -132,14 +136,15 @@ func (s *SoftwareStore) AddPackage(pkg *SoftwarePackage) error {
 	}
 	installJSON, _ := json.Marshal(pkg.InstallCmd)
 	uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
+	versionsJSON, _ := json.Marshal(pkg.Versions)
 	now := time.Now().Unix()
 
 	_, err := s.db.Raw().Exec(`
 		INSERT INTO software_packages
-		(id, name, category, description, version, icon, install_cmd, uninstall_cmd,
+		(id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 		 status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		pkg.ID, pkg.Name, pkg.Category, pkg.Description, pkg.Version, pkg.Icon,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		pkg.ID, pkg.Name, pkg.Category, pkg.Description, pkg.Version, string(versionsJSON), pkg.Icon,
 		string(installJSON), string(uninstallJSON),
 		pkg.StatusCmd, pkg.VersionCmd, pkg.StartCmd, pkg.StopCmd, pkg.RestartCmd,
 		now, now)
@@ -244,16 +249,17 @@ func (s *SoftwareStore) DeleteSource(id string) error {
 
 // LanguageRecord 是数据库中的语言环境行。
 type LanguageRecord struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Category      string `json:"category"`
-	Description   string `json:"description"`
-	Icon          string `json:"icon"`
-	VersionCmd    string `json:"version_cmd"`
-	InstallCmd    string `json:"install_cmd"`
-	UninstallCmd  string `json:"uninstall_cmd"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Category     string   `json:"category"`
+	Description  string   `json:"description"`
+	Icon         string   `json:"icon"`
+	VersionCmd   string   `json:"version_cmd"`
+	InstallCmd   string   `json:"install_cmd"`
+	UninstallCmd string   `json:"uninstall_cmd"`
+	Versions     []string `json:"versions"` // 预定义可选版本列表
+	CreatedAt    int64    `json:"created_at"`
+	UpdatedAt    int64    `json:"updated_at"`
 }
 
 // LanguageStore 管理编程语言环境定义。
@@ -271,21 +277,22 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 	// 清理不属于编程语言的条目（如 Docker 属于软件包）
 	_, _ = s.db.Raw().Exec(`DELETE FROM languages WHERE id = 'docker'`)
 	now := time.Now().Unix()
-		languages := []*LanguageRecord{
-			{ID: "go", Name: "Go", Category: "language", Description: "Google 开发的高性能编译语言", Icon: "🐹", VersionCmd: "go version 2>/dev/null", InstallCmd: "apt-get install -y golang-go || yum install -y golang || dnf install -y golang", CreatedAt: now, UpdatedAt: now},
-			{ID: "java", Name: "Java", Category: "language", Description: "广泛使用的面向对象编程语言", Icon: "☕", VersionCmd: "java -version 2>&1 | head -1", InstallCmd: "apt-get install -y default-jdk || yum install -y java-11-openjdk-devel || dnf install -y java-11-openjdk-devel", CreatedAt: now, UpdatedAt: now},
-			{ID: "python", Name: "Python", Category: "language", Description: "简洁优雅的解释型编程语言", Icon: "🐍", VersionCmd: "python3 --version 2>/dev/null", InstallCmd: "apt-get install -y python3 python3-pip || yum install -y python3 python3-pip || dnf install -y python3 python3-pip", CreatedAt: now, UpdatedAt: now},
-			{ID: "nodejs", Name: "Node.js", Category: "runtime", Description: "基于 Chrome V8 引擎的 JavaScript 运行时", Icon: "⬢", VersionCmd: "node --version 2>/dev/null", InstallCmd: "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && apt-get install -y nodejs || yum install -y nodejs || dnf install -y nodejs", CreatedAt: now, UpdatedAt: now},
-			{ID: "rust", Name: "Rust", Category: "language", Description: "注重安全和性能的系统编程语言", Icon: "🦀", VersionCmd: "rustc --version 2>/dev/null", InstallCmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", CreatedAt: now, UpdatedAt: now},
-			{ID: "php", Name: "PHP", Category: "language", Description: "广泛使用的服务端脚本语言", Icon: "🐘", VersionCmd: "php --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y php-cli php-fpm || yum install -y php-cli php-fpm || dnf install -y php-cli php-fpm", CreatedAt: now, UpdatedAt: now},
-			{ID: "ruby", Name: "Ruby", Category: "language", Description: "简洁优雅的动态编程语言", Icon: "💎", VersionCmd: "ruby --version 2>/dev/null", InstallCmd: "apt-get install -y ruby-full || yum install -y ruby || dnf install -y ruby", CreatedAt: now, UpdatedAt: now},
-			{ID: "dotnet", Name: ".NET", Category: "runtime", Description: "微软跨平台开发框架（C#/F#/VB）", Icon: "🔷", VersionCmd: "dotnet --version 2>/dev/null", InstallCmd: "apt-get install -y dotnet-sdk-8.0 || yum install -y dotnet-sdk-8.0 || dnf install -y dotnet-sdk-8.0", CreatedAt: now, UpdatedAt: now},
-		}
-	for _, lang := range languages {
+	defaults := []*LanguageRecord{
+		{ID: "go", Name: "Go", Category: "language", Description: "Google 开发的高性能编译语言", Icon: "🐹", VersionCmd: "go version 2>/dev/null", InstallCmd: "apt-get install -y golang-go || yum install -y golang || dnf install -y golang", Versions: []string{"1.21", "1.22", "1.23"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "java", Name: "Java", Category: "language", Description: "广泛使用的面向对象编程语言", Icon: "☕", VersionCmd: "java -version 2>&1 | head -1", InstallCmd: "apt-get install -y default-jdk || yum install -y java-11-openjdk-devel || dnf install -y java-11-openjdk-devel", Versions: []string{"11", "17", "21"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "python", Name: "Python", Category: "language", Description: "简洁优雅的解释型编程语言", Icon: "🐍", VersionCmd: "python3 --version 2>/dev/null", InstallCmd: "apt-get install -y python3 python3-pip || yum install -y python3 python3-pip || dnf install -y python3 python3-pip", Versions: []string{"3.10", "3.11", "3.12"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "nodejs", Name: "Node.js", Category: "runtime", Description: "基于 Chrome V8 引擎的 JavaScript 运行时", Icon: "⬢", VersionCmd: "node --version 2>/dev/null", InstallCmd: "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && apt-get install -y nodejs || yum install -y nodejs || dnf install -y nodejs", Versions: []string{"18", "20", "22"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "rust", Name: "Rust", Category: "language", Description: "注重安全和性能的系统编程语言", Icon: "🦀", VersionCmd: "rustc --version 2>/dev/null", InstallCmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", Versions: []string{"最新稳定版"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "php", Name: "PHP", Category: "language", Description: "广泛使用的服务端脚本语言", Icon: "🐘", VersionCmd: "php --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y php-cli php-fpm || yum install -y php-cli php-fpm || dnf install -y php-cli php-fpm", Versions: []string{"8.1", "8.2", "8.3"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "ruby", Name: "Ruby", Category: "language", Description: "简洁优雅的动态编程语言", Icon: "💎", VersionCmd: "ruby --version 2>/dev/null", InstallCmd: "apt-get install -y ruby-full || yum install -y ruby || dnf install -y ruby", Versions: []string{"3.1", "3.2", "3.3"}, CreatedAt: now, UpdatedAt: now},
+		{ID: "dotnet", Name: ".NET", Category: "runtime", Description: "微软跨平台开发框架（C#/F#/VB）", Icon: "🔷", VersionCmd: "dotnet --version 2>/dev/null", InstallCmd: "apt-get install -y dotnet-sdk-8.0 || yum install -y dotnet-sdk-8.0 || dnf install -y dotnet-sdk-8.0", Versions: []string{"6.0", "8.0", "9.0"}, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, lang := range defaults {
+		versionsJSON, _ := json.Marshal(lang.Versions)
 		_, err := s.db.Raw().Exec(`
-			INSERT OR IGNORE INTO languages (id, name, category, description, icon, version_cmd, install_cmd, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.CreatedAt, lang.UpdatedAt)
+			INSERT OR IGNORE INTO languages (id, name, category, description, icon, version_cmd, install_cmd, versions, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, string(versionsJSON), lang.CreatedAt, lang.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("insert language %s: %w", lang.ID, err)
 		}
@@ -295,7 +302,7 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 
 // ListLanguages 返回所有语言环境。
 func (s *LanguageStore) ListLanguages() []*LanguageRecord {
-	rows, err := s.db.Raw().Query(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at FROM languages ORDER BY category, name`)
+	rows, err := s.db.Raw().Query(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages ORDER BY category, name`)
 	if err != nil {
 		return nil
 	}
@@ -304,9 +311,11 @@ func (s *LanguageStore) ListLanguages() []*LanguageRecord {
 	var languages []*LanguageRecord
 	for rows.Next() {
 		var lang LanguageRecord
-		if err := rows.Scan(&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &lang.CreatedAt, &lang.UpdatedAt); err != nil {
+		var versionsJSON string
+		if err := rows.Scan(&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &versionsJSON, &lang.CreatedAt, &lang.UpdatedAt); err != nil {
 			continue
 		}
+		_ = json.Unmarshal([]byte(versionsJSON), &lang.Versions)
 		languages = append(languages, &lang)
 	}
 	return languages
@@ -315,11 +324,13 @@ func (s *LanguageStore) ListLanguages() []*LanguageRecord {
 // GetLanguage 按 ID 获取语言环境。
 func (s *LanguageStore) GetLanguage(id string) (*LanguageRecord, bool) {
 	var lang LanguageRecord
-	err := s.db.Raw().QueryRow(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
-		&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &lang.CreatedAt, &lang.UpdatedAt)
+	var versionsJSON string
+	err := s.db.Raw().QueryRow(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
+		&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &versionsJSON, &lang.CreatedAt, &lang.UpdatedAt)
 	if err != nil {
 		return nil, false
 	}
+	_ = json.Unmarshal([]byte(versionsJSON), &lang.Versions)
 	return &lang, true
 }
 
@@ -328,21 +339,23 @@ func (s *LanguageStore) AddLanguage(lang *LanguageRecord) error {
 	if lang.ID == "" {
 		return fmt.Errorf("language id is required")
 	}
+	versionsJSON, _ := json.Marshal(lang.Versions)
 	now := time.Now().Unix()
 	_, err := s.db.Raw().Exec(`
-		INSERT INTO languages (id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, now, now)
+		INSERT INTO languages (id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, string(versionsJSON), now, now)
 	return err
 }
 
 // UpdateLanguage 更新语言环境定义。
 func (s *LanguageStore) UpdateLanguage(lang *LanguageRecord) error {
+	versionsJSON, _ := json.Marshal(lang.Versions)
 	now := time.Now().Unix()
 	_, err := s.db.Raw().Exec(`
-		UPDATE languages SET name=?, category=?, description=?, icon=?, version_cmd=?, install_cmd=?, uninstall_cmd=?, updated_at=?
+		UPDATE languages SET name=?, category=?, description=?, icon=?, version_cmd=?, install_cmd=?, uninstall_cmd=?, versions=?, updated_at=?
 		WHERE id=?`,
-		lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, now, lang.ID)
+		lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, string(versionsJSON), now, lang.ID)
 	return err
 }
 

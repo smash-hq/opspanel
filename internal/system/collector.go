@@ -3,6 +3,7 @@
 package system
 
 import (
+	"os"
 	"runtime"
 	"time"
 
@@ -25,19 +26,19 @@ type DetectedLanguage struct {
 
 // Info 是单次采集得到的完整系统快照。
 type Info struct {
-	Timestamp   int64              `json:"timestamp"`    // Unix 毫秒时间戳
-	Host        HostInfo           `json:"host"`         // 主机基本信息
-	CPU         CPUInfo            `json:"cpu"`          // CPU 信息
-	Memory      MemoryInfo         `json:"memory"`       // 内存信息
-	Disks       []DiskInfo         `json:"disks"`        // 磁盘信息
-	Network     NetworkInfo        `json:"network"`      // 网络信息
-	Load        LoadInfo           `json:"load"`         // 负载信息
-	Processes   int                `json:"processes"`    // 进程数
-	Uptime      uint64             `json:"uptime"`       // 运行秒数
-	GoVersion   string             `json:"go_version"`   // Go 运行时版本
-	Goroutines  int                `json:"goroutines"`   // 当前 goroutine 数
-	SudoUsed    bool               `json:"sudo_used"`    // 采集过程使用了 sudo（权限不足标记）
-	Languages   []DetectedLanguage `json:"languages"`    // 检测到的编程语言
+	Timestamp  int64              `json:"timestamp"`  // Unix 毫秒时间戳
+	Host       HostInfo           `json:"host"`       // 主机基本信息
+	CPU        CPUInfo            `json:"cpu"`        // CPU 信息
+	Memory     MemoryInfo         `json:"memory"`     // 内存信息
+	Disks      []DiskInfo         `json:"disks"`      // 磁盘信息
+	Network    NetworkInfo        `json:"network"`    // 网络信息
+	Load       LoadInfo           `json:"load"`       // 负载信息
+	Processes  int                `json:"processes"`  // 进程数
+	Uptime     uint64             `json:"uptime"`     // 运行秒数
+	GoVersion  string             `json:"go_version"` // Go 运行时版本
+	Goroutines int                `json:"goroutines"` // 当前 goroutine 数
+	SudoUsed   bool               `json:"sudo_used"`  // 采集过程使用了 sudo（权限不足标记）
+	Languages  []DetectedLanguage `json:"languages"`  // 检测到的编程语言
 }
 
 // HostInfo 主机基本信息。
@@ -47,15 +48,16 @@ type HostInfo struct {
 	Platform string `json:"platform"`
 	Kernel   string `json:"kernel"`
 	Arch     string `json:"arch"`
+	Locale   string `json:"locale"` // 系统语言环境，如 zh_CN.UTF-8
 }
 
 // CPUInfo CPU 信息。
 type CPUInfo struct {
-	Model     string    `json:"model"`
-	Cores     int       `json:"cores"`      // 物理核心
-	Threads   int       `json:"threads"`    // 逻辑核心
-	Percent   float64   `json:"percent"`    // 总使用率
-	PerCore   []float64 `json:"per_core"`   // 每核使用率
+	Model   string    `json:"model"`
+	Cores   int       `json:"cores"`    // 物理核心
+	Threads int       `json:"threads"`  // 逻辑核心
+	Percent float64   `json:"percent"`  // 总使用率
+	PerCore []float64 `json:"per_core"` // 每核使用率
 }
 
 // MemoryInfo 内存信息（字节）。
@@ -70,12 +72,12 @@ type MemoryInfo struct {
 
 // DiskInfo 单个挂载点信息。
 type DiskInfo struct {
-	Device    string  `json:"device"`
-	Mount     string  `json:"mount"`
-	Total     uint64  `json:"total"`
-	Used      uint64  `json:"used"`
-	Percent   float64 `json:"percent"`
-	FSType    string  `json:"fs_type"`
+	Device  string  `json:"device"`
+	Mount   string  `json:"mount"`
+	Total   uint64  `json:"total"`
+	Used    uint64  `json:"used"`
+	Percent float64 `json:"percent"`
+	FSType  string  `json:"fs_type"`
 }
 
 // NetworkInfo 网络信息。
@@ -86,7 +88,7 @@ type NetworkInfo struct {
 
 // NetIOCounter 单网卡 IO 统计。
 type NetIOCounter struct {
-	Name     string `json:"name"`
+	Name      string `json:"name"`
 	BytesSent uint64 `json:"bytes_sent"`
 	BytesRecv uint64 `json:"bytes_recv"`
 }
@@ -125,6 +127,13 @@ func (c *Collector) Snapshot() (*Info, error) {
 			Arch:     h.KernelArch,
 		}
 		info.Uptime = h.Uptime
+	}
+
+	// 系统语言环境（本地）
+	if lang := os.Getenv("LANG"); lang != "" {
+		info.Host.Locale = lang
+	} else if lc := os.Getenv("LC_ALL"); lc != "" {
+		info.Host.Locale = lc
 	}
 
 	// CPU
@@ -247,4 +256,3 @@ func isVirtualFS(fs string) bool {
 	}
 	return false
 }
-

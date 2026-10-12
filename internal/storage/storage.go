@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -46,7 +47,7 @@ func New(dataDir string) (*DB, error) {
 	return d, nil
 }
 
-// migrate 创建表结构（幂等）。
+// migrate 创建表结构（幂等），并对已有数据库执行增量变更。
 func (d *DB) migrate() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS servers (
@@ -127,7 +128,28 @@ func (d *DB) migrate() error {
 	`
 
 	_, err := d.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 增量迁移：为已有数据库补上新加列（忽略已存在错误）
+	_ = d.addColumnIfNotExists("languages", "uninstall_cmd", "TEXT NOT NULL DEFAULT ''")
+	_ = d.addColumnIfNotExists("software_packages", "versions", "TEXT NOT NULL DEFAULT '[]'")
+	_ = d.addColumnIfNotExists("languages", "versions", "TEXT NOT NULL DEFAULT '[]'")
+	return nil
+}
+
+// addColumnIfNotExists 给表追加列（若列已存在则忽略错误）。
+func (d *DB) addColumnIfNotExists(table, column, definition string) error {
+	_, err := d.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	if err != nil {
+		// SQLite 已存在该列时会返回 duplicate column error，忽略即可
+		if strings.Contains(err.Error(), "duplicate column") {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // InitDefaultData 写入首次启动的默认数据（幂等）。

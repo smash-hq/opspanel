@@ -25,6 +25,7 @@ var Catalog = []*Package{
 		Description: "最流行的开源关系型数据库",
 		Icon:        "🐬",
 		Version:     "8.0",
+		Versions:    []string{"8.0", "8.4"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y mysql-server"},
 			"yum": {"yum install -y mysql-server"},
@@ -48,6 +49,7 @@ var Catalog = []*Package{
 		Description: "强大的开源对象关系型数据库",
 		Icon:        "🐘",
 		Version:     "15",
+		Versions:    []string{"14", "15", "16"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y postgresql postgresql-contrib"},
 			"yum": {"yum install -y postgresql-server postgresql-contrib"},
@@ -71,6 +73,7 @@ var Catalog = []*Package{
 		Description: "高性能的内存键值数据库",
 		Icon:        "🔴",
 		Version:     "7.0",
+		Versions:    []string{"7.0", "7.2", "7.4"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y redis-server"},
 			"yum": {"yum install -y redis"},
@@ -94,6 +97,7 @@ var Catalog = []*Package{
 		Description: "高性能的 Web 服务器与反向代理",
 		Icon:        "🌐",
 		Version:     "1.24",
+		Versions:    []string{"1.24", "1.26", "1.28"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y nginx"},
 			"yum": {"yum install -y nginx"},
@@ -117,6 +121,7 @@ var Catalog = []*Package{
 		Description: "容器化平台，支持应用容器化部署",
 		Icon:        "🐳",
 		Version:     "24.0",
+		Versions:    []string{"24.0", "25.0", "26.0", "27.0"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y docker.io docker-compose"},
 			"yum": {"yum install -y docker docker-compose"},
@@ -140,6 +145,7 @@ var Catalog = []*Package{
 		Description: "基于 Chrome V8 引擎的 JavaScript 运行时",
 		Icon:        "⬢",
 		Version:     "20 LTS",
+		Versions:    []string{"18", "20", "22"},
 		InstallCmd: map[string][]string{
 			"apt": {"apt-get install -y nodejs npm"},
 			"yum": {"yum install -y nodejs npm"},
