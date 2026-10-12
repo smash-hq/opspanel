@@ -305,6 +305,192 @@ export async function installLanguage(serverId, languageId) {
     return json.data;
 }
 
+// --- 文件管理 ---
+
+/** 列出目录内容。 */
+export async function fetchFiles(serverId, path) {
+    const params = new URLSearchParams({ server: serverId, path: path || '/' });
+    const json = await request(`/files?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '加载文件列表失败');
+    // 新格式: { files: [...], sudo_used: bool }
+    if (json.data && Array.isArray(json.data.files)) {
+        return json.data;
+    }
+    // 兼容旧格式
+    return { files: json.data || [], sudo_used: false };
+}
+
+/** 获取文件详情。 */
+export async function fetchFileInfo(serverId, path) {
+    const params = new URLSearchParams({ server: serverId, path });
+    const json = await request(`/files/info?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '获取文件详情失败');
+    return json.data;
+}
+
+/** 预览文件内容。 */
+export async function fetchFilePreview(serverId, path, lines) {
+    const params = new URLSearchParams({ server: serverId, path, lines: lines || 100 });
+    const json = await request(`/files/preview?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '预览文件失败');
+    return json.data;
+}
+
+/** 下载文件。 */
+export async function downloadFile(serverId, path) {
+    const params = new URLSearchParams({ server: serverId, path });
+    const response = await fetch(`/files/download?${params}`);
+    if (!response.ok) throw new Error('下载失败');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = path.split('/').pop() || 'download';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// --- Docker 管理 ---
+
+/** 检测 Docker 环境。 */
+export async function checkDocker(serverId) {
+    const json = await request(`/docker?server=${encodeURIComponent(serverId)}`);
+    if (json.code !== 0) throw new Error(json.message || '检测失败');
+    return json.data;
+}
+
+/** 获取镜像列表。 */
+export async function fetchDockerImages(serverId) {
+    const json = await request(`/docker/images?server=${encodeURIComponent(serverId)}`);
+    if (json.code !== 0) throw new Error(json.message || '加载镜像失败');
+    return json.data || [];
+}
+
+/** 拉取镜像。 */
+export async function pullDockerImage(serverId, image) {
+    const json = await request('/docker/images/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, image }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '拉取失败');
+    return json.data;
+}
+
+/** 删除镜像。 */
+export async function removeDockerImage(serverId, id) {
+    const json = await request(`/docker/images/${encodeURIComponent(id)}?server=${encodeURIComponent(serverId)}`, { method: 'DELETE' });
+    if (json.code !== 0) throw new Error(json.message || '删除失败');
+}
+
+/** 获取容器列表。 */
+export async function fetchDockerContainers(serverId, all) {
+    const params = new URLSearchParams({ server: serverId, all: all ? 'true' : 'false' });
+    const json = await request(`/docker/containers?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '加载容器失败');
+    return json.data || [];
+}
+
+/** 容器操作。 */
+export async function dockerContainerAction(serverId, id, action) {
+    const json = await request(`/docker/containers/${encodeURIComponent(id)}/${action}?server=${encodeURIComponent(serverId)}`, { method: 'POST' });
+    if (json.code !== 0) throw new Error(json.message || '操作失败');
+    return json.data;
+}
+
+/** 删除容器。 */
+export async function removeDockerContainer(serverId, id) {
+    const json = await request(`/docker/containers/${encodeURIComponent(id)}?server=${encodeURIComponent(serverId)}`, { method: 'DELETE' });
+    if (json.code !== 0) throw new Error(json.message || '删除失败');
+}
+
+/** 在容器内执行命令。 */
+export async function dockerExec(serverId, containerId, command) {
+    const json = await request('/docker/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, container_id: containerId, command }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '执行失败');
+    return json.data;
+}
+
+/** 获取容器日志。 */
+export async function fetchDockerLogs(serverId, id, lines) {
+    const params = new URLSearchParams({ server: serverId, id, lines: lines || 100 });
+    const json = await request(`/docker/logs?${params}`);
+    if (json.code !== 0) throw new Error(json.message || '获取日志失败');
+    return json.data;
+}
+
+// --- Docker 批量操作 ---
+
+/** 批量删除镜像。 */
+export async function batchDeleteDockerImages(serverId, ids) {
+    const json = await request('/docker/images/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, ids }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '批量删除失败');
+    return json.data;
+}
+
+/** 批量容器操作。 */
+export async function batchDockerContainerAction(serverId, ids, action) {
+    const json = await request('/docker/containers/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, ids, action }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '批量操作失败');
+    return json.data;
+}
+
+// --- Docker 镜像源管理 ---
+
+/** 获取镜像源列表。 */
+export async function fetchDockerSources() {
+    const json = await request('/docker-sources');
+    if (json.code !== 0) throw new Error(json.message || '加载镜像源失败');
+    return json.data || [];
+}
+
+/** 新增镜像源。 */
+export async function createDockerSource(payload) {
+    const json = await request('/docker-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '创建失败');
+    return json.data;
+}
+
+/** 更新镜像源。 */
+export async function updateDockerSource(id, payload) {
+    const json = await request(`/docker-sources/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (json.code !== 0) throw new Error(json.message || '更新失败');
+    return json.data;
+}
+
+/** 删除镜像源。 */
+export async function deleteDockerSource(id) {
+    const json = await request(`/docker-sources/${id}`, { method: 'DELETE' });
+    if (json.code !== 0) throw new Error(json.message || '删除失败');
+}
+
+/** 设置默认镜像源。 */
+export async function setDefaultDockerSource(id) {
+    const json = await request(`/docker-sources/${id}`, { method: 'POST' });
+    if (json.code !== 0) throw new Error(json.message || '设置失败');
+    return json.data;
+}
+
 // --- 进程管理 ---
 
 /** 获取进程列表。 */

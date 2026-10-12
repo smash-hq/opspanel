@@ -112,13 +112,33 @@ func (rc *RemoteCollector) Dial(srv *Server) (*sshConn, error) {
 	return newSSHConn(srv)
 }
 
-// RunOne 在远程服务器上执行单条命令并返回输出。
+// RunOne 在远程服务器上执行单条命令并返回输出。所有命令均记录日志。
 func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
 	out, err := client.RunOnce(cmd)
 	if err != nil {
-		rc.log.Debugw("remote cmd failed", "cmd", cmd, "error", err)
+		rc.log.Infow("remote cmd error", "cmd", cmd, "error", err.Error())
 		return ""
 	}
+	// 截断过长的输出用于日志
+	logOut := out
+	if len(logOut) > 200 {
+		logOut = logOut[:200] + "..."
+	}
+	rc.log.Infow("remote cmd", "cmd", cmd, "output", logOut)
+	return out
+}
+
+// RunWithSudo 先尝试直接执行命令，失败则使用 sudo -n 回退。所有命令均记录日志。
+func (rc *RemoteCollector) RunWithSudo(client *sshConn, cmd string) string {
+	// 先尝试直接执行
+	out := rc.RunOne(client, cmd)
+	if out != "" {
+		return out
+	}
+	// 失败则尝试 sudo -n（免密 sudo）
+	sudoCmd := "sudo -n " + cmd
+	rc.log.Infow("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
+	out = rc.RunOne(client, sudoCmd)
 	return out
 }
 
@@ -170,13 +190,12 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	}
 
 	// 进程数（无需 root）
-	if procs := rc.RunOne(conn, "ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
+	if procs := rc.RunWithSudo(conn, "ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
 		fmt.Sscanf(strings.TrimSpace(procs), "%d", &info.Processes)
 	}
 
-	// 磁盘信息
-	sudoNeeded := false
-	if disks := rc.RunOne(conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
+	// 磁盘信息（runWithSudo 自动回退到 sudo -n）
+	if disks := rc.RunWithSudo(conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
 		for _, line := range strings.Split(disks, "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 4 {
@@ -197,32 +216,6 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 			}
 		}
 	}
-	// 检查是否有权限获取完整磁盘信息（部分挂载点可能需要 root）
-	if len(info.Disks) == 0 {
-		sudoNeeded = true
-		// 尝试用 sudo 获取
-		if disks := rc.RunOne(conn, "sudo -n df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
-			for _, line := range strings.Split(disks, "\n") {
-				fields := strings.Fields(line)
-				if len(fields) >= 4 {
-					var total, used uint64
-					fmt.Sscanf(fields[1], "%d", &total)
-					fmt.Sscanf(fields[2], "%d", &used)
-					pct := 0.0
-					if total > 0 {
-						pct = float64(used) / float64(total) * 100
-					}
-					info.Disks = append(info.Disks, system.DiskInfo{
-						Device:  fields[0],
-						Total:   total,
-						Used:    used,
-						Mount:   fields[3],
-						Percent: pct,
-					})
-				}
-			}
-		}
-	}
 
 	// 运行时间（无需 root）
 	if uptime := rc.RunOne(conn, "cat /proc/uptime 2>/dev/null | awk '{print $1}'"); uptime != "" {
@@ -237,12 +230,8 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	}
 
 	// 检测是否使用了 sudo（权限不足标记）
-	if sudoNeeded {
-		info.SudoUsed = true
-	}
-	// 额外检查：如果进程数异常低，也可能是权限不足
+	// 如果进程数异常低，可能是权限不足
 	if info.Processes > 0 && info.Processes < 10 {
-		// 尝试用 sudo 获取更准确的进程数
 		if procs := rc.RunOne(conn, "sudo -n ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
 			var sudoProcs int
 			fmt.Sscanf(strings.TrimSpace(procs), "%d", &sudoProcs)
@@ -367,9 +356,179 @@ func (rc *RemoteCollector) InstallLanguage(srv *Server, installCmd string) error
 	defer conn.Close()
 
 	// 执行安装命令
-	out := rc.RunOne(conn, installCmd)
+	out := rc.RunWithSudo(conn, installCmd)
 	rc.log.Infow("install language", "cmd", installCmd, "output", out)
 	return nil
+}
+
+// --- 文件管理 ---
+
+// FileInfo 表示文件或目录的信息。
+type FileInfo struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	IsDir   bool   `json:"is_dir"`
+	Size    int64  `json:"size"`
+	Mode    string `json:"mode"`
+	ModTime int64  `json:"mod_time"`
+	IsHidden bool  `json:"is_hidden"`
+}
+
+// ListFilesResult 包含文件列表和 sudo 使用状态。
+type ListFilesResult struct {
+	Files    []FileInfo `json:"files"`
+	SudoUsed bool       `json:"sudo_used"`
+}
+
+// ListFiles 列出指定目录的内容（类似 ls -la）。
+// 先尝试 sudo ls，失败则回退到普通 ls，并标记 sudo 是否可用。
+func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	if path == "" {
+		path = "/"
+	}
+
+	sudoUsed := false
+	// 先尝试 sudo ls -la
+	cmd := fmt.Sprintf("ls -la --time-style=long-iso %q 2>/dev/null", path)
+	out := rc.RunOne(conn, "sudo -n "+cmd)
+	if out != "" {
+		sudoUsed = true
+	} else {
+		// sudo 失败，回退到普通 ls
+		out = rc.RunOne(conn, cmd)
+	}
+	if out == "" {
+		return nil, fmt.Errorf("cannot list directory: %s", path)
+	}
+
+	var files []FileInfo
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 9 {
+			continue
+		}
+		// 跳过总计行和当前目录/父目录
+		name := strings.Join(fields[8:], " ")
+		if name == "" || name == "." || name == ".." || strings.HasPrefix(name, "total") {
+			continue
+		}
+
+		mode := fields[0]
+		isDir := strings.HasPrefix(mode, "d")
+		isHidden := strings.HasPrefix(name, ".")
+
+		var size int64
+		fmt.Sscanf(fields[4], "%d", &size)
+
+		// 拼接完整路径
+		fullPath := path
+		if !strings.HasSuffix(fullPath, "/") {
+			fullPath += "/"
+		}
+		fullPath += name
+
+		// 如果是目录，追加 /
+		if isDir && !strings.HasSuffix(fullPath, "/") {
+			fullPath += "/"
+		}
+
+		files = append(files, FileInfo{
+			Name:     name,
+			Path:     fullPath,
+			IsDir:    isDir,
+			Size:     size,
+			Mode:     mode,
+			ModTime:  0, // ls 输出解析时间较复杂，暂不解析
+			IsHidden: isHidden,
+		})
+	}
+
+	return &ListFilesResult{Files: files, SudoUsed: sudoUsed}, nil
+}
+
+// GetFileInfo 获取单个文件的详细信息。
+func (rc *RemoteCollector) GetFileInfo(srv *Server, path string) (*FileInfo, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("stat -c '%%n|%%F|%%s|%%a|%%Y|%%U|%%G' %q 2>/dev/null", path)
+	out := rc.RunWithSudo(conn, cmd)
+	if out == "" {
+		return nil, fmt.Errorf("file not found: %s", path)
+	}
+
+	parts := strings.Split(out, "|")
+	if len(parts) < 5 {
+		return nil, fmt.Errorf("failed to stat file: %s", path)
+	}
+
+	var size, modTime int64
+	fmt.Sscanf(parts[2], "%d", &size)
+	fmt.Sscanf(parts[4], "%d", &modTime)
+
+	isDir := strings.Contains(parts[1], "directory")
+	mode := parts[3]
+
+	return &FileInfo{
+		Name:    parts[0],
+		Path:    path,
+		IsDir:   isDir,
+		Size:    size,
+		Mode:    mode,
+		ModTime: modTime,
+	}, nil
+}
+
+// ReadFileContent 读取文件内容（用于预览）。
+func (rc *RemoteCollector) ReadFileContent(srv *Server, path string, lines int) (string, error) {
+	if lines <= 0 {
+		lines = 100
+	}
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	// 先检查文件大小，避免读取过大的文件
+	cmd := fmt.Sprintf("stat -c %%s %q 2>/dev/null", path)
+	out := rc.RunOne(conn, cmd)
+	var size int64
+	fmt.Sscanf(out, "%d", &size)
+	if size > 1<<20 { // > 1MB
+		return "", fmt.Errorf("file too large (%d bytes), max 1MB", size)
+	}
+
+	cmd = fmt.Sprintf("cat %q 2>/dev/null | head -n %d", path, lines)
+	return rc.RunWithSudo(conn, cmd), nil
+}
+
+// DownloadFile 读取文件内容用于下载。
+func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, string, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, "", err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("cat %q 2>/dev/null", path)
+	out := rc.RunWithSudo(conn, cmd)
+
+	// 提取文件名
+	parts := strings.Split(path, "/")
+	filename := parts[len(parts)-1]
+
+	return []byte(out), filename, nil
 }
 
 // KillProcess 终止指定 PID 的进程。
@@ -434,4 +593,220 @@ func (rc *RemoteCollector) TestConnection(srv *Server) (*system.HostInfo, error)
 	info.Kernel = rc.RunOne(conn, "uname -r")
 	info.Arch = rc.RunOne(conn, "uname -m")
 	return info, nil
+}
+
+// ============================================================
+// Docker 管理
+// ============================================================
+
+// DockerImage 表示 Docker 镜像信息。
+type DockerImage struct {
+	ID         string `json:"id"`
+	Repository string `json:"repository"`
+	Tag        string `json:"tag"`
+	Size       string `json:"size"`
+	Created    string `json:"created"`
+}
+
+// DockerContainer 表示 Docker 容器信息。
+type DockerContainer struct {
+	ID      string `json:"id"`
+	Image   string `json:"image"`
+	Command string `json:"command"`
+	State   string `json:"state"`
+	Ports   string `json:"ports"`
+	Names   string `json:"names"`
+}
+
+// CheckDocker 检测服务器是否安装了 Docker。
+func (rc *RemoteCollector) CheckDocker(srv *Server) (bool, string) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return false, ""
+	}
+	defer conn.Close()
+
+	// 检查 docker 命令是否存在
+	out := rc.RunWithSudo(conn, "docker --version 2>/dev/null")
+	if out == "" {
+		return false, ""
+	}
+	return true, out
+}
+
+// ListImages 列出 Docker 镜像。
+func (rc *RemoteCollector) ListImages(srv *Server) ([]DockerImage, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// 使用 docker images --format 获取结构化输出（需要 sudo）
+	// 使用 @@ 作为分隔符避免 shell 解析问题
+	cmd := "docker images --format '{{.ID}}@@{{.Repository}}@@{{.Tag}}@@{{.Size}}@@{{.CreatedAt}}' 2>/dev/null"
+	out := rc.RunWithSudo(conn, cmd)
+	if out == "" {
+		return []DockerImage{}, nil
+	}
+
+	var images []DockerImage
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "@@")
+		if len(parts) >= 5 {
+			images = append(images, DockerImage{
+				ID:         parts[0],
+				Repository: parts[1],
+				Tag:        parts[2],
+				Size:       parts[3],
+				Created:    parts[4],
+			})
+		}
+	}
+	return images, nil
+}
+
+// ListContainers 列出 Docker 容器。
+func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContainer, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// 使用 docker ps 获取容器列表（需要 sudo）
+	// 使用 @@ 作为分隔符避免 shell 解析问题
+	psCmd := "docker ps --format '{{.ID}}@@{{.Image}}@@{{.Command}}@@{{.Status}}@@{{.Ports}}@@{{.Names}}' 2>/dev/null"
+	if all {
+		psCmd = strings.Replace(psCmd, "docker ps ", "docker ps -a ", 1)
+	}
+	out := rc.RunWithSudo(conn, psCmd)
+	if out == "" {
+		return []DockerContainer{}, nil
+	}
+
+	var containers []DockerContainer
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "@@")
+		if len(parts) >= 6 {
+			state := parts[3]
+			// 标准化状态
+			stateLower := strings.ToLower(state)
+			if strings.Contains(stateLower, "up") {
+				state = "running"
+			} else if strings.Contains(stateLower, "exited") {
+				state = "exited"
+			} else {
+				state = stateLower
+			}
+			containers = append(containers, DockerContainer{
+				ID:      parts[0],
+				Image:   parts[1],
+				Command: strings.Trim(parts[2], "\""),
+				State:   state,
+				Ports:   parts[4],
+				Names:   parts[5],
+			})
+		}
+	}
+	return containers, nil
+}
+
+// PullImage 拉取 Docker 镜像（异步）。
+func (rc *RemoteCollector) PullImage(srv *Server, image string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("docker pull %q 2>&1", image)
+	out := rc.RunWithSudo(conn, cmd)
+	rc.log.Infow("docker pull", "image", image, "output", out)
+	return nil
+}
+
+// RemoveImage 删除 Docker 镜像。
+func (rc *RemoteCollector) RemoveImage(srv *Server, id string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("docker rmi %q 2>&1", id)
+	out := rc.RunWithSudo(conn, cmd)
+	if strings.Contains(out, "No such image") {
+		return fmt.Errorf("image not found: %s", id)
+	}
+	return nil
+}
+
+// ContainerAction 执行容器操作（start/stop/restart）。
+func (rc *RemoteCollector) ContainerAction(srv *Server, id, action string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	validActions := map[string]bool{"start": true, "stop": true, "restart": true}
+	if !validActions[action] {
+		return fmt.Errorf("invalid action: %s", action)
+	}
+
+	cmd := fmt.Sprintf("docker %s %q 2>&1", action, id)
+	out := rc.RunWithSudo(conn, cmd)
+	rc.log.Infow("docker container action", "action", action, "id", id, "output", out)
+	return nil
+}
+
+// ExecInContainer 在容器内执行命令。
+func (rc *RemoteCollector) ExecInContainer(srv *Server, id, cmd string) (string, error) {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	fullCmd := fmt.Sprintf("docker exec %q sh -c %q 2>&1", id, cmd)
+	out := rc.RunWithSudo(conn, fullCmd)
+	return out, nil
+}
+
+// ContainerLogs 获取容器日志。
+func (rc *RemoteCollector) ContainerLogs(srv *Server, id string, lines int) (string, error) {
+	if lines <= 0 {
+		lines = 100
+	}
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("docker logs --tail %d %q 2>&1", lines, id)
+	return rc.RunWithSudo(conn, cmd), nil
+}
+
+// RemoveContainer 删除容器。
+func (rc *RemoteCollector) RemoveContainer(srv *Server, id string) error {
+	conn, err := rc.Dial(srv)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	cmd := fmt.Sprintf("docker rm -f %q 2>&1", id)
+	out := rc.RunWithSudo(conn, cmd)
+	rc.log.Infow("docker rm", "id", id, "output", out)
+	return nil
 }

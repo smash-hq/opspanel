@@ -6,6 +6,18 @@
 
 Go 原生服务器运维平台，提供浏览器控制台管理本机及远程服务器。单机优先，零外部依赖（无需数据库），开箱即用。
 
+## ⚠️ 安全声明
+
+**使用本软件前，请仔细阅读以下安全声明：**
+
+1. **本软件会执行远程命令**：通过 SSH 连接远程服务器并执行系统命令（包括 sudo 操作），可能导致系统配置变更、数据丢失或服务中断。
+2. **凭证存储**：服务器连接信息（密码、私钥）存储在本地 SQLite 数据库中，虽有文件权限保护，但**不应用于生产环境或高安全要求场景**。
+3. **无认证机制**：当前版本**无内置用户认证和访问控制**，任何能访问面板的人都可以执行所有操作。
+4. **责任免除**：**一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏等）均与本项目无关**。使用者需自行承担所有风险。
+5. **使用建议**：仅在内网/开发环境使用，不要暴露到公网，务必配置防火墙和访问控制。
+
+---
+
 ## 目录
 
 - [功能特性](#功能特性)
@@ -22,19 +34,49 @@ Go 原生服务器运维平台，提供浏览器控制台管理本机及远程�
 
 ### 当前版本 (V0.1)
 
-- **服务器管理**：添加、连接、管理本机及远程 SSH 服务器
+#### 🖥️ 服务器管理
+- **节点管理**：添加、连接、管理本机及远程 SSH 服务器
 - **实时监控**：CPU、内存、磁盘、网络、运行时间等系统指标
+- **WebSocket 推送**：实时数据自动刷新（仅在系统信息页采集，减少 SSH 开销）
+
+#### 📦 软件管理
 - **软件商店**：一键安装/卸载 MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js
-- **WebSocket 推送**：实时数据自动刷新
-- **国产平台适配**：麒麟 V10 等国产 Linux 自动回退采集方式
+- **软件包管理**：自定义软件包定义（安装命令、服务控制命令）
+- **软件源管理**：管理镜像源/仓库地址，支持预设和自定义源
+
+#### 📁 文件管理
+- **文件浏览**：远程服务器文件目录浏览（树形导航）
+- **文件操作**：预览文本文件、下载文件、查看文件详情
+- **权限检测**：自动检测 sudo 权限并提示
+
+#### 🐳 Docker 管理
+- **镜像管理**：查看、拉取、删除镜像，批量操作支持
+- **容器管理**：启动、停止、重启、删除容器，批量操作支持
+- **容器终端**：在容器内执行命令
+- **容器日志**：实时查看容器日志
+- **镜像源管理**：常用镜像源预设 + 自定义源
+
+#### ⚙️ 进程管理
+- **进程列表**：查看所有运行进程（PID、用户、CPU、内存、命令）
+- **进程控制**：终止进程（SIGTERM/SIGKILL）
+- **进程日志**：查看进程相关日志
+
+#### 🌐 运行环境
+- **编程语言管理**：检测服务器已安装的语言环境（Go/Java/Python/Node.js/Rust/PHP/Ruby/.NET 等）
+- **一键安装**：从软件商店安装语言环境
+- **自定义扩展**：支持添加自定义语言和安装脚本
+
+#### 🎨 界面
+- **主题切换**：白天/夜间/跟随系统
+- **自定义图标**：浏览器标签页图标自定义
+- **响应式布局**：适配桌面和移动设备
 
 ### 即将推出
 
 - **集群管理**：多机负载均衡与服务编排
 - **监控中心**：性能图表、告警通知、日志分析
-- **文件管理**：Web 文件浏览、上传、编辑
-- **Web 终端**：浏览器内 SSH 终端
-- **防火墙**：端口管理、IP 封禁、规则模板
+- **安全中心**：防火墙规则、端口管理、IP 封禁
+- **定时任务**：Cron 定时任务管理
 
 ## 快速开始
 
@@ -125,19 +167,6 @@ docker run -d \
 
 ### Docker Compose
 
-```bash
-# 创建 docker-compose.yml（参见下方示例）
-docker compose up -d
-
-# 查看日志
-docker compose logs -f
-
-# 停止
-docker compose down
-```
-
-`docker-compose.yml` 示例：
-
 ```yaml
 version: "3.8"
 services:
@@ -149,6 +178,12 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+docker compose logs -f
+docker compose down
 ```
 
 ### 反向代理（Nginx）
@@ -234,8 +269,8 @@ make build-windows
 
 **首次启动**时自动初始化数据库并写入默认数据：
 - **本机服务器**（`srv_local`）：自动检测 hostname、OS/ARCH、当前用户
-- **软件包目录**：MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js
-- **软件源**：Ubuntu/CentOS/Docker 官方源与阿里云镜像
+- **软件包目录**：内置常用软件包定义
+- **Docker 镜像源**：Docker Hub/阿里云/腾讯云/DaoCloud/中科大/清华/网易/华为
 
 - **本机条目**（`srv_local`）不可删除，保证面板始终有一个可监控的目标
 - 所有配置变更实时持久化到 SQLite（WAL 模式，支持并发读取）
@@ -305,7 +340,7 @@ log:
 | POST | `/api/v1/software/uninstall` | 卸载软件 |
 | POST | `/api/v1/software/service` | 服务启停 |
 
-### 软件包管理
+### 软件包与源管理
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -313,15 +348,61 @@ log:
 | POST | `/api/v1/software/packages` | 新增软件包 |
 | PUT | `/api/v1/software/packages/{id}` | 更新软件包 |
 | DELETE | `/api/v1/software/packages/{id}` | 删除软件包 |
+| GET | `/api/v1/software/sources` | 软件源列表 |
+| POST/PUT/DELETE | `/api/v1/software/sources[/id]` | 软件源 CRUD |
 
-### 软件源管理
+### 文件管理
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/software/sources` | 软件源列表 |
-| POST | `/api/v1/software/sources` | 新增软件源 |
-| PUT | `/api/v1/software/sources/{id}` | 更新软件源 |
-| DELETE | `/api/v1/software/sources/{id}` | 删除软件源 |
+| GET | `/api/v1/files?server=&path=` | 列出目录 |
+| GET | `/api/v1/files/info?server=&path=` | 文件详情 |
+| GET | `/api/v1/files/preview?server=&path=&lines=` | 文件预览 |
+| GET | `/api/v1/files/download?server=&path=` | 下载文件 |
+
+### Docker 管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/docker?server=` | Docker 环境检测 |
+| GET | `/api/v1/docker/images?server=` | 镜像列表 |
+| POST | `/api/v1/docker/images/pull` | 拉取镜像 |
+| DELETE | `/api/v1/docker/images/{id}` | 删除镜像 |
+| POST | `/api/v1/docker/images/batch-delete` | 批量删除镜像 |
+| GET | `/api/v1/docker/containers?server=&all=` | 容器列表 |
+| POST | `/api/v1/docker/containers/{id}/{action}` | 容器操作 |
+| POST | `/api/v1/docker/containers/batch` | 批量容器操作 |
+| GET | `/api/v1/docker/containers/{id}/logs` | 容器日志 |
+| POST | `/api/v1/docker/exec` | 容器内执行命令 |
+
+### Docker 镜像源管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/docker-sources` | 镜像源列表 |
+| POST | `/api/v1/docker-sources` | 新增镜像源 |
+| PUT | `/api/v1/docker-sources/{id}` | 更新镜像源 |
+| DELETE | `/api/v1/docker-sources/{id}` | 删除镜像源 |
+| POST | `/api/v1/docker-sources/{id}` | 设为默认源 |
+
+### 进程管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/processes?server=&lines=` | 进程列表 |
+| POST | `/api/v1/processes/kill` | 终止进程 |
+| GET | `/api/v1/processes/log?server=&pid=&lines=` | 进程日志 |
+
+### 语言环境管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/languages` | 语言列表 |
+| POST | `/api/v1/languages` | 新增语言 |
+| PUT | `/api/v1/languages/{id}` | 更新语言 |
+| DELETE | `/api/v1/languages/{id}` | 删除语言 |
+| GET | `/api/v1/languages/detect?server=` | 检测已安装语言 |
+| POST | `/api/v1/languages/install` | 安装语言环境 |
 
 ### WebSocket
 
@@ -339,7 +420,7 @@ server-management/
 │   ├── config/          # 配置加载（Viper）
 │   ├── host/            # 服务器配置抽象与采集调度
 │   ├── remote/          # SSH 远程执行（独立包，避免循环依赖）
-│   ├── storage/         # SQLite 持久化（服务器/软件包/软件源）
+│   ├── storage/         # SQLite 持久化（服务器/软件包/软件源/镜像源）
 │   ├── middleware/      # 中间件（日志、恢复）
 │   ├── server/          # HTTP 服务组装
 │   ├── software/        # 软件包管理与安装
@@ -409,20 +490,38 @@ make deps
 - **Web 框架**：Go 标准库 `net/http`
 - **配置管理**：Viper（支持配置文件、环境变量、命令行标志）
 - **系统采集**：gopsutil（CPU、内存、磁盘、网络）
-- **SSH 连接**：golang.org/x/crypto/websocket
+- **SSH 连接**：golang.org/x/crypto/ssh
 - **实时推送**：Gorilla WebSocket
 - **日志**：Uber Zap（结构化日志）
 - **前端**：原生 HTML/CSS/JS（无构建步骤，Go embed 嵌入）
 
 ## 安全建议
 
-1. **不要将面板暴露在公网**，建议通过 VPN 或内网访问
-2. **使用反向代理**（Nginx/Caddy）启用 HTTPS
-3. **配置防火墙**，仅允许信任来源访问
-4. **使用强密码**连接远程服务器
-5. **定期备份** `data/smp.db` 数据库文件
-6. **为远程用户配置 NOPASSWD sudo**，避免 Web 进程拥有完整 root 权限
-7. **不要提交 `data/smp.db`**，该文件包含敏感凭证信息
+> **⚠️ 再次强调：使用本软件可能带来严重安全风险，请务必遵守以下建议。**
+
+### 必须遵守
+
+1. **🚫 不要将面板暴露在公网** — 建议仅通过 VPN 或内网访问
+2. **🔒 使用反向代理**（Nginx/Caddy）启用 HTTPS
+3. **🛡️ 配置防火墙**，仅允许信任来源访问面板端口
+4. **🔑 使用强密码**连接远程服务器，推荐使用 SSH 密钥认证
+5. **👤 创建专用用户**运行面板服务，不要使用 root 用户
+
+### 远程服务器安全
+
+6. **🔐 为远程用户配置 NOPASSWD sudo** — 避免 Web 进程拥有完整 root 权限
+7. **📋 定期审计** `data/smp.db` 中的服务器配置和访问日志
+8. **🗑️ 定期清理**不再使用的服务器配置和敏感凭证
+
+### 数据安全
+
+9. **💾 定期备份** `data/smp.db` 数据库文件
+10. **🚫 不要提交 `data/smp.db`** 到版本控制，该文件包含敏感凭证信息
+11. **🔒 文件权限**确保 `data/` 目录权限为 `0700`，数据库文件权限为 `0600`
+
+### 责任声明
+
+**本软件按"原样"提供，不附带任何明示或暗示的保证。一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏、数据丢失等）均与本项目无关。使用者需自行评估风险并承担所有责任。**
 
 ## 许可证
 

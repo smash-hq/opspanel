@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/smash-hq/server-management/internal/api"
@@ -21,12 +22,13 @@ import (
 
 // Server 封装 HTTP 服务生命周期。
 type Server struct {
-	cfg       *config.Config
-	log       *logger.Logger
-	httpSrv   *http.Server
-	hub       *ws.Hub
-	store     *host.Store
-	collector *host.Collector
+	cfg           *config.Config
+	log           *logger.Logger
+	httpSrv       *http.Server
+	hub           *ws.Hub
+	store         *host.Store
+	collector     *host.Collector
+	pushPaused    atomic.Bool  // 暂停推送循环（用户不在系统信息页时）
 }
 
 // New 创建服务实例，注册全部路由与中间件。
@@ -51,6 +53,12 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	langStore := storage.NewLanguageStore(store.DB())
 	if err := langStore.InitDefaultLanguages(); err != nil {
 		log.Fatal("languages init failed", "error", err)
+	}
+
+	// 初始化 Docker 镜像源到数据库
+	sourceStore := storage.NewDockerSourceStore(store.DB())
+	if err := sourceStore.InitDefaultSources(); err != nil {
+		log.Fatal("docker sources init failed", "error", err)
 	}
 
 	// --- API 处理器 ---
@@ -97,7 +105,7 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return &Server{
+	s := &Server{
 		cfg:       cfg,
 		log:       log,
 		httpSrv:   httpSrv,
@@ -105,6 +113,9 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 		store:     store,
 		collector: host.NewCollector(log, store),
 	}
+	// 设置推送控制器引用
+	settingsHandler.SetPushController(s)
+	return s
 }
 
 // Start 启动 HTTP 服务并阻塞，直到收到中断信号或出错。
@@ -128,7 +139,18 @@ func (s *Server) CloseStore() error {
 	return nil
 }
 
+// PausePush 暂停/恢复系统快照推送循环。
+func (s *Server) PausePush(paused bool) {
+	s.pushPaused.Store(paused)
+	if paused {
+		s.log.Info("push loop paused")
+	} else {
+		s.log.Info("push loop resumed")
+	}
+}
+
 // pushLoop 定时采集所有服务器的系统快照并按 serverID 分发到 WebSocket 客户端。
+// 当 pushPaused 为 true 时跳过采集（用户不在系统信息页）。
 func (s *Server) pushLoop() {
 	interval := time.Duration(s.cfg.Server.PushInterval) * time.Second
 	if interval < 1*time.Second {
@@ -138,6 +160,11 @@ func (s *Server) pushLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// 暂停时跳过采集，减少不必要的 SSH 连接和日志
+		if s.pushPaused.Load() {
+			continue
+		}
+
 		// 本机 + 所有已配置服务器
 		serverIDs := []string{host.LocalServerID}
 		for _, srv := range s.store.List() {
@@ -147,7 +174,7 @@ func (s *Server) pushLoop() {
 		for _, id := range serverIDs {
 			info, err := s.collector.Snapshot(id)
 			if err != nil {
-				s.log.Errorw("push snapshot failed", "server", id, "error", err)
+				s.log.Debugw("push snapshot failed", "server", id, "error", err)
 				continue
 			}
 			s.hub.Broadcast(info, id)

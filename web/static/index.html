@@ -61,8 +61,8 @@
                     <small>尝试修改搜索条件</small>
                 </div>
             </div>
-            <button class="add-button" @click="openAdd" :class="{ 'compact-add': sidebarCollapsed }">
-                <span>＋</span>
+            <button class="add-button" @click="openAdd" :class="{ 'compact-add': sidebarCollapsed }" title="添加节点">
+                <span class="add-icon">＋</span>
                 <b v-show="!sidebarCollapsed">添加节点</b>
             </button>
         </div>
@@ -191,24 +191,27 @@
                             <button class="primary-button small" @click="openLangForm('add')">＋ 添加语言</button>
                         </div>
                         <div class="languages-grid">
-                            <div v-for="lang in languages" :key="lang.id" class="language-card">
+                            <div v-for="lang in languages" :key="lang.id" class="language-row">
                                 <span class="lang-icon">{{ lang.icon || '📦' }}</span>
                                 <div class="lang-info">
                                     <strong>{{ lang.name }}</strong>
                                     <small>{{ lang.description }}</small>
-                                    <div class="lang-cmd-toggle" @click="lang._expanded = !lang._expanded">
-                                        <span>{{ lang._expanded ? '▾ 收起详情' : '▸ 查看详情' }}</span>
-                                    </div>
-                                    <div v-if="lang._expanded" class="lang-details">
-                                        <div class="lang-detail-row"><span class="detail-label">版本检测:</span><code>{{ lang.version_cmd || '未配置' }}</code></div>
-                                        <div class="lang-detail-row"><span class="detail-label">安装脚本:</span><pre>{{ lang.install_cmd || '未配置' }}</pre></div>
-                                    </div>
+                                </div>
+                                <div class="lang-meta">
+                                    <span class="lang-cmd-toggle" @click="lang._expanded = !lang._expanded">
+                                        {{ lang._expanded ? '▾ 收起' : '▸ 详情' }}
+                                    </span>
                                 </div>
                                 <div class="lang-actions">
                                     <button @click="openLangForm('edit', lang)" title="编辑">✎</button>
                                     <button class="danger" @click="deleteLanguage(lang.id)" title="删除">×</button>
                                 </div>
                             </div>
+                        </div>
+                        <!-- 展开的详情区域 -->
+                        <div v-for="lang in languages.filter(l => l._expanded)" :key="'detail-'+lang.id" class="lang-expand-detail">
+                            <div class="lang-detail-row"><span class="detail-label">版本检测:</span><code>{{ lang.version_cmd || '未配置' }}</code></div>
+                            <div class="lang-detail-row"><span class="detail-label">安装脚本:</span><pre>{{ lang.install_cmd || '未配置' }}</pre></div>
                         </div>
                     </div>
                     <!-- 启动信息 -->
@@ -259,67 +262,120 @@
                 <!-- 节点面包屑 Tab -->
                 <div class="node-breadcrumb">
                     <button class="bc-tab" :class="{ active: activeTab === 'system' }" @click="activeTab = 'system'">系统信息</button>
-                    <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
-                    <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'process' }" @click="activeTab = 'process'; loadProcesses()">进程管理</button>
-                    <button class="bc-tab disabled">集群管理</button>
-                    <button class="bc-tab disabled">监控中心</button>
-                    <button class="bc-tab disabled">文件管理</button>
-                    <button class="bc-tab disabled">Web 终端</button>
-                    <button class="bc-tab disabled">防火墙</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; currentFilePath = '/'; loadFiles('/')">文件管理</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="dockerTabEnabled && (activeTab = 'docker', checkDockerEnv(), loadDockerImages(), loadDockerContainers(true))" :title="dockerTabEnabled ? '' : '暂无 Docker 环境'">Docker</button>
+                    <button class="bc-tab disabled" title="即将推出">集群管理</button>
+                    <button class="bc-tab disabled" title="即将推出">安全</button>
+                    <button class="bc-tab disabled" title="即将推出">定时任务</button>
                 </div>
 
                 <!-- 系统信息 Tab -->
                 <div v-if="activeTab === 'system'" class="node-tab-content">
-                    <!-- 系统指标 -->
+                    <!-- 系统指标卡片 -->
                     <div class="metric-grid" v-if="hasInfo">
-                        <div class="metric-card"><div class="metric-top"><span class="metric-label">CPU 使用率</span><span class="metric-symbol blue">CPU</span></div><div class="metric-value">{{ number(info.cpu && info.cpu.percent) }}<small>%</small></div><div class="metric-bar"><i :style="{ width: bounded(info.cpu && info.cpu.percent) + '%' }" class="blue-fill"></i></div><span class="metric-foot">{{ info.cpu && info.cpu.cores || 0 }} 核心 · {{ info.cpu && info.cpu.threads || 0 }} 线程</span></div>
-                        <div class="metric-card"><div class="metric-top"><span class="metric-label">内存使用</span><span class="metric-symbol violet">RAM</span></div><div class="metric-value">{{ number(info.memory && info.memory.percent) }}<small>%</small></div><div class="metric-bar"><i :style="{ width: bounded(info.memory && info.memory.percent) + '%' }" class="violet-fill"></i></div><span class="metric-foot">{{ fmtBytes(info.memory && info.memory.used) }} / {{ fmtBytes(info.memory && info.memory.total) }}</span></div>
-                        <div class="metric-card"><div class="metric-top"><span class="metric-label">磁盘使用</span><span class="metric-symbol amber">DISK</span></div><div class="metric-value">{{ diskPercent }}<small>%</small></div><div class="metric-bar"><i :style="{ width: diskPercent + '%' }" class="amber-fill"></i></div><span class="metric-foot">{{ diskUsed }} / {{ diskTotal }} · {{ diskCount }} 个挂载点</span></div>
-                        <div class="metric-card"><div class="metric-top"><span class="metric-label">运行时间</span><span class="metric-symbol green">UP</span></div><div class="metric-value metric-time">{{ fmtUptime(info.uptime) }}</div><div class="metric-status"><span class="status-dot ok"></span>系统运行正常</div><span class="metric-foot">负载 {{ loadValue }} · {{ info.processes || 0 }} 个进程</span></div>
+                        <div class="metric-card">
+                            <div class="metric-top"><span class="metric-label">CPU 使用率</span><span class="metric-symbol blue">CPU</span></div>
+                            <div class="metric-value">{{ number(info.cpu && info.cpu.percent) }}<small>%</small></div>
+                            <div class="metric-bar"><i :style="{ width: bounded(info.cpu && info.cpu.percent) + '%' }" class="blue-fill"></i></div>
+                            <span class="metric-foot">{{ info.cpu && info.cpu.cores || 0 }} 核心 · {{ info.cpu && info.cpu.threads || 0 }} 线程</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-top"><span class="metric-label">内存使用</span><span class="metric-symbol violet">RAM</span></div>
+                            <div class="metric-value">{{ number(info.memory && info.memory.percent) }}<small>%</small></div>
+                            <div class="metric-bar"><i :style="{ width: bounded(info.memory && info.memory.percent) + '%' }" class="violet-fill"></i></div>
+                            <span class="metric-foot">{{ fmtBytes(info.memory && info.memory.used) }} / {{ fmtBytes(info.memory && info.memory.total) }}</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-top"><span class="metric-label">磁盘使用</span><span class="metric-symbol amber">DISK</span></div>
+                            <div class="metric-value">{{ diskPercent }}<small>%</small></div>
+                            <div class="metric-bar"><i :style="{ width: diskPercent + '%' }" class="amber-fill"></i></div>
+                            <span class="metric-foot">{{ diskUsed }} / {{ diskTotal }} · {{ diskCount }} 个挂载点</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-top"><span class="metric-label">运行时间</span><span class="metric-symbol green">UP</span></div>
+                            <div class="metric-value metric-time">{{ fmtUptime(info.uptime) }}</div>
+                            <div class="metric-status"><span class="status-dot ok"></span>系统运行正常</div>
+                            <span class="metric-foot">负载 {{ loadValue }} · {{ info.processes || 0 }} 个进程</span>
+                        </div>
                     </div>
                     <!-- 权限警告 -->
                     <div v-if="hasInfo && info.sudo_used" class="permission-warning">
                         <div class="warning-icon">⚠</div>
                         <div class="warning-content">
                             <strong>权限不足 — 部分系统信息可能不完整</strong>
-                            <p>当前采集过程使用了 sudo 回退，部分数据（如磁盘挂载点、进程数）可能不准确。建议为远程用户配置 NOPASSWD sudo 权限。</p>
                             <details class="warning-details">
                                 <summary>📖 如何配置 sudo 免密权限</summary>
                                 <div class="warning-docs">
                                     <p><strong>方法一：使用 visudo（推荐）</strong></p>
                                     <pre><code>sudo visudo -f /etc/sudoers.d/your_username</code></pre>
-                                    <p>添加以下内容（替换 your_username 为实际用户名）：</p>
                                     <pre><code>your_username ALL=(ALL) NOPASSWD: ALL</code></pre>
                                     <p><strong>方法二：直接编辑 /etc/sudoers</strong></p>
                                     <pre><code>sudo visudo</code></pre>
-                                    <p>在文件末尾添加：</p>
                                     <pre><code>your_username ALL=(ALL) NOPASSWD: ALL</code></pre>
-                                    <p><strong>方法三：将用户加入 sudo 组</strong></p>
-                                    <pre><code>sudo usermod -aG sudo your_username</code></pre>
                                     <p class="warning-tip">💡 配置完成后，建议重新连接服务器以获取完整信息。</p>
                                 </div>
                             </details>
                         </div>
                     </div>
-                    <!-- 主机信息 -->
-                    <div class="detail-grid" v-if="hasInfo">
-                        <div class="detail-item"><small>主机名</small><strong>{{ info.host && info.host.hostname || '—' }}</strong></div>
-                        <div class="detail-item"><small>操作系统</small><strong>{{ info.host && info.host.os || '—' }}</strong></div>
-                        <div class="detail-item"><small>平台</small><strong>{{ info.host && info.host.platform || '—' }}</strong></div>
-                        <div class="detail-item"><small>内核版本</small><strong>{{ info.host && info.host.kernel || '—' }}</strong></div>
-                        <div class="detail-item"><small>架构</small><strong>{{ info.host && info.host.arch || '—' }}</strong></div>
-                        <div class="detail-item"><small>CPU 型号</small><strong>{{ info.cpu && info.cpu.model || '—' }}</strong></div>
-                        <div class="detail-item"><small>进程数</small><strong>{{ info.processes || 0 }}</strong></div>
-                    </div>
-                    <!-- 磁盘信息 -->
-                    <div v-if="info.disks && info.disks.length" style="margin-top:16px;">
-                        <h4 style="font-size:14px;font-weight:600;margin-bottom:12px;">磁盘空间</h4>
-                        <div class="disk-table">
-                            <div v-for="(d, i) in info.disks" :key="i" class="disk-row">
-                                <div class="disk-name"><strong>{{ d.mount }}</strong><small>{{ d.device }} · {{ d.fs_type || 'unknown' }}</small></div>
-                                <div class="disk-progress"><span><i :style="{ width: bounded(d.percent) + '%' }" :class="usageClass(d.percent)"></i></span><b>{{ number(d.percent) }}%</b></div>
-                                <div class="disk-size">{{ fmtBytes(d.used) }} <small>/ {{ fmtBytes(d.total) }}</small></div>
+                    <!-- 主机信息卡片 -->
+                    <div class="info-cards" v-if="hasInfo">
+                        <div class="info-card">
+                            <div class="info-card-header">
+                                <span class="info-card-icon">🖥️</span>
+                                <h4>主机信息</h4>
+                            </div>
+                            <div class="info-card-body">
+                                <div class="info-row">
+                                    <span class="info-key">主机名</span>
+                                    <span class="info-value">{{ info.host && info.host.hostname || '—' }}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">操作系统</span>
+                                    <span class="info-value">{{ info.host && info.host.os || '—' }}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">平台</span>
+                                    <span class="info-value">{{ info.host && info.host.platform || '—' }}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">内核版本</span>
+                                    <span class="info-value">{{ info.host && info.host.kernel || '—' }}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">架构</span>
+                                    <span class="info-value">{{ info.host && info.host.arch || '—' }}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-key">CPU 型号</span>
+                                    <span class="info-value info-model">{{ info.cpu && info.cpu.model || '—' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-card-header">
+                                <span class="info-card-icon">💾</span>
+                                <h4>磁盘空间</h4>
+                            </div>
+                            <div class="info-card-body" v-if="info.disks && info.disks.length">
+                                <div v-for="(d, i) in info.disks" :key="i" class="disk-card-row">
+                                    <div class="disk-card-header">
+                                        <span class="disk-card-mount">{{ d.mount }}</span>
+                                        <span class="disk-card-percent" :class="usageClass(d.percent)">{{ number(d.percent) }}%</span>
+                                    </div>
+                                    <div class="disk-card-bar">
+                                        <i :style="{ width: bounded(d.percent) + '%' }" :class="usageClass(d.percent)"></i>
+                                    </div>
+                                    <div class="disk-card-size">
+                                        <span>{{ fmtBytes(d.used) }} / {{ fmtBytes(d.total) }}</span>
+                                        <small>{{ d.device }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="info-card-body" v-else>
+                                <span class="text-muted">暂无磁盘数据</span>
                             </div>
                         </div>
                     </div>
@@ -415,8 +471,27 @@
 
                 <!-- 进程管理 Tab -->
                 <div v-if="activeTab === 'process'" class="node-tab-content">
+                    <!-- 系统概览 -->
+                    <div class="process-overview" v-if="hasInfo">
+                        <div class="overview-card">
+                            <span class="overview-label">CPU 使用率</span>
+                            <span class="overview-value">{{ number(info.cpu && info.cpu.percent) }}%</span>
+                            <span class="overview-foot">{{ info.cpu && info.cpu.threads || 0 }} 线程</span>
+                        </div>
+                        <div class="overview-card">
+                            <span class="overview-label">内存使用</span>
+                            <span class="overview-value">{{ number(info.memory && info.memory.percent) }}%</span>
+                            <span class="overview-foot">{{ fmtBytes(info.memory && info.memory.used) }} / {{ fmtBytes(info.memory && info.memory.total) }}</span>
+                        </div>
+                        <div class="overview-card">
+                            <span class="overview-label">系统负载</span>
+                            <span class="overview-value">{{ loadValue }}</span>
+                            <span class="overview-foot">{{ info.processes || 0 }} 个进程</span>
+                        </div>
+                    </div>
+                    <!-- 进程列表 -->
                     <div class="process-toolbar">
-                        <h3>进程列表</h3>
+                        <h3>进程列表 ({{ processes.length }})</h3>
                         <button class="toolbar-button" @click="loadProcesses()" :disabled="processLoading">↻ 刷新</button>
                     </div>
                     <div v-if="processLoading" class="loading-state" style="padding:20px;">加载中...</div>
@@ -428,7 +503,7 @@
                             <span class="col-pid">PID</span>
                             <span class="col-user">用户</span>
                             <span class="col-cpu">CPU</span>
-                            <span class="col-mem">内存</span>
+                            <span class="col-mem">MEM</span>
                             <span class="col-cmd">命令</span>
                             <span class="col-actions">操作</span>
                         </div>
@@ -443,6 +518,190 @@
                                 <button class="proc-btn danger" @click="handleKillProcess(p.pid, false)" title="终止">✗</button>
                                 <button class="proc-btn danger" @click="handleKillProcess(p.pid, true)" title="强制终止">⚡</button>
                             </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 文件管理 Tab -->
+                <div v-if="activeTab === 'files'" class="node-tab-content">
+                    <!-- 权限警告 -->
+                    <div v-if="fileSudoWarning" class="file-sudo-warning">
+                        <span class="warning-icon">⚠</span>
+                        <div class="warning-content">
+                            <strong>权限不足 — 部分文件可能无法显示</strong>
+                            <p>当前未配置 sudo 权限，部分受保护的文件和目录可能无法访问。建议为远程用户配置 NOPASSWD sudo。</p>
+                        </div>
+                    </div>
+                    <!-- 面包屑导航 -->
+                    <div class="file-breadcrumb">
+                        <button class="bc-home" @click="navigateToPath('/')">/</button>
+                        <template v-for="(segment, i) in currentFilePath.split('/').filter(Boolean)" :key="i">
+                            <span class="bc-sep">/</span>
+                            <button class="bc-segment" @click="navigateToPath('/' + currentFilePath.split('/').filter(Boolean).slice(0, i+1).join('/') + '/')">{{ segment }}</button>
+                        </template>
+                    </div>
+                    <!-- 工具栏 -->
+                    <div class="file-toolbar">
+                        <div class="file-search">
+                            <span class="search-icon">⌕</span>
+                            <input v-model="fileSearchQuery" placeholder="搜索文件...">
+                        </div>
+                        <button class="toolbar-button" @click="loadFiles()" :disabled="filesLoading">↻ 刷新</button>
+                    </div>
+                    <!-- 文件列表 -->
+                    <div v-if="filesLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                    <div v-else-if="!filteredFiles.length" class="list-empty">
+                        <span class="empty-icon">⌁</span><strong>空目录</strong>
+                    </div>
+                    <div v-else>
+                        <!-- 文件夹区域 -->
+                        <div v-if="filteredDirs.length" class="file-section">
+                            <div class="file-section-title">
+                                <span class="section-icon">📁</span>文件夹 ({{ filteredDirs.length }})
+                            </div>
+                            <div class="folder-grid">
+                                <div v-for="file in filteredDirs" :key="file.path" class="folder-card" @click="navigateToPath(file.path)">
+                                    <span class="folder-icon-big">{{ file.is_hidden ? '🔒' : '📁' }}</span>
+                                    <span class="folder-name">{{ file.name }}</span>
+                                    <span class="folder-meta">{{ file.mode }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 文件区域 -->
+                        <div v-if="filteredRegFiles.length" class="file-section">
+                            <div class="file-section-title">
+                                <span class="section-icon">📄</span>文件 ({{ filteredRegFiles.length }})
+                            </div>
+                            <div class="file-table">
+                                <div class="file-table-header">
+                                    <span class="ft-name">名称</span>
+                                    <span class="ft-size">大小</span>
+                                    <span class="ft-mode">权限</span>
+                                    <span class="ft-actions">操作</span>
+                                </div>
+                                <div v-for="file in filteredRegFiles" :key="file.path" class="file-table-row">
+                                    <span class="ft-name">
+                                        <span class="ft-icon">{{ file.is_hidden ? '🔒' : getFileIcon(file.name) }}</span>
+                                        <span class="ft-link" @click="openFilePreview(file)">{{ file.name }}</span>
+                                    </span>
+                                    <span class="ft-size">{{ formatFileSize(file.size) }}</span>
+                                    <span class="ft-mode">{{ file.mode }}</span>
+                                    <span class="ft-actions">
+                                        <button class="ft-btn" @click="openFilePreview(file)" title="预览">👁</button>
+                                        <button class="ft-btn" @click="openFileDetail(file)" title="详情">ℹ</button>
+                                        <button class="ft-btn" @click="handleDownloadFile(file)" title="下载">⬇</button>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Docker 管理 Tab -->
+                <div v-if="activeTab === 'docker'" class="node-tab-content">
+                    <!-- Docker 信息栏 -->
+                    <div class="docker-header">
+                        <div class="docker-info">
+                            <span class="docker-badge" :class="dockerAvailable ? 'ok' : 'error'">{{ dockerAvailable ? '● Docker 已就绪' : '○ Docker 未安装' }}</span>
+                            <span class="docker-version" v-if="dockerVersion">{{ dockerVersion }}</span>
+                        </div>
+                        <div class="docker-stats">
+                            <span class="docker-stat">镜像: <strong>{{ dockerImages.length }}</strong></span>
+                            <span class="docker-stat">容器: <strong>{{ dockerContainers.length }}</strong></span>
+                        </div>
+                    </div>
+                    <!-- Docker 子 Tab -->
+                    <div class="docker-tabs">
+                        <button class="docker-tab" :class="{ active: dockerSubTab === 'images' }" @click="dockerSubTab = 'images'; loadDockerImages()">镜像管理</button>
+                        <button class="docker-tab" :class="{ active: dockerSubTab === 'containers' }" @click="dockerSubTab = 'containers'; loadDockerContainers(true)">容器管理</button>
+                        <button class="docker-tab" :class="{ active: dockerSubTab === 'sources' }" @click="dockerSubTab = 'sources'; loadDockerSources()">镜像源</button>
+                    </div>
+                    <!-- 镜像管理 -->
+                    <div v-if="dockerSubTab === 'images'">
+                        <div class="docker-toolbar">
+                            <input v-model="dockerPullInput" placeholder="输入镜像名，如：nginx:latest" @keyup.enter="dockerPullImage(dockerPullInput); dockerPullInput = ''">
+                            <button class="primary-button small" @click="dockerPullImage(dockerPullInput); dockerPullInput = ''">⬇ 拉取</button>
+                            <button class="toolbar-button" @click="loadDockerImages()" :disabled="dockerLoading">↻ 刷新</button>
+                        </div>
+                        <!-- 批量操作栏 -->
+                        <div class="batch-toolbar" v-if="selectedImages.length">
+                            <span class="batch-info">已选中 {{ selectedImages.length }} 个镜像</span>
+                            <button class="toolbar-button danger-text" @click="batchDeleteImages()" :disabled="batchActionLoading">🗑 批量删除</button>
+                            <button class="toolbar-button" @click="selectedImages = []">取消选择</button>
+                        </div>
+                        <div v-if="dockerLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                        <div v-else-if="!dockerImages.length" class="list-empty">
+                            <span class="empty-icon">⌁</span><strong>暂无镜像</strong>
+                        </div>
+                        <div v-else class="docker-image-list">
+                            <div v-for="img in dockerImages" :key="img.id" class="docker-image-row" :class="{ selected: selectedImages.includes(img.id) }">
+                                <input type="checkbox" class="batch-check" :checked="selectedImages.includes(img.id)" @change="toggleImageSelection(img.id)">
+                                <span class="docker-img-repo">{{ img.repository }}:{{ img.tag }}</span>
+                                <span class="docker-img-id">{{ img.id.substring(0, 12) }}</span>
+                                <span class="docker-img-size">{{ img.size }}</span>
+                                <span class="docker-img-actions">
+                                    <button class="proc-btn danger" @click="dockerRemoveImage(img.id)" title="删除">×</button>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 容器管理 -->
+                    <div v-if="dockerSubTab === 'containers'">
+                        <div class="docker-toolbar">
+                            <label class="show-all-label">
+                                <input type="checkbox" v-model="dockerShowAll" @change="loadDockerContainers(dockerShowAll)"> 显示已停止
+                            </label>
+                            <button class="toolbar-button" @click="loadDockerContainers(dockerShowAll)" :disabled="dockerLoading">↻ 刷新</button>
+                        </div>
+                        <!-- 批量操作栏 -->
+                        <div class="batch-toolbar" v-if="selectedContainers.length">
+                            <span class="batch-info">已选中 {{ selectedContainers.length }} 个容器</span>
+                            <button class="toolbar-button" @click="batchContainerAction('start')" :disabled="batchActionLoading">▶ 批量启动</button>
+                            <button class="toolbar-button" @click="batchContainerAction('stop')" :disabled="batchActionLoading">⏸ 批量停止</button>
+                            <button class="toolbar-button" @click="batchContainerAction('restart')" :disabled="batchActionLoading">↻ 批量重启</button>
+                            <button class="toolbar-button danger-text" @click="batchContainerAction('rm')" :disabled="batchActionLoading">🗑 批量删除</button>
+                            <button class="toolbar-button" @click="selectedContainers = []">取消选择</button>
+                        </div>
+                        <div v-if="dockerLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                        <div v-else-if="!dockerContainers.length" class="list-empty">
+                            <span class="empty-icon">⌁</span><strong>暂无容器</strong>
+                        </div>
+                        <div v-else class="docker-container-list">
+                            <div v-for="c in dockerContainers" :key="c.id" class="docker-container-row" :class="{ selected: selectedContainers.includes(c.id) }">
+                                <input type="checkbox" class="batch-check" :checked="selectedContainers.includes(c.id)" @change="toggleContainerSelection(c.id)">
+                                <span class="docker-ctr-name">{{ c.names || c.id.substring(0, 12) }}</span>
+                                <span class="docker-ctr-image">{{ c.image }}</span>
+                                <span class="docker-ctr-status" :class="c.state">{{ c.state }}</span>
+                                <span class="docker-ctr-ports">{{ c.ports || '—' }}</span>
+                                <span class="docker-ctr-actions">
+                                    <button v-if="c.state !== 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'start')" title="启动">▶</button>
+                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'stop')" title="停止">⏸</button>
+                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'restart')" title="重启">↻</button>
+                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerExecCommand(c.id, 'sh')" title="执行">⌨</button>
+                                    <button class="proc-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>
+                                    <button class="proc-btn danger" @click="dockerRemoveContainer(c.id)" title="删除">×</button>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 镜像源管理 -->
+                    <div v-if="dockerSubTab === 'sources'">
+                        <div class="docker-toolbar">
+                            <button class="primary-button small" @click="openDockerSourceForm()">＋ 添加镜像源</button>
+                        </div>
+                        <div class="docker-source-list">
+                            <div v-for="src in dockerSources" :key="src.id" class="docker-source-row">
+                                <span class="src-default" v-if="src.is_default">★</span>
+                                <span class="src-default empty" v-else>☆</span>
+                                <span class="src-name">{{ src.name }}</span>
+                                <span class="src-url">{{ src.url }}</span>
+                                <span class="src-status" :class="src.enabled ? 'enabled' : 'disabled'">{{ src.enabled ? '启用' : '禁用' }}</span>
+                                <span class="src-actions">
+                                    <button class="proc-btn" @click="setDefaultSource(src.id)" title="设为默认" v-if="!src.is_default">★</button>
+                                    <button class="proc-btn" @click="openDockerSourceForm(src)" title="编辑">✎</button>
+                                    <button class="proc-btn danger" @click="removeDockerSource(src.id)" title="删除" v-if="!src.is_default">×</button>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -570,6 +829,25 @@
         </div>
     </div>
 
+    <!-- Docker 镜像源表单弹窗 -->
+    <div class="modal-overlay" v-if="dockerSourceFormVisible" @click.self="closeDockerSourceForm">
+        <div class="modal">
+            <div class="modal-header"><div><span class="eyebrow">{{ dockerSourceForm.id ? 'EDIT SOURCE' : 'NEW SOURCE' }}</span><h3>{{ dockerSourceForm.id ? '编辑镜像源' : '添加镜像源' }}</h3></div><button class="icon-button" @click="closeDockerSourceForm" title="关闭">×</button></div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <label class="field"><span>ID <em>*</em></span><input v-model.trim="dockerSourceForm.id" placeholder="例如：custom_mirror" :disabled="!!dockerSourceForm.id"></label>
+                    <label class="field"><span>名称 <em>*</em></span><input v-model.trim="dockerSourceForm.name" placeholder="例如：公司内部镜像"></label>
+                    <label class="field full"><span>URL 地址 <em>*</em></span><input v-model.trim="dockerSourceForm.url" placeholder="https://..."></label>
+                    <label class="field"><span>状态</span><select v-model="dockerSourceForm.enabled"><option :value="true">启用</option><option :value="false">禁用</option></select></label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="closeDockerSourceForm">取消</button>
+                <button class="primary-button" @click="saveDockerSource" :disabled="dockerSourceSaving">{{ dockerSourceSaving ? '保存中...' : '保存' }}</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 语言环境表单弹窗 -->
     <div class="modal-overlay" v-if="langFormMode" @click.self="closeLangForm">
         <div class="modal lang-form-modal">
@@ -624,6 +902,77 @@
                 </div>
                 <div class="log-viewer">
                     <pre>{{ langInstallLog || '等待安装开始...' }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件预览弹窗 -->
+    <div class="modal-overlay" v-if="filePreviewVisible" @click.self="closeFilePreview">
+        <div class="modal file-preview-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">FILE PREVIEW</span><h3>{{ filePreviewData.path }}</h3></div>
+                <button class="icon-button" @click="closeFilePreview" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-viewer" v-if="!filePreviewLoading">
+                    <pre>{{ filePreviewData.content || '空文件' }}</pre>
+                </div>
+                <div class="log-loading" v-else>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件详情弹窗 -->
+    <div class="modal-overlay" v-if="fileDetailVisible" @click.self="closeFileDetail">
+        <div class="modal file-detail-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">FILE DETAILS</span><h3>{{ fileDetailData.name }}</h3></div>
+                <button class="icon-button" @click="closeFileDetail" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-detail-grid">
+                    <div class="detail-item"><span class="detail-label">路径</span><code>{{ fileDetailData.path }}</code></div>
+                    <div class="detail-item"><span class="detail-label">类型</span><span>{{ fileDetailData.is_dir ? '目录' : '文件' }}</span></div>
+                    <div class="detail-item"><span class="detail-label">大小</span><span>{{ formatFileSize(fileDetailData.size) }}</span></div>
+                    <div class="detail-item"><span class="detail-label">权限</span><code>{{ fileDetailData.mode }}</code></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="closeFileDetail">关闭</button>
+                <button class="primary-button" @click="handleDownloadFile({path: fileDetailData.path, name: fileDetailData.name})">下载</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker 执行命令弹窗 -->
+    <div class="modal-overlay" v-if="dockerExecVisible" @click.self="dockerExecVisible = false">
+        <div class="modal file-preview-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">DOCKER EXEC</span><h3>{{ dockerExecData.containerId.substring(0, 12) }} · 执行命令</h3></div>
+                <button class="icon-button" @click="dockerExecVisible = false" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <label class="field full"><span>命令</span><input v-model="dockerExecData.command" placeholder="输入命令..." @keyup.enter="dockerExecCommand(dockerExecData.containerId, dockerExecData.command)"></label>
+                </div>
+                <div class="log-viewer" style="margin-top: 12px;">
+                    <pre>{{ dockerExecData.output || '等待执行...' }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker 容器日志弹窗 -->
+    <div class="modal-overlay" v-if="dockerLogsVisible" @click.self="dockerLogsVisible = false">
+        <div class="modal file-preview-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">CONTAINER LOGS</span><h3>{{ dockerLogsData.containerId.substring(0, 12) }} · 日志</h3></div>
+                <button class="icon-button" @click="dockerLogsVisible = false" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-viewer">
+                    <pre>{{ dockerLogsData.logs || '暂无日志' }}</pre>
                 </div>
             </div>
         </div>

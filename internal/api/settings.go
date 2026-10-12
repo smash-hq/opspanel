@@ -13,11 +13,17 @@ import (
 	"github.com/smash-hq/server-management/internal/storage"
 )
 
+// PushController 控制推送循环的接口。
+type PushController interface {
+	PausePush(paused bool)
+}
+
 // SettingsHandler 提供系统设置管理 API。
 type SettingsHandler struct {
 	log     *logger.Logger
 	db      *storage.DB
 	dataDir string
+	pushCtrl PushController
 }
 
 // NewSettingsHandler 创建设置处理器。
@@ -29,10 +35,35 @@ func NewSettingsHandler(log *logger.Logger, db *storage.DB, dataDir string) *Set
 	}
 }
 
+// SetPushController 设置推送控制器。
+func (h *SettingsHandler) SetPushController(ctrl PushController) {
+	h.pushCtrl = ctrl
+}
+
 // Register 注册路由。
 func (h *SettingsHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/settings/", h.handleSettings)
 	mux.HandleFunc("/api/v1/settings/favicon", h.handleFavicon)
+	mux.HandleFunc("/api/v1/settings/push", h.handlePushControl)
+}
+
+// handlePushControl: POST {"paused": true/false} 暂停/恢复系统快照推送。
+func (h *SettingsHandler) handlePushControl(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		Paused bool `json:"paused"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	if h.pushCtrl != nil {
+		h.pushCtrl.PausePush(req.Paused)
+	}
+	OK(w, map[string]bool{"paused": req.Paused})
 }
 
 // handleSettings: GET 获取设置 / PUT 更新设置。

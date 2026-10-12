@@ -7,12 +7,13 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/smash-hq/server-management/internal/logger"
 )
 
-// Logging 记录每个请求的方法、路径、状态码与耗时。
+// Logging 记录请求日志：错误和慢请求记录 INFO，其余记录 DEBUG。
 func Logging(log *logger.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,13 +22,33 @@ func Logging(log *logger.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(ww, r)
 
-			log.Infow("request",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", ww.status,
-				"duration", time.Since(start).String(),
-				"remote", r.RemoteAddr,
-			)
+			duration := time.Since(start)
+			// 静态资源、健康检查、WebSocket 使用 DEBUG 级别
+			isStatic := strings.HasPrefix(r.URL.Path, "/css/") ||
+				strings.HasPrefix(r.URL.Path, "/js/") ||
+				strings.HasPrefix(r.URL.Path, "/favicon") ||
+				r.URL.Path == "/api/v1/health" ||
+				r.URL.Path == "/ws"
+			isError := ww.status >= 400
+			isSlow := duration > 2*time.Second
+
+			if isError || isSlow {
+				log.Warnw("request",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", ww.status,
+					"duration", duration.String(),
+					"remote", r.RemoteAddr,
+				)
+			} else if !isStatic {
+				log.Debugw("request",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", ww.status,
+					"duration", duration.String(),
+					"remote", r.RemoteAddr,
+				)
+			}
 		})
 	}
 }

@@ -212,7 +212,7 @@
 /* 收起态添加按钮 */
 .add-button.compact-add {
     justify-content: center;
-    padding: 9px;
+    padding: 6px;
 }
 
 .sidebar-header {
@@ -551,17 +551,57 @@
     justify-content: center;
     gap: 6px;
     width: 100%;
-    padding: 9px 14px;
+    padding: 8px 12px;
     border-radius: var(--border-radius-sm);
-    background: var(--color-blue);
-    color: #fff;
-    font-size: 13px;
+    background: transparent;
+    border: 1px dashed var(--sidebar-border, rgba(255,255,255,0.15));
+    color: var(--sidebar-text-dim, #94a3b8);
+    font-size: 12px;
     font-weight: 500;
-    transition: background var(--transition-fast), transform var(--transition-fast);
+    transition: all 0.2s;
 }
 
-.add-button:hover { background: #2563eb; transform: translateY(-1px); }
-.add-button span { font-size: 16px; line-height: 1; }
+.add-button:hover {
+    background: var(--color-blue, #3b82f6);
+    border-color: var(--color-blue, #3b82f6);
+    border-style: solid;
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.add-button .add-icon {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.8;
+}
+
+.add-button:hover .add-icon {
+    opacity: 1;
+}
+
+/* 收起态：小圆形添加按钮 */
+.add-button.compact-add {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid var(--sidebar-border, rgba(255,255,255,0.2));
+    background: var(--sidebar-bg-hover, #334155);
+    margin: 0 auto;
+}
+
+.add-button.compact-add:hover {
+    background: var(--color-blue, #3b82f6);
+    border-color: var(--color-blue, #3b82f6);
+    transform: scale(1.1);
+    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4);
+}
+
+.add-button.compact-add .add-icon {
+    font-size: 18px;
+    opacity: 1;
+}
 
 .sidebar-meta {
     display: flex;

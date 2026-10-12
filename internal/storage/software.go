@@ -271,30 +271,14 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 	_, _ = s.db.Raw().Exec(`DELETE FROM languages WHERE id = 'docker'`)
 	now := time.Now().Unix()
 		languages := []*LanguageRecord{
-			// 主流编译型语言
 			{ID: "go", Name: "Go", Category: "language", Description: "Google 开发的高性能编译语言", Icon: "🐹", VersionCmd: "go version 2>/dev/null", InstallCmd: "apt-get install -y golang-go || yum install -y golang || dnf install -y golang", CreatedAt: now, UpdatedAt: now},
-			{ID: "rust", Name: "Rust", Category: "language", Description: "注重安全和性能的系统编程语言", Icon: "🦀", VersionCmd: "rustc --version 2>/dev/null", InstallCmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", CreatedAt: now, UpdatedAt: now},
-			{ID: "cpp", Name: "C/C++", Category: "language", Description: "经典的系统级编译语言", Icon: "⚙️", VersionCmd: "gcc --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y gcc g++ build-essential || yum install -y gcc gcc-c++ || dnf install -y gcc gcc-c++", CreatedAt: now, UpdatedAt: now},
-			{ID: "swift", Name: "Swift", Category: "language", Description: "Apple 开发的现代化编程语言", Icon: "🦅", VersionCmd: "swift --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y clang || yum install -y clang", CreatedAt: now, UpdatedAt: now},
-			{ID: "kotlin", Name: "Kotlin", Category: "language", Description: "JVM 平台现代编程语言", Icon: "🟣", VersionCmd: "kotlin -version 2>&1 | head -1", InstallCmd: "curl -s https://get.sdkman.io | bash", CreatedAt: now, UpdatedAt: now},
-			// 主流解释型/VM 语言
 			{ID: "java", Name: "Java", Category: "language", Description: "广泛使用的面向对象编程语言", Icon: "☕", VersionCmd: "java -version 2>&1 | head -1", InstallCmd: "apt-get install -y default-jdk || yum install -y java-11-openjdk-devel || dnf install -y java-11-openjdk-devel", CreatedAt: now, UpdatedAt: now},
-			{ID: "python", Name: "Python", Category: "language", Description: "简洁优雅的解释型编程语言", Icon: "🐍", VersionCmd: "python3 --version 2>/dev/null", InstallCmd: "apt-get install -y python3 python3-pip python3-venv || yum install -y python3 python3-pip || dnf install -y python3 python3-pip", CreatedAt: now, UpdatedAt: now},
+			{ID: "python", Name: "Python", Category: "language", Description: "简洁优雅的解释型编程语言", Icon: "🐍", VersionCmd: "python3 --version 2>/dev/null", InstallCmd: "apt-get install -y python3 python3-pip || yum install -y python3 python3-pip || dnf install -y python3 python3-pip", CreatedAt: now, UpdatedAt: now},
 			{ID: "nodejs", Name: "Node.js", Category: "runtime", Description: "基于 Chrome V8 引擎的 JavaScript 运行时", Icon: "⬢", VersionCmd: "node --version 2>/dev/null", InstallCmd: "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && apt-get install -y nodejs || yum install -y nodejs || dnf install -y nodejs", CreatedAt: now, UpdatedAt: now},
+			{ID: "rust", Name: "Rust", Category: "language", Description: "注重安全和性能的系统编程语言", Icon: "🦀", VersionCmd: "rustc --version 2>/dev/null", InstallCmd: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", CreatedAt: now, UpdatedAt: now},
 			{ID: "php", Name: "PHP", Category: "language", Description: "广泛使用的服务端脚本语言", Icon: "🐘", VersionCmd: "php --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y php-cli php-fpm || yum install -y php-cli php-fpm || dnf install -y php-cli php-fpm", CreatedAt: now, UpdatedAt: now},
 			{ID: "ruby", Name: "Ruby", Category: "language", Description: "简洁优雅的动态编程语言", Icon: "💎", VersionCmd: "ruby --version 2>/dev/null", InstallCmd: "apt-get install -y ruby-full || yum install -y ruby || dnf install -y ruby", CreatedAt: now, UpdatedAt: now},
 			{ID: "dotnet", Name: ".NET", Category: "runtime", Description: "微软跨平台开发框架（C#/F#/VB）", Icon: "🔷", VersionCmd: "dotnet --version 2>/dev/null", InstallCmd: "apt-get install -y dotnet-sdk-8.0 || yum install -y dotnet-sdk-8.0 || dnf install -y dotnet-sdk-8.0", CreatedAt: now, UpdatedAt: now},
-			// 其他主流语言
-			{ID: "scala", Name: "Scala", Category: "language", Description: "JVM 平台函数式与面向对象混合语言", Icon: "🔴", VersionCmd: "scala -version 2>&1 | head -1", InstallCmd: "curl -s https://get.sdkman.io | bash", CreatedAt: now, UpdatedAt: now},
-			{ID: "perl", Name: "Perl", Category: "language", Description: "强大的文本处理脚本语言", Icon: "🐪", VersionCmd: "perl -v 2>/dev/null | head -2 | tail -1", InstallCmd: "apt-get install -y perl || yum install -y perl || dnf install -y perl", CreatedAt: now, UpdatedAt: now},
-			{ID: "lua", Name: "Lua", Category: "language", Description: "轻量级嵌入式脚本语言", Icon: "🌙", VersionCmd: "lua -v 2>/dev/null || lua5.3 -v 2>/dev/null || lua5.4 -v 2>/dev/null", InstallCmd: "apt-get install -y lua5.4 || yum install -y lua || dnf install -y lua", CreatedAt: now, UpdatedAt: now},
-			{ID: "typescript", Name: "TypeScript", Category: "language", Description: "JavaScript 的超集，添加了类型系统", Icon: "🔷", VersionCmd: "tsc --version 2>/dev/null", InstallCmd: "npm install -g typescript", CreatedAt: now, UpdatedAt: now},
-			{ID: "elixir", Name: "Elixir", Category: "language", Description: "基于 Erlang VM 的函数式编程语言", Icon: "💧", VersionCmd: "elixir --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y elixir || yum install -y elixir", CreatedAt: now, UpdatedAt: now},
-			{ID: "haskell", Name: "Haskell", Category: "language", Description: "纯函数式编程语言", Icon: "λ", VersionCmd: "ghc --version 2>/dev/null", InstallCmd: "apt-get install -y ghc || yum install -y ghc || dnf install -y ghc", CreatedAt: now, UpdatedAt: now},
-			{ID: "julia", Name: "Julia", Category: "language", Description: "高性能科学计算编程语言", Icon: "📊", VersionCmd: "julia --version 2>/dev/null", InstallCmd: "curl -fsSL https://install.julialang.org | sh", CreatedAt: now, UpdatedAt: now},
-			{ID: "dart", Name: "Dart", Category: "language", Description: "Google 开发的客户端优化语言", Icon: "🎯", VersionCmd: "dart --version 2>&1 | head -1", InstallCmd: "apt-get install -y dart", CreatedAt: now, UpdatedAt: now},
-			{ID: "zig", Name: "Zig", Category: "language", Description: "现代系统编程语言，C 的替代者", Icon: "⚡", VersionCmd: "zig version 2>/dev/null", InstallCmd: "apt-get install -y zig || yum install -y zig || dnf install -y zig", CreatedAt: now, UpdatedAt: now},
-			{ID: "r", Name: "R", Category: "language", Description: "统计计算与数据可视化语言", Icon: "📈", VersionCmd: "R --version 2>/dev/null | head -1", InstallCmd: "apt-get install -y r-base || yum install -y R || dnf install -y R", CreatedAt: now, UpdatedAt: now},
 		}
 	for _, lang := range languages {
 		_, err := s.db.Raw().Exec(`
@@ -364,5 +348,127 @@ func (s *LanguageStore) UpdateLanguage(lang *LanguageRecord) error {
 // DeleteLanguage 删除语言环境。
 func (s *LanguageStore) DeleteLanguage(id string) error {
 	_, err := s.db.Raw().Exec(`DELETE FROM languages WHERE id = ?`, id)
+	return err
+}
+
+// --- Docker 镜像源管理 ---
+
+// DockerSource 是 Docker 镜像源定义。
+type DockerSource struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Enabled   bool   `json:"enabled"`
+	IsDefault bool   `json:"is_default"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
+// DockerSourceStore 管理 Docker 镜像源。
+type DockerSourceStore struct {
+	db *DB
+}
+
+// NewDockerSourceStore 创建镜像源存储实例。
+func NewDockerSourceStore(db *DB) *DockerSourceStore {
+	return &DockerSourceStore{db: db}
+}
+
+// InitDefaultSources 写入内置镜像源（幂等）。
+func (s *DockerSourceStore) InitDefaultSources() error {
+	now := time.Now().Unix()
+	sources := []*DockerSource{
+		{ID: "dockerhub", Name: "Docker Hub 官方", URL: "https://registry-1.docker.io", Enabled: true, IsDefault: true, CreatedAt: now, UpdatedAt: now},
+		{ID: "aliyun", Name: "阿里云镜像加速器", URL: "https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "tencent", Name: "腾讯云镜像加速器", URL: "https://mirror.ccs.tencentyun.com", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "daocloud", Name: "DaoCloud 镜像加速器", URL: "https://docker.m.daocloud.io", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "ustc", Name: "中科大镜像源", URL: "https://docker.mirrors.ustc.edu.cn", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "tuna", Name: "清华 TUNA 镜像源", URL: "https://docker.mirror.tuna.tsinghua.edu.cn", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "163", Name: "网易 163 镜像源", URL: "https://hub-mirror.c.163.com", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+		{ID: "huawei", Name: "华为云镜像加速器", URL: "https://swr.cn-southwest-2.myhuaweicloud.com", Enabled: true, IsDefault: false, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, src := range sources {
+		enabled := 0
+		if src.Enabled {
+			enabled = 1
+		}
+		isDefault := 0
+		if src.IsDefault {
+			isDefault = 1
+		}
+		_, err := s.db.Raw().Exec(`
+			INSERT OR IGNORE INTO docker_sources (id, name, url, enabled, is_default, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			src.ID, src.Name, src.URL, enabled, isDefault, src.CreatedAt, src.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("insert docker source %s: %w", src.ID, err)
+		}
+	}
+	return nil
+}
+
+// ListSources 返回所有镜像源。
+func (s *DockerSourceStore) ListSources() []*DockerSource {
+	rows, err := s.db.Raw().Query(`SELECT id, name, url, enabled, is_default, created_at, updated_at FROM docker_sources ORDER BY is_default DESC, name`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var sources []*DockerSource
+	for rows.Next() {
+		var src DockerSource
+		var enabled, isDefault int
+		if err := rows.Scan(&src.ID, &src.Name, &src.URL, &enabled, &isDefault, &src.CreatedAt, &src.UpdatedAt); err != nil {
+			continue
+		}
+		src.Enabled = enabled != 0
+		src.IsDefault = isDefault != 0
+		sources = append(sources, &src)
+	}
+	return sources
+}
+
+// AddSource 新增镜像源。
+func (s *DockerSourceStore) AddSource(src *DockerSource) error {
+	if src.ID == "" {
+		return fmt.Errorf("source id is required")
+	}
+	now := time.Now().Unix()
+	enabled := 0
+	if src.Enabled {
+		enabled = 1
+	}
+	_, err := s.db.Raw().Exec(`
+		INSERT INTO docker_sources (id, name, url, enabled, is_default, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 0, ?, ?)`,
+		src.ID, src.Name, src.URL, enabled, now, now)
+	return err
+}
+
+// UpdateSource 更新镜像源。
+func (s *DockerSourceStore) UpdateSource(src *DockerSource) error {
+	now := time.Now().Unix()
+	enabled := 0
+	if src.Enabled {
+		enabled = 1
+	}
+	_, err := s.db.Raw().Exec(`
+		UPDATE docker_sources SET name=?, url=?, enabled=?, updated_at=?
+		WHERE id=?`,
+		src.Name, src.URL, enabled, now, src.ID)
+	return err
+}
+
+// DeleteSource 删除镜像源。
+func (s *DockerSourceStore) DeleteSource(id string) error {
+	_, err := s.db.Raw().Exec(`DELETE FROM docker_sources WHERE id = ?`, id)
+	return err
+}
+
+// SetDefaultSource 设置默认镜像源。
+func (s *DockerSourceStore) SetDefaultSource(id string) error {
+	_, _ = s.db.Raw().Exec(`UPDATE docker_sources SET is_default = 0`)
+	_, err := s.db.Raw().Exec(`UPDATE docker_sources SET is_default = 1, enabled = 1 WHERE id = ?`, id)
 	return err
 }

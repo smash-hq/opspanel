@@ -8,10 +8,10 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs } from './api.js';
 import { connectWS } from './ws.js';
 
-const { reactive, ref, computed, onMounted, onUnmounted, nextTick } = window.Vue;
+const { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } = window.Vue;
 
 /**
  * 创建空的表单模板。
@@ -264,6 +264,91 @@ export function setupStore() {
     const langInstallName = ref('');
     const langInstallStatus = ref('');
 
+    // ─── 文件管理 ───
+    const files = ref([]);
+    const currentFilePath = ref('/');
+    const filesLoading = ref(false);
+    const fileSearchQuery = ref('');
+    const fileSudoWarning = ref(false);
+    const filePreviewVisible = ref(false);
+    const filePreviewData = reactive({ path: '', content: '', size: 0 });
+    const filePreviewLoading = ref(false);
+    const fileDetailVisible = ref(false);
+    const fileDetailData = reactive({ name: '', path: '', is_dir: false, size: 0, mode: '', mod_time: 0 });
+
+    async function loadFiles(path) {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        filesLoading.value = true;
+        try {
+            const targetPath = path || currentFilePath.value;
+            const result = await fetchFiles(selectedServer.value, targetPath);
+            files.value = result.files || [];
+            fileSudoWarning.value = !result.sudo_used;
+            if (path) currentFilePath.value = path;
+        } catch (err) {
+            toastNotify('文件列表加载失败: ' + err.message, true);
+            fileSudoWarning.value = false;
+        } finally {
+            filesLoading.value = false;
+        }
+    }
+
+    function navigateToPath(path) {
+        loadFiles(path);
+    }
+
+    async function openFilePreview(file) {
+        if (!selectedServer.value || file.is_dir) return;
+        filePreviewVisible.value = true;
+        filePreviewLoading.value = true;
+        filePreviewData.path = file.path;
+        filePreviewData.content = '';
+        try {
+            const data = await fetchFilePreview(selectedServer.value, file.path, 100);
+            filePreviewData.content = data.content || '空文件';
+            filePreviewData.size = data.content ? data.content.length : 0;
+        } catch (err) {
+            filePreviewData.content = '读取失败: ' + err.message;
+        } finally {
+            filePreviewLoading.value = false;
+        }
+    }
+
+    function closeFilePreview() {
+        filePreviewVisible.value = false;
+    }
+
+    async function openFileDetail(file) {
+        if (!selectedServer.value) return;
+        fileDetailVisible.value = true;
+        fileDetailData.name = file.name;
+        fileDetailData.path = file.path;
+        fileDetailData.is_dir = file.is_dir;
+        fileDetailData.size = file.size;
+        fileDetailData.mode = file.mode;
+        fileDetailData.mod_time = file.mod_time;
+        try {
+            const info = await fetchFileInfo(selectedServer.value, file.path);
+            Object.assign(fileDetailData, info);
+        } catch (err) {
+            // 使用已有数据
+        }
+    }
+
+    function closeFileDetail() {
+        fileDetailVisible.value = false;
+    }
+
+    async function handleDownloadFile(file) {
+        if (!selectedServer.value) return;
+        try {
+            await downloadFile(selectedServer.value, file.path);
+            toastNotify('下载已开始');
+        } catch (err) {
+            toastNotify('下载失败: ' + err.message, true);
+        }
+    }
+
     async function loadLanguages() {
         try {
             languages.value = await fetchLanguages();
@@ -399,6 +484,257 @@ export function setupStore() {
     function refreshInstallLog() {
         // 重新检测已安装的语言
         detectServerLanguages();
+    }
+
+    // ─── Docker 管理 ───
+    const dockerAvailable = ref(false);
+    const dockerVersion = ref('');
+    const dockerTabEnabled = ref(false);
+    const dockerImages = ref([]);
+    const dockerContainers = ref([]);
+    const dockerLoading = ref(false);
+    const dockerExecVisible = ref(false);
+    const dockerExecData = reactive({ containerId: '', command: '', output: '' });
+    const dockerLogsVisible = ref(false);
+    const dockerLogsData = reactive({ containerId: '', logs: '' });
+    const dockerSubTab = ref('images');
+    const dockerPullInput = ref('');
+    const dockerShowAll = ref(true);
+    // Docker 镜像源管理
+    const dockerSources = ref([]);
+    const dockerSourceFormVisible = ref(false);
+    const dockerSourceForm = reactive({ id: '', name: '', url: '', enabled: true });
+    const dockerSourceSaving = ref(false);
+    // 批量操作
+    const selectedImages = ref([]);
+    const selectedContainers = ref([]);
+    const batchActionLoading = ref(false);
+
+    async function checkDockerEnv() {
+        if (!selectedServer.value || selectedServer.value === 'srv_local') {
+            dockerAvailable.value = false;
+            dockerTabEnabled.value = false;
+            return;
+        }
+        try {
+            const data = await checkDocker(selectedServer.value);
+            dockerAvailable.value = data.available;
+            dockerVersion.value = data.version || '';
+            dockerTabEnabled.value = data.available;
+        } catch {
+            dockerAvailable.value = false;
+            dockerTabEnabled.value = false;
+        }
+    }
+
+    async function loadDockerImages() {
+        if (!selectedServer.value) return;
+        dockerLoading.value = true;
+        try {
+            dockerImages.value = await fetchDockerImages(selectedServer.value);
+        } catch (err) {
+            toastNotify('镜像列表加载失败: ' + err.message, true);
+        } finally {
+            dockerLoading.value = false;
+        }
+    }
+
+    async function loadDockerContainers(all) {
+        if (!selectedServer.value) return;
+        dockerLoading.value = true;
+        try {
+            dockerContainers.value = await fetchDockerContainers(selectedServer.value, all);
+        } catch (err) {
+            toastNotify('容器列表加载失败: ' + err.message, true);
+        } finally {
+            dockerLoading.value = false;
+        }
+    }
+
+    async function dockerPullImage(image) {
+        if (!selectedServer.value) return;
+        try {
+            await pullDockerImage(selectedServer.value, image);
+            toastNotify('正在拉取镜像: ' + image);
+            setTimeout(() => loadDockerImages(), 5000);
+        } catch (err) {
+            toastNotify('拉取失败: ' + err.message, true);
+        }
+    }
+
+    async function dockerRemoveImage(id) {
+        if (!selectedServer.value) return;
+        if (!confirm('确定删除镜像 ' + id + ' 吗？')) return;
+        try {
+            await removeDockerImage(selectedServer.value, id);
+            toastNotify('镜像已删除');
+            loadDockerImages();
+        } catch (err) {
+            toastNotify('删除失败: ' + err.message, true);
+        }
+    }
+
+    async function dockerContainerAction(id, action) {
+        if (!selectedServer.value) return;
+        try {
+            await dockerContainerAction(selectedServer.value, id, action);
+            toastNotify('操作成功: ' + action);
+            loadDockerContainers(true);
+        } catch (err) {
+            toastNotify('操作失败: ' + err.message, true);
+        }
+    }
+
+    async function dockerRemoveContainer(id) {
+        if (!selectedServer.value) return;
+        if (!confirm('确定删除容器 ' + id + ' 吗？')) return;
+        try {
+            await removeDockerContainer(selectedServer.value, id);
+            toastNotify('容器已删除');
+            loadDockerContainers(true);
+        } catch (err) {
+            toastNotify('删除失败: ' + err.message, true);
+        }
+    }
+
+    async function dockerExecCommand(containerId, command) {
+        if (!selectedServer.value) return;
+        dockerExecVisible.value = true;
+        dockerExecData.containerId = containerId;
+        dockerExecData.command = command;
+        dockerExecData.output = '执行中...';
+        try {
+            const data = await dockerExec(selectedServer.value, containerId, command);
+            dockerExecData.output = data.output || '无输出';
+        } catch (err) {
+            dockerExecData.output = '执行失败: ' + err.message;
+        }
+    }
+
+    async function dockerViewLogs(containerId) {
+        if (!selectedServer.value) return;
+        dockerLogsVisible.value = true;
+        dockerLogsData.containerId = containerId;
+        dockerLogsData.logs = '加载中...';
+        try {
+            const data = await fetchDockerLogs(selectedServer.value, containerId, 100);
+            dockerLogsData.logs = data.logs || '暂无日志';
+        } catch (err) {
+            dockerLogsData.logs = '获取日志失败: ' + err.message;
+        }
+    }
+
+    // ─── Docker 镜像源管理 ───
+    async function loadDockerSources() {
+        try {
+            dockerSources.value = await fetchDockerSources();
+        } catch (err) {
+            toastNotify('镜像源列表加载失败', true);
+        }
+    }
+
+    function openDockerSourceForm(src) {
+        dockerSourceFormVisible.value = true;
+        if (src) {
+            Object.assign(dockerSourceForm, { id: src.id, name: src.name, url: src.url, enabled: src.enabled });
+        } else {
+            Object.assign(dockerSourceForm, { id: '', name: '', url: '', enabled: true });
+        }
+    }
+
+    function closeDockerSourceForm() {
+        dockerSourceFormVisible.value = false;
+    }
+
+    async function saveDockerSource() {
+        if (!dockerSourceForm.name.trim() || !dockerSourceForm.url.trim()) {
+            toastNotify('名称和地址不能为空', true);
+            return;
+        }
+        dockerSourceSaving.value = true;
+        try {
+            if (dockerSourceForm.id) {
+                await updateDockerSource(dockerSourceForm.id, dockerSourceForm);
+            } else {
+                dockerSourceForm.id = 'src_' + Date.now();
+                await createDockerSource(dockerSourceForm);
+            }
+            await loadDockerSources();
+            dockerSourceFormVisible.value = null;
+            dockerSourceFormVisible.value = false;
+            toastNotify(dockerSourceForm.id ? '镜像源已更新' : '镜像源已添加');
+        } catch (err) {
+            toastNotify('保存失败: ' + err.message, true);
+        } finally {
+            dockerSourceSaving.value = false;
+        }
+    }
+
+    async function removeDockerSource(id) {
+        if (!confirm('确定删除此镜像源吗？')) return;
+        try {
+            await deleteDockerSource(id);
+            await loadDockerSources();
+            toastNotify('镜像源已删除');
+        } catch (err) {
+            toastNotify('删除失败: ' + err.message, true);
+        }
+    }
+
+    async function setDefaultSource(id) {
+        try {
+            await setDefaultDockerSource(id);
+            await loadDockerSources();
+            toastNotify('已设为默认镜像源');
+        } catch (err) {
+            toastNotify('设置失败: ' + err.message, true);
+        }
+    }
+
+    // ─── Docker 批量操作 ───
+    function toggleImageSelection(id) {
+        const idx = selectedImages.value.indexOf(id);
+        if (idx >= 0) selectedImages.value.splice(idx, 1);
+        else selectedImages.value.push(id);
+    }
+
+    function toggleContainerSelection(id) {
+        const idx = selectedContainers.value.indexOf(id);
+        if (idx >= 0) selectedContainers.value.splice(idx, 1);
+        else selectedContainers.value.push(id);
+    }
+
+    async function batchDeleteImages() {
+        if (!selectedImages.value.length) { toastNotify('请选择要删除的镜像', true); return; }
+        if (!confirm(`确定删除选中的 ${selectedImages.value.length} 个镜像吗？`)) return;
+        batchActionLoading.value = true;
+        try {
+            const result = await batchDeleteDockerImages(selectedServer.value, selectedImages.value);
+            toastNotify(`已删除 ${result.deleted?.length || 0} 个镜像${result.errors?.length ? ', ' + result.errors.length + ' 个失败' : ''}`);
+            selectedImages.value = [];
+            loadDockerImages();
+        } catch (err) {
+            toastNotify('批量删除失败: ' + err.message, true);
+        } finally {
+            batchActionLoading.value = false;
+        }
+    }
+
+    async function batchContainerAction(action) {
+        if (!selectedContainers.value.length) { toastNotify('请选择要操作的容器', true); return; }
+        const actionName = action === 'stop' ? '停止' : action === 'start' ? '启动' : action === 'restart' ? '重启' : action === 'rm' ? '删除' : action;
+        if (!confirm(`确定对选中的 ${selectedContainers.value.length} 个容器执行"${actionName}"操作吗？`)) return;
+        batchActionLoading.value = true;
+        try {
+            const result = await batchDockerContainerAction(selectedServer.value, selectedContainers.value, action);
+            toastNotify(`已处理 ${result.done?.length || 0} 个容器${result.errors?.length ? ', ' + result.errors.length + ' 个失败' : ''}`);
+            selectedContainers.value = [];
+            loadDockerContainers(true);
+        } catch (err) {
+            toastNotify('批量操作失败: ' + err.message, true);
+        } finally {
+            batchActionLoading.value = false;
+        }
     }
 
     // ─── 网站图标 ───
@@ -639,6 +975,7 @@ export function setupStore() {
         fetchServerInfo(id);
         reconnectWS();
         loadSoftwareStatus(id);
+        checkDockerEnv();
     }
 
     /** 刷新当前选中服务器的数据。 */
@@ -828,6 +1165,40 @@ export function setupStore() {
         return softwareCatalog.value.filter(p => p.category === softwareCategory.value);
     });
 
+    // 文件管理辅助函数
+    const filteredFiles = computed(() => {
+        if (!fileSearchQuery.value) return files.value;
+        const q = fileSearchQuery.value.toLowerCase();
+        return files.value.filter(f => f.name.toLowerCase().includes(q));
+    });
+
+    const filteredDirs = computed(() => filteredFiles.value.filter(f => f.is_dir));
+    const filteredRegFiles = computed(() => filteredFiles.value.filter(f => !f.is_dir));
+
+    function getFileIcon(name) {
+        const ext = name.split('.').pop()?.toLowerCase();
+        const icons = {
+            js: '📜', ts: '📜', py: '🐍', go: '🐹', java: '☕', rb: '💎',
+            php: '🐘', rs: '🦀', c: '⚙️', cpp: '⚙️', h: '⚙️',
+            json: '📋', yaml: '📋', yml: '📋', toml: '📋',
+            md: '📝', txt: '📄', log: '📄', csv: '📊',
+            html: '🌐', css: '🎨', xml: '📋',
+            sh: '⌨️', bash: '⌨️', zsh: '⌨️',
+            tar: '📦', gz: '📦', zip: '📦', rar: '📦',
+            jpg: '🖼️', png: '🖼️', gif: '🖼️', svg: '🖼️',
+            mp4: '🎬', mp3: '🎵', wav: '🎵',
+            exe: '⚡', bin: '⚡', deb: '📦', rpm: '📦',
+        };
+        return icons[ext] || '📄';
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+    }
+
     /** 加载软件目录。 */
     async function loadSoftwareCatalog() {
         try {
@@ -996,6 +1367,16 @@ export function setupStore() {
         window.addEventListener('keydown', handleKeydown);
     });
 
+    // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接）
+    watch(activeTab, (tab) => {
+        const paused = tab !== 'system';
+        fetch('/api/v1/settings/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paused }),
+        }).catch(() => {});
+    });
+
     onUnmounted(() => {
         clearTimeout(toastTimer);
         if (wsController) wsController.disconnect();
@@ -1060,8 +1441,28 @@ export function setupStore() {
         detectedLanguages, langDetectLoading,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
         loadLanguages, openLangForm, closeLangForm, saveLanguage,
-        deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang,
+        deleteLanguage: handleDeleteLanguage, detectServerLanguages, installLang, onLangSourceChange,
         viewInstallLog, refreshInstallLog,
+        // 文件管理
+        files, currentFilePath, filesLoading, fileSearchQuery, fileSudoWarning,
+        filePreviewVisible, filePreviewData, filePreviewLoading,
+        fileDetailVisible, fileDetailData,
+        loadFiles, navigateToPath, openFilePreview, closeFilePreview,
+        openFileDetail, closeFileDetail, downloadFile: handleDownloadFile,
+        filteredFiles, filteredDirs, filteredRegFiles, getFileIcon, formatFileSize,
+        // Docker 管理
+        dockerAvailable, dockerVersion, dockerTabEnabled,
+        dockerImages, dockerContainers, dockerLoading,
+        dockerExecVisible, dockerExecData, dockerLogsVisible, dockerLogsData,
+        dockerSubTab, dockerPullInput, dockerShowAll,
+        dockerSources, dockerSourceFormVisible, dockerSourceForm, dockerSourceSaving,
+        selectedImages, selectedContainers, batchActionLoading,
+        checkDockerEnv, loadDockerImages, loadDockerContainers,
+        dockerPullImage, dockerRemoveImage, dockerContainerAction,
+        dockerRemoveContainer, dockerExecCommand, dockerViewLogs,
+        loadDockerSources, openDockerSourceForm, closeDockerSourceForm, saveDockerSource,
+        removeDockerSource, setDefaultSource,
+        toggleImageSelection, toggleContainerSelection, batchDeleteImages, batchContainerAction,
         nextTick,
     };
 }

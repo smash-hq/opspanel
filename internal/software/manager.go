@@ -135,7 +135,7 @@ func (m *Manager) Install(srv *storage.Server, pkg *Package) error {
 	defer client.Close()
 
 	for _, cmd := range cmds {
-		out := m.remote.RunOne(client, cmd)
+		out := m.remote.RunWithSudo(client, cmd)
 		m.log.Infow("install cmd", "pkg", pkg.ID, "cmd", cmd, "out", out)
 	}
 
@@ -161,7 +161,7 @@ func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
 	defer client.Close()
 
 	for _, cmd := range cmds {
-		out := m.remote.RunOne(client, cmd)
+		out := m.remote.RunWithSudo(client, cmd)
 		m.log.Infow("uninstall cmd", "pkg", pkg.ID, "cmd", cmd, "out", out)
 	}
 
@@ -192,7 +192,7 @@ func (m *Manager) ServiceControl(srv *storage.Server, pkg *Package, action strin
 		return fmt.Errorf("service action %s not supported for %s", action, pkg.ID)
 	}
 
-	out := m.remote.RunOne(client, cmd)
+	out := m.remote.RunWithSudo(client, cmd)
 	m.log.Infow("service control", "pkg", pkg.ID, "action", action, "out", out)
 	return nil
 }

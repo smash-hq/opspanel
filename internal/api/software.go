@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/smash-hq/server-management/internal/host"
 	"github.com/smash-hq/server-management/internal/logger"
@@ -64,6 +65,28 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	// 镜像源管理
 	mux.HandleFunc("/api/v1/software/sources", h.handleSources)            // GET 列表 / POST 新增
 	mux.HandleFunc("/api/v1/software/sources/", h.handleSourceDetail)     // PUT 更新 / DELETE 删除
+
+	// 文件管理
+	mux.HandleFunc("/api/v1/files", h.handleFiles)                         // GET ?server=&path= 列出目录
+	mux.HandleFunc("/api/v1/files/info", h.handleFileInfo)                 // GET ?server=&path= 文件详情
+	mux.HandleFunc("/api/v1/files/preview", h.handleFilePreview)           // GET ?server=&path=&lines= 文件预览
+	mux.HandleFunc("/api/v1/files/download", h.handleFileDownload)         // GET ?server=&path= 下载文件
+
+	// Docker 管理
+	mux.HandleFunc("/api/v1/docker", h.handleDockerCheck)                  // GET ?server= Docker 环境检测
+	mux.HandleFunc("/api/v1/docker/images", h.handleDockerImages)          // GET ?server= 镜像列表
+	mux.HandleFunc("/api/v1/docker/images/pull", h.handleDockerPull)       // POST 拉取镜像
+	mux.HandleFunc("/api/v1/docker/images/", h.handleDockerImageDetail)    // DELETE 删除镜像
+	mux.HandleFunc("/api/v1/docker/images/batch-delete", h.handleBatchDeleteImages)  // POST 批量删除镜像
+	mux.HandleFunc("/api/v1/docker/containers", h.handleDockerContainers)  // GET ?server=&all= 容器列表
+	mux.HandleFunc("/api/v1/docker/containers/", h.handleDockerContainer)  // POST 操作/DELETE 删除
+	mux.HandleFunc("/api/v1/docker/containers/batch", h.handleBatchContainerAction)   // POST 批量容器操作
+	mux.HandleFunc("/api/v1/docker/exec", h.handleDockerExec)              // POST 执行命令
+	mux.HandleFunc("/api/v1/docker/logs", h.handleDockerLogs)              // GET ?server=&id=&lines= 容器日志
+
+	// Docker 镜像源管理
+	mux.HandleFunc("/api/v1/docker-sources", h.handleDockerSources)        // GET 列表 / POST 新增
+	mux.HandleFunc("/api/v1/docker-sources/", h.handleDockerSourceDetail)  // PUT 更新 / DELETE 删除 / POST 设为默认
 }
 
 // --- 软件目录与安装 ---
@@ -384,6 +407,478 @@ func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		"server":  serverID,
 		"log":     log,
 	})
+}
+
+// --- Docker 管理 ---
+
+// handleDockerCheck: GET ?server=<id> 检测 Docker 环境。
+func (h *SoftwareHandler) handleDockerCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	available, version := h.remoteCollector.CheckDocker(toRemoteServer(srv))
+	OK(w, map[string]any{"available": available, "version": version})
+}
+
+// handleDockerImages: GET ?server=<id> 列出镜像。
+func (h *SoftwareHandler) handleDockerImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	images, err := h.remoteCollector.ListImages(toRemoteServer(srv))
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, 500, "failed to list images: "+err.Error())
+		return
+	}
+	OK(w, images)
+}
+
+// handleDockerPull: POST {"server_id": "...", "image": "..."} 拉取镜像。
+func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		ServerID string `json:"server_id"`
+		Image    string `json:"image"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	srv, ok := h.store.Get(req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	go func() {
+		if err := h.remoteCollector.PullImage(toRemoteServer(srv), req.Image); err != nil {
+			h.log.Errorw("docker pull failed", "image", req.Image, "error", err)
+		}
+	}()
+	OK(w, map[string]string{"status": "pulling", "image": req.Image})
+}
+
+// handleDockerImageDetail: DELETE /api/v1/docker/images/{id}?server=<id> 删除镜像。
+func (h *SoftwareHandler) handleDockerImageDetail(w http.ResponseWriter, r *http.Request) {
+	id := trimPrefix(r.URL.Path, "/api/v1/docker/images/")
+	if id == "" {
+		Fail(w, http.StatusBadRequest, 400, "image id required")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	if err := h.remoteCollector.RemoveImage(toRemoteServer(srv), id); err != nil {
+		Fail(w, http.StatusInternalServerError, 500, "failed to remove image: "+err.Error())
+		return
+	}
+	OK(w, map[string]string{"deleted": id})
+}
+
+// handleDockerContainers: GET ?server=<id>&all=<bool> 列出容器。
+func (h *SoftwareHandler) handleDockerContainers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	all := r.URL.Query().Get("all") == "true"
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	containers, err := h.remoteCollector.ListContainers(toRemoteServer(srv), all)
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, 500, "failed to list containers: "+err.Error())
+		return
+	}
+	OK(w, containers)
+}
+
+// handleDockerContainer: POST 操作容器 / DELETE 删除容器。
+func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/docker/containers/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 {
+		Fail(w, http.StatusBadRequest, 400, "container id and action required")
+		return
+	}
+	id, action := parts[0], parts[1]
+	serverID := r.URL.Query().Get("server")
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		if action != "start" && action != "stop" && action != "restart" {
+			Fail(w, http.StatusBadRequest, 400, "invalid action")
+			return
+		}
+		if err := h.remoteCollector.ContainerAction(toRemoteServer(srv), id, action); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
+			return
+		}
+		OK(w, map[string]string{"status": "ok", "action": action})
+
+	case http.MethodDelete:
+		if err := h.remoteCollector.RemoveContainer(toRemoteServer(srv), id); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed to remove container: "+err.Error())
+			return
+		}
+		OK(w, map[string]string{"deleted": id})
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// handleDockerExec: POST {"server_id": "...", "container_id": "...", "command": "..."} 执行命令。
+func (h *SoftwareHandler) handleDockerExec(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		ServerID  string `json:"server_id"`
+		Container string `json:"container_id"`
+		Command   string `json:"command"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	srv, ok := h.store.Get(req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	output, err := h.remoteCollector.ExecInContainer(toRemoteServer(srv), req.Container, req.Command)
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, 500, "exec failed: "+err.Error())
+		return
+	}
+	OK(w, map[string]string{"output": output})
+}
+
+// handleDockerLogs: GET ?server=&id=&lines= 容器日志。
+func (h *SoftwareHandler) handleDockerLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	id := r.URL.Query().Get("id")
+	lines := 100
+	if l := r.URL.Query().Get("lines"); l != "" {
+		fmt.Sscanf(l, "%d", &lines)
+	}
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	logs, err := h.remoteCollector.ContainerLogs(toRemoteServer(srv), id, lines)
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, 500, "failed to get logs: "+err.Error())
+		return
+	}
+	OK(w, map[string]string{"id": id, "logs": logs})
+}
+
+// --- 文件管理 ---
+
+// handleFiles: GET ?server=<id>&path=<path> 列出目录内容。
+func (h *SoftwareHandler) handleFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server")
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "/"
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	result, err := h.remoteCollector.ListFiles(toRemoteServer(srv), path)
+	if err != nil {
+		h.log.Errorw("list files failed", "server", serverID, "path", path, "error", err)
+		Fail(w, http.StatusInternalServerError, 500, "failed to list files: "+err.Error())
+		return
+	}
+
+	OK(w, result)
+}
+
+// handleFileInfo: GET ?server=<id>&path=<path> 获取文件详情。
+func (h *SoftwareHandler) handleFileInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server")
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		Fail(w, http.StatusBadRequest, 400, "path is required")
+		return
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	info, err := h.remoteCollector.GetFileInfo(toRemoteServer(srv), path)
+	if err != nil {
+		h.log.Errorw("get file info failed", "server", serverID, "path", path, "error", err)
+		Fail(w, http.StatusInternalServerError, 500, "failed to get file info: "+err.Error())
+		return
+	}
+
+	OK(w, info)
+}
+
+// handleFilePreview: GET ?server=<id>&path=<path>&lines=<n> 读取文件内容用于预览。
+func (h *SoftwareHandler) handleFilePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server")
+	path := r.URL.Query().Get("path")
+	linesStr := r.URL.Query().Get("lines")
+	lines := 100
+	if linesStr != "" {
+		fmt.Sscanf(linesStr, "%d", &lines)
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	content, err := h.remoteCollector.ReadFileContent(toRemoteServer(srv), path, lines)
+	if err != nil {
+		h.log.Errorw("read file failed", "server", serverID, "path", path, "error", err)
+		Fail(w, http.StatusInternalServerError, 500, "failed to read file: "+err.Error())
+		return
+	}
+
+	OK(w, map[string]string{"path": path, "content": content})
+}
+
+// handleFileDownload: GET ?server=<id>&path=<path> 下载文件。
+func (h *SoftwareHandler) handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server")
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		Fail(w, http.StatusBadRequest, 400, "path is required")
+		return
+	}
+
+	srv, ok := h.store.Get(serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+
+	data, filename, err := h.remoteCollector.DownloadFile(toRemoteServer(srv), path)
+	if err != nil {
+		h.log.Errorw("download file failed", "server", serverID, "path", path, "error", err)
+		Fail(w, http.StatusInternalServerError, 500, "failed to download file: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
+}
+
+// --- Docker 批量操作 ---
+
+// handleBatchDeleteImages: POST {"server_id": "...", "ids": [...]} 批量删除镜像。
+func (h *SoftwareHandler) handleBatchDeleteImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		ServerID string   `json:"server_id"`
+		IDs      []string `json:"ids"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	srv, ok := h.store.Get(req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	var deleted []string
+	var errors []string
+	for _, id := range req.IDs {
+		if err := h.remoteCollector.RemoveImage(toRemoteServer(srv), id); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %s", id, err.Error()))
+		} else {
+			deleted = append(deleted, id)
+		}
+	}
+	OK(w, map[string]any{"deleted": deleted, "errors": errors})
+}
+
+// handleBatchContainerAction: POST {"server_id": "...", "ids": [...], "action": "stop/start/restart"} 批量容器操作。
+func (h *SoftwareHandler) handleBatchContainerAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		ServerID string   `json:"server_id"`
+		IDs      []string `json:"ids"`
+		Action   string   `json:"action"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	if req.Action != "stop" && req.Action != "start" && req.Action != "restart" && req.Action != "rm" {
+		Fail(w, http.StatusBadRequest, 400, "invalid action")
+		return
+	}
+	srv, ok := h.store.Get(req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	var done []string
+	var errors []string
+	for _, id := range req.IDs {
+		var err error
+		if req.Action == "rm" {
+			err = h.remoteCollector.RemoveContainer(toRemoteServer(srv), id)
+		} else {
+			err = h.remoteCollector.ContainerAction(toRemoteServer(srv), id, req.Action)
+		}
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %s", id, err.Error()))
+		} else {
+			done = append(done, id)
+		}
+	}
+	OK(w, map[string]any{"done": done, "errors": errors})
+}
+
+// --- Docker 镜像源管理 ---
+
+// handleDockerSources: GET 列表 / POST 新增。
+func (h *SoftwareHandler) handleDockerSources(w http.ResponseWriter, r *http.Request) {
+	sourceStore := storage.NewDockerSourceStore(h.db)
+	switch r.Method {
+	case http.MethodGet:
+		OK(w, sourceStore.ListSources())
+
+	case http.MethodPost:
+		var src storage.DockerSource
+		if err := decodeBody(r, &src); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		if src.ID == "" || src.Name == "" || src.URL == "" {
+			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
+			return
+		}
+		if err := sourceStore.AddSource(&src); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
+			return
+		}
+		OK(w, src)
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
+}
+
+// handleDockerSourceDetail: PUT 更新 / DELETE 删除 / POST 设为默认。
+func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *http.Request) {
+	sourceStore := storage.NewDockerSourceStore(h.db)
+	id := trimPrefix(r.URL.Path, "/api/v1/docker-sources/")
+	if id == "" {
+		Fail(w, http.StatusBadRequest, 400, "source id required")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		var src storage.DockerSource
+		if err := decodeBody(r, &src); err != nil {
+			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			return
+		}
+		src.ID = id
+		if err := sourceStore.UpdateSource(&src); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
+			return
+		}
+		OK(w, src)
+
+	case http.MethodDelete:
+		if err := sourceStore.DeleteSource(id); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
+			return
+		}
+		OK(w, map[string]string{"deleted": id})
+
+	case http.MethodPost:
+		// 设为默认
+		if err := sourceStore.SetDefaultSource(id); err != nil {
+			Fail(w, http.StatusInternalServerError, 500, "failed to set default")
+			return
+		}
+		OK(w, map[string]string{"default": id})
+
+	default:
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+	}
 }
 
 // --- 进程管理 ---

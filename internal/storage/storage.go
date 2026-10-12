@@ -103,6 +103,16 @@ func (d *DB) migrate() error {
 		updated_at    INTEGER NOT NULL DEFAULT 0
 	);
 
+	CREATE TABLE IF NOT EXISTS docker_sources (
+		id          TEXT PRIMARY KEY,
+		name        TEXT NOT NULL,
+		url         TEXT NOT NULL,
+		enabled     INTEGER NOT NULL DEFAULT 1,
+		is_default  INTEGER NOT NULL DEFAULT 0,
+		created_at  INTEGER NOT NULL DEFAULT 0,
+		updated_at  INTEGER NOT NULL DEFAULT 0
+	);
+
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL DEFAULT ''
