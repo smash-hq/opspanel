@@ -4,6 +4,7 @@ package remote
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -104,7 +105,12 @@ func (c *sshConn) RunOnce(cmd string) (string, error) {
 
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
-		c.broken.Store(true) // 连接异常时标记断开，池会在下次获取时重建
+		// 命令非零退出（ExitError）是正常业务结果（如 grep 无匹配、sudo -n 免密失败），
+		// 只有连接级错误（EOF/网络断开等）才标记断开，由连接池重建
+		var exitErr *ssh.ExitError
+		if !errors.As(err, &exitErr) {
+			c.broken.Store(true)
+		}
 		return string(out), err
 	}
 	return strings.TrimSpace(string(out)), nil
@@ -662,8 +668,9 @@ func (rc *RemoteCollector) CheckDocker(srv *Server) (bool, string) {
 	}
 	defer rc.Release(srv.ID)
 
-	// 检查 docker 命令是否存在
-	out := rc.RunWithSudo(conn, "docker --version 2>/dev/null")
+	// bash -lc 加载登录 shell 的 PATH（兼容 snap 安装在 /snap/bin 等非标准路径），
+	// 失败再由 RunWithSudo 回退 sudo -n 尝试
+	out := rc.RunWithSudo(conn, "bash -lc 'docker --version' 2>/dev/null")
 	if out == "" {
 		return false, ""
 	}

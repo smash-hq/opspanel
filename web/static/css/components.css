@@ -1264,18 +1264,20 @@
 }
 
 /* ─── 软件状态卡片（表格式对齐）─── */
-/* ─── 已安装软件表格 ─── */
+/* ─── 已安装软件/语言表格（软件管理与语言环境共用同一套样式） ─── */
 .sw-installed-table {
     border: 1px solid var(--card-border, #e2e8f0);
     border-radius: 10px;
     overflow: hidden;
 }
 
+/* 列：名称自适应 | 版本 | 状态 | 服务控制 | 操作 */
 .sw-installed-header,
 .sw-installed-row {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 70px 120px 70px;
+    grid-template-columns: minmax(0, 1fr) 130px 92px 148px 92px;
     align-items: center;
+    gap: 12px;
     padding: 10px 16px;
 }
 
@@ -1294,10 +1296,16 @@
     transition: background 0.15s;
 }
 
-/* 语言环境表格（4 列，无服务控制） */
+/* 语言环境表格（无服务控制列，其余列样式一致） */
 .sw-installed-table.lang-table-4col .sw-installed-header,
 .sw-installed-table.lang-table-4col .sw-installed-row {
-    grid-template-columns: 2fr 1fr 80px 90px;
+    grid-template-columns: minmax(0, 1fr) 130px 92px 92px;
+}
+
+/* 表头对齐：中间列居中，与行内容对齐 */
+.sw-installed-header .sw-col-version,
+.sw-installed-header .sw-col-status {
+    text-align: center;
 }
 
 .sw-installed-row:hover {
@@ -1311,15 +1319,43 @@
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-primary, #0f172a);
+    min-width: 0;
+}
+
+.sw-col-name strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sw-row-icon {
-    font-size: 1.4rem;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    background: var(--content-bg, #f1f5f9);
+    border-radius: 8px;
 }
 
 .sw-col-version {
-    font-size: 0.85rem;
+    min-width: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
     color: var(--text-secondary, #475569);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 状态徽章列居中，与表头对齐 */
+.sw-col-status {
+    display: flex;
+    justify-content: center;
 }
 
 .sw-status-badge {
@@ -1384,6 +1420,28 @@
 .sw-col-actions {
     display: flex;
     justify-content: flex-end;
+}
+
+/* ─── 已安装表格响应式：窄屏收起表头，行内容改为两列流式排布 ─── */
+@media (max-width: 720px) {
+    .sw-installed-header {
+        display: none;
+    }
+
+    .sw-installed-row,
+    .sw-installed-table.lang-table-4col .sw-installed-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 16px;
+        padding: 14px 16px;
+    }
+
+    .sw-col-name {
+        grid-column: 1 / -1;
+    }
+
+    .sw-col-actions {
+        justify-content: flex-start;
+    }
 }
 
 /* ─── 操作按钮（统一规格） ─── */
@@ -2734,17 +2792,12 @@
     box-shadow: 0 2px 4px rgba(239, 68, 68, 0.15);
 }
 
-/* ─── 检测到的语言 ─── */
-.lang-detect-toolbar {
+/* ─── Tab 顶部刷新工具栏（软件管理 / 语言环境共用） ─── */
+.sw-tab-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 16px;
-}
-
-.lang-detect-toolbar h3 {
-    font-size: 1rem;
-    font-weight: 600;
 }
 
 /* ─── 已检测语言环境（表格式）─── */

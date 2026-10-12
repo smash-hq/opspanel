@@ -297,7 +297,7 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; currentFilePath = '/'; loadFiles('/')">文件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
-                    <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="dockerTabEnabled && (activeTab = 'docker', checkDockerEnv(), loadDockerImages(), loadDockerContainers(true), loadServerMirror())" :title="dockerTabEnabled ? '' : '暂无 Docker 环境'">Docker</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="onDockerTabClick()" :title="dockerTabEnabled ? '' : '未检测到 Docker 环境，点击重新检测'">Docker</button>
                     <button class="bc-tab disabled" title="即将推出">集群管理</button>
                     <button class="bc-tab disabled" title="即将推出">安全</button>
                     <button class="bc-tab disabled" title="即将推出">定时任务</button>
@@ -427,6 +427,9 @@
 
                 <!-- 软件管理 Tab -->
                 <div v-if="activeTab === 'software'" class="node-tab-content">
+                    <div class="sw-tab-toolbar">
+                        <button class="toolbar-button" @click="loadSoftwareStatus(selectedServer)" :disabled="softwareLoading">{{ softwareLoading ? '查询中...' : '↻ 刷新状态' }}</button>
+                    </div>
                     <!-- 已安装软件 -->
                     <div class="sw-section" v-if="softwareStatuses.filter(s => s.installed).length">
                         <h4>已安装软件（{{ softwareStatuses.filter(s => s.installed).length }}）</h4>
@@ -504,9 +507,8 @@
 
                 <!-- 语言环境 Tab -->
                 <div v-if="activeTab === 'languages'" class="node-tab-content">
-                    <div class="lang-detect-toolbar">
-                        <h3>语言环境</h3>
-                        <button class="toolbar-button" @click="detectServerLanguages()" :disabled="langDetectLoading">↻ 刷新检测</button>
+                    <div class="sw-tab-toolbar">
+                        <button class="toolbar-button" @click="detectServerLanguages()" :disabled="langDetectLoading">{{ langDetectLoading ? '检测中...' : '↻ 刷新检测' }}</button>
                     </div>
                     <div v-if="langDetectLoading" class="loading-state" style="padding:20px;">检测中...</div>
                     <div v-else-if="!detectedLanguages.length" class="list-empty" style="padding:40px;">
@@ -516,7 +518,7 @@
                     <template v-else>
                         <!-- 已安装语言 -->
                         <div class="sw-section" v-if="detectedLanguages.filter(l => l.status === 'installed').length">
-                            <h4>已安装（{{ detectedLanguages.filter(l => l.status === 'installed').length }}）</h4>
+                            <h4>已安装语言（{{ detectedLanguages.filter(l => l.status === 'installed').length }}）</h4>
                             <div class="sw-installed-table lang-table-4col">
                                 <div class="sw-installed-header">
                                     <span class="sw-col-name">语言</span>

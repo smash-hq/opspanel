@@ -566,6 +566,22 @@ export function setupStore() {
         }
     }
 
+    /** 点击 Docker Tab：已启用则进入并刷新；灰色状态点击则重新检测环境。 */
+    function onDockerTabClick() {
+        if (dockerTabEnabled.value) {
+            activeTab.value = 'docker';
+            checkDockerEnv();
+            loadDockerImages();
+            loadDockerContainers(true);
+            loadServerMirror();
+            return;
+        }
+        // 未检测到环境（灰色）时允许手动重检：服务器可能是后来才安装的 Docker
+        checkDockerEnv().then(() => {
+            if (dockerTabEnabled.value) toastNotify('检测到 Docker 环境，已启用管理');
+        });
+    }
+
     async function loadDockerImages() {
         if (!selectedServer.value) return;
         dockerLoading.value = true;
@@ -1576,7 +1592,7 @@ export function setupStore() {
         dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror, mirrorSelectMode,
         dockerSources, dockerSourceFormVisible, dockerSourceForm, dockerSourceSaving,
         selectedImages, selectedContainers, batchActionLoading,
-        checkDockerEnv, loadDockerImages, loadDockerContainers,
+        checkDockerEnv, onDockerTabClick, loadDockerImages, loadDockerContainers,
         dockerPullImage, dockerRemoveImage, dockerContainerAction,
         dockerRemoveContainer, dockerExecCommand, dockerViewLogs,
         loadDockerSources, openDockerSourceForm, closeDockerSourceForm, saveDockerSource,
