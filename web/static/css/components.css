@@ -1811,27 +1811,35 @@
 
 .package-actions {
     display: flex;
-    gap: 4px;
+    gap: 8px;
 }
 
 .package-actions button {
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--card-border, #e5e7eb);
-    border-radius: 6px;
-    background: transparent;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    background: var(--card-bg, #fff);
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.15s;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .package-actions button:hover {
-    background: var(--content-bg, #f9fafb);
+    background: var(--color-blue-light, #eff6ff);
+    border-color: var(--color-blue, #3b82f6);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.15);
 }
 
 .package-actions button.danger:hover {
     background: var(--color-red-light, #fef2f2);
     border-color: var(--color-red, #ef4444);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.15);
 }
 
 /* ─── 软件包弹窗 ─── */
@@ -2507,31 +2515,38 @@
 
 .lang-actions {
     display: flex;
-    gap: 6px;
-    width: 70px;
+    gap: 8px;
+    width: 80px;
     flex-shrink: 0;
     justify-content: flex-end;
 }
 
 .lang-actions button {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border: 1px solid var(--card-border, #e2e8f0);
-    border-radius: 6px;
-    background: transparent;
+    border-radius: 8px;
+    background: var(--card-bg, #fff);
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.15s;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .lang-actions button:hover {
-    background: var(--content-bg, #f9fafb);
+    background: var(--color-blue-light, #eff6ff);
     border-color: var(--color-blue, #3b82f6);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.15);
 }
 
 .lang-actions button.danger:hover {
     background: var(--color-red-light, #fef2f2);
     border-color: var(--color-red, #ef4444);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.15);
 }
 
 /* ─── 检测到的语言 ─── */
@@ -3058,83 +3073,70 @@
 
 .docker-image-row,
 .docker-container-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 24px 1fr 120px 100px 120px 1fr;
     align-items: center;
     padding: 10px 16px;
-    border-top: 1px solid var(--card-border, #e5e7eb);
+    border-top: 1px solid var(--card-border, #e2e8f0);
     font-size: 0.85rem;
     gap: 12px;
 }
 
-.docker-image-row:first-child,
 .docker-container-row:first-child {
     border-top: none;
 }
 
-.docker-image-row:hover,
 .docker-container-row:hover {
     background: var(--color-blue-bg, #f0f9ff);
 }
 
-.docker-img-repo {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 500;
+.docker-container-row.selected {
+    background: var(--color-blue-light, #eff6ff);
 }
 
-.docker-img-id,
-.docker-ctr-image {
-    width: 100px;
-    flex-shrink: 0;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.75rem;
-    color: var(--text-muted, #94a3b8);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.docker-img-size {
-    width: 80px;
-    flex-shrink: 0;
-    text-align: right;
-    color: var(--text-secondary, #475569);
-}
-
-.docker-img-actions,
-.docker-ctr-actions {
-    width: 120px;
-    flex-shrink: 0;
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
+.batch-check {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--color-blue, #3b82f6);
 }
 
 .docker-ctr-name {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.docker-ctr-image {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .docker-ctr-status {
-    width: 80px;
-    flex-shrink: 0;
     text-align: center;
-    padding: 2px 8px;
-    border-radius: 10px;
+    padding: 3px 10px;
+    border-radius: 12px;
     font-size: 0.7rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .docker-ctr-status.running {
     background: var(--color-green-light, #ecfdf5);
-    color: var(--color-color, #10b981);
+    color: var(--color-green, #10b981);
+}
+
+.docker-ctr-status.restarting {
+    background: var(--color-amber-light, #fffbeb);
+    color: var(--color-amber, #f59e0b);
+    animation: pulse 1.5s infinite;
 }
 
 .docker-ctr-status.exited {
@@ -3142,14 +3144,55 @@
     color: var(--color-red, #ef4444);
 }
 
-.docker-ctr-ports {
-    width: 120px;
-    flex-shrink: 0;
+.docker-ctr-status.paused {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.docker-ctr-time {
     font-size: 0.75rem;
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted, #64748b);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.docker-ctr-ports {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: center;
+}
+
+.docker-ctr-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+
+/* 批量操作栏 */
+.batch-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--color-blue-light, #f0f9ff);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.batch-info {
+    font-size: 0.85rem;
+    color: var(--color-blue, #3b82f6);
+    font-weight: 500;
+    margin-right: auto;
 }
 
 /* Disabled breadcrumb tab */

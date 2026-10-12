@@ -672,10 +672,12 @@
                                 <span class="docker-ctr-name">{{ c.names || c.id.substring(0, 12) }}</span>
                                 <span class="docker-ctr-image">{{ c.image }}</span>
                                 <span class="docker-ctr-status" :class="c.state">{{ c.state }}</span>
+                                <span class="docker-ctr-time">{{ c.running_for || '—' }}</span>
                                 <span class="docker-ctr-ports">{{ c.ports || '—' }}</span>
                                 <span class="docker-ctr-actions">
-                                    <button v-if="c.state !== 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'start')" title="启动">▶</button>
-                                    <button v-if="c.state === 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'stop')" title="停止">⏸</button>
+                                    <button v-if="c.state === 'running' || c.state === 'restarting' || c.state === 'paused'" class="proc-btn" @click="dockerContainerAction(c.id, 'stop')" title="停止">⏸</button>
+                                    <button v-if="c.state === 'restarting'" class="proc-btn danger" @click="dockerContainerAction(c.id, 'kill')" title="强制终止">■</button>
+                                    <button v-if="c.state !== 'running' && c.state !== 'restarting'" class="proc-btn" @click="dockerContainerAction(c.id, 'start')" title="启动">▶</button>
                                     <button v-if="c.state === 'running'" class="proc-btn" @click="dockerContainerAction(c.id, 'restart')" title="重启">↻</button>
                                     <button v-if="c.state === 'running'" class="proc-btn" @click="dockerExecCommand(c.id, 'sh')" title="执行">⌨</button>
                                     <button class="proc-btn" @click="dockerViewLogs(c.id)" title="日志">📋</button>

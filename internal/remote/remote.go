@@ -610,12 +610,13 @@ type DockerImage struct {
 
 // DockerContainer 表示 Docker 容器信息。
 type DockerContainer struct {
-	ID      string `json:"id"`
-	Image   string `json:"image"`
-	Command string `json:"command"`
-	State   string `json:"state"`
-	Ports   string `json:"ports"`
-	Names   string `json:"names"`
+	ID          string `json:"id"`
+	Image       string `json:"image"`
+	Command     string `json:"command"`
+	State       string `json:"state"`
+	Ports       string `json:"ports"`
+	Names       string `json:"names"`
+	RunningFor  string `json:"running_for"`
 }
 
 // CheckDocker 检测服务器是否安装了 Docker。
@@ -680,7 +681,7 @@ func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContai
 
 	// 使用 docker ps 获取容器列表（需要 sudo）
 	// 使用 @@ 作为分隔符避免 shell 解析问题
-	psCmd := "docker ps --format '{{.ID}}@@{{.Image}}@@{{.Command}}@@{{.Status}}@@{{.Ports}}@@{{.Names}}' 2>/dev/null"
+	psCmd := "docker ps --format '{{.ID}}@@{{.Image}}@@{{.Command}}@@{{.Status}}@@{{.Ports}}@@{{.Names}}@@{{.RunningFor}}' 2>/dev/null"
 	if all {
 		psCmd = strings.Replace(psCmd, "docker ps ", "docker ps -a ", 1)
 	}
@@ -702,18 +703,27 @@ func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContai
 			stateLower := strings.ToLower(state)
 			if strings.Contains(stateLower, "up") {
 				state = "running"
+			} else if strings.Contains(stateLower, "restarting") {
+				state = "restarting"
 			} else if strings.Contains(stateLower, "exited") {
 				state = "exited"
+			} else if strings.Contains(stateLower, "paused") {
+				state = "paused"
 			} else {
 				state = stateLower
 			}
+			runningFor := ""
+			if len(parts) >= 7 {
+				runningFor = parts[6]
+			}
 			containers = append(containers, DockerContainer{
-				ID:      parts[0],
-				Image:   parts[1],
-				Command: strings.Trim(parts[2], "\""),
-				State:   state,
-				Ports:   parts[4],
-				Names:   parts[5],
+				ID:         parts[0],
+				Image:      parts[1],
+				Command:    strings.Trim(parts[2], "\""),
+				State:      state,
+				Ports:      parts[4],
+				Names:      parts[5],
+				RunningFor: runningFor,
 			})
 		}
 	}
@@ -750,7 +760,7 @@ func (rc *RemoteCollector) RemoveImage(srv *Server, id string) error {
 	return nil
 }
 
-// ContainerAction 执行容器操作（start/stop/restart）。
+// ContainerAction 执行容器操作（start/stop/restart/kill）。
 func (rc *RemoteCollector) ContainerAction(srv *Server, id, action string) error {
 	conn, err := rc.Dial(srv)
 	if err != nil {
@@ -758,7 +768,7 @@ func (rc *RemoteCollector) ContainerAction(srv *Server, id, action string) error
 	}
 	defer conn.Close()
 
-	validActions := map[string]bool{"start": true, "stop": true, "restart": true}
+	validActions := map[string]bool{"start": true, "stop": true, "restart": true, "kill": true}
 	if !validActions[action] {
 		return fmt.Errorf("invalid action: %s", action)
 	}
