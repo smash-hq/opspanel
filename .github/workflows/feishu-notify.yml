@@ -1,7 +1,6 @@
 name: Feishu Notify All Events
 
 on:
-  # 代码相关 - 所有分支
   push:
   pull_request:
     types: [opened, reopened, closed, synchronize]
@@ -16,7 +15,6 @@ on:
   watch:
     types: [started]
 
-  # Issue / Discussion
   issues:
     types: [opened, edited, milestoned, pinned, reopened, closed]
   issue_comment:
@@ -26,13 +24,11 @@ on:
   discussion_comment:
     types: [created, deleted]
 
-  # Release
   release:
     types: [published]
   registry_package:
     types: [published]
 
-  # 项目管理
   label:
     types: [created, deleted]
   milestone:
@@ -44,7 +40,6 @@ on:
   project_column:
     types: [created, deleted]
 
-  # CI/CD
   check_run:
     types: [rerequested, completed]
   check_suite:
@@ -53,7 +48,6 @@ on:
   status:
   page_build:
 
-  # 安全
   branch_protection_rule:
     types: [created, deleted]
 
@@ -72,6 +66,7 @@ jobs:
           EVENT="${{ github.event_name }}"
           REPO="${{ github.repository }}"
           ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
 
           COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}"
           COMMIT_HASH="${{ github.event.head_commit.id || github.event.pull_request.head.sha || 'N/A' }}"
@@ -85,7 +80,7 @@ jobs:
                 {
                   "tag": "div",
                   "text": {
-                    "content": "**🔔 GitHub Event Notification**\n\n**Event:** ${EVENT}\n**Repository:** ${REPO}\n**Triggered By:** ${ACTOR}\n\n**Commit / PR:**\n${COMMIT_MSG}\n\n**Commit Hash:** ${COMMIT_HASH}\n\n[View Details](${COMMIT_URL})",
+                    "content": "**🔔 GitHub Event Notification**\n\n**Event:** ${EVENT}\n**Repository:** ${REPO}\n**Branch:** ${BRANCH}\n**Triggered By:** ${ACTOR}\n\n**Commit / PR:**\n${COMMIT_MSG}\n\n**Commit Hash:** ${COMMIT_HASH}\n\n[View Details](${COMMIT_URL})",
                     "tag": "lark_md"
                   }
                 }
