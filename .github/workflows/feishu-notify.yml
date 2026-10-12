@@ -57,15 +57,48 @@ on:
   branch_protection_rule:
     types: [created, deleted]
 
-  # 定时推送 GitHub Trending（可选，不需要可删掉）
-  schedule:
-    - cron: '30 2 * * *'
-
 jobs:
   send-event:
-    name: Webhook
+    name: Feishu Webhook
     runs-on: ubuntu-latest
     steps:
-      - uses: junka/feishu-bot-webhook-action@main
-        with:
-          webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send Feishu Message
+        env:
+          WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+        run: |
+          EVENT="${{ github.event_name }}"
+          REPO="${{ github.repository }}"
+          ACTOR="${{ github.actor }}"
+
+          COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}"
+          COMMIT_HASH="${{ github.event.head_commit.id || github.event.pull_request.head.sha || 'N/A' }}"
+          COMMIT_URL="${{ github.event.head_commit.url || github.event.pull_request.html_url || 'N/A' }}"
+
+          cat > payload.json <<EOF
+          {
+            "msg_type": "interactive",
+            "card": {
+              "elements": [
+                {
+                  "tag": "div",
+                  "text": {
+                    "content": "**🔔 GitHub Event Notification**\n\n**Event:** ${EVENT}\n**Repository:** ${REPO}\n**Triggered By:** ${ACTOR}\n\n**Commit / PR:**\n${COMMIT_MSG}\n\n**Commit Hash:** ${COMMIT_HASH}\n\n[View Details](${COMMIT_URL})",
+                    "tag": "lark_md"
+                  }
+                }
+              ],
+              "header": {
+                "title": {
+                  "content": "📢 GitHub → Feishu",
+                  "tag": "plain_text"
+                }
+              }
+            }
+          }
+          EOF
+
+          curl -X POST -H "Content-Type: application/json" \
+            -d @payload.json "$WEBHOOK"
