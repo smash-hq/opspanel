@@ -538,7 +538,9 @@ func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.R
 
 	switch r.Method {
 	case http.MethodPost:
-		if action != "start" && action != "stop" && action != "restart" {
+		switch action {
+		case "start", "stop", "restart", "kill":
+		default:
 			Fail(w, http.StatusBadRequest, 400, "invalid action")
 			return
 		}
@@ -1123,7 +1125,7 @@ func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.R
 	langStore := storage.NewLanguageStore(h.db)
 	languages := langStore.ListLanguages()
 
-	var detected []map[string]string
+	var detected []map[string]any
 	for _, lang := range languages {
 		if lang.VersionCmd == "" {
 			continue
@@ -1132,17 +1134,14 @@ func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.R
 		status := "not_installed"
 		if version != "" {
 			status = "installed"
-			// 截断过长的版本字符串
-			if len(version) > 100 {
-				version = version[:97] + "..."
-			}
 		}
-		detected = append(detected, map[string]string{
-			"id":      lang.ID,
-			"name":    lang.Name,
-			"icon":    lang.Icon,
-			"version": version,
-			"status":  status,
+		detected = append(detected, map[string]any{
+			"id":       lang.ID,
+			"name":     lang.Name,
+			"icon":     lang.Icon,
+			"version":  version,
+			"status":   status,
+			"versions": lang.Versions,
 		})
 	}
 

@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror, uninstallLanguage } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction as apiDockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror, uninstallLanguage } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -175,9 +175,45 @@ export function setupStore() {
         logModalVisible.value = false;
     }
 
+    // ─── 全局确认框 ───
+    const confirmState = reactive({
+        visible: false, title: '操作确认', message: '',
+        confirmText: '确定', danger: true, _resolve: null,
+    });
+
+    /** 友好的二次确认，替代原生 confirm：返回 Promise<boolean>。 */
+    function confirmDialog(message, opts = {}) {
+        return new Promise(resolve => {
+            Object.assign(confirmState, {
+                visible: true,
+                title: opts.title || '操作确认',
+                message,
+                confirmText: opts.confirmText || '确定',
+                danger: opts.danger !== false,
+                _resolve: resolve,
+            });
+        });
+    }
+
+    function okConfirm() {
+        confirmState.visible = false;
+        confirmState._resolve && confirmState._resolve(true);
+    }
+
+    function cancelConfirm() {
+        confirmState.visible = false;
+        confirmState._resolve && confirmState._resolve(false);
+    }
+
+    /** 解析逗号/空格分隔的版本串为数组（去空、去重）。 */
+    function parseVersions(str) {
+        const seen = new Set();
+        return (str || '').split(/[,，\s]+/).map(s => s.trim()).filter(Boolean).filter(v => !seen.has(v) && seen.add(v));
+    }
+
     // ─── 软件包管理 ───
     const packageFormMode = ref(null);
-    const packageForm = reactive({ id: '', name: '', category: 'tool', description: '', version: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
+    const packageForm = reactive({ id: '', name: '', category: 'tool', description: '', version: '', versions: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
     const packageSaving = ref(false);
     const packageFormError = ref('');
 
@@ -187,14 +223,15 @@ export function setupStore() {
         if (mode === 'edit' && pkg) {
             Object.assign(packageForm, {
                 id: pkg.id, name: pkg.name, category: pkg.category,
-                description: pkg.description || '', version: pkg.version || '', icon: pkg.icon || '',
+                description: pkg.description || '', version: pkg.version || '',
+                versions: (pkg.versions || []).join(', '), icon: pkg.icon || '',
                 install_cmd: JSON.stringify(pkg.InstallCmd || {}, null, 2),
                 uninstall_cmd: JSON.stringify(pkg.UninstallCmd || {}, null, 2),
                 status_cmd: pkg.StatusCmd || '', version_cmd: pkg.VersionCmd || '',
                 start_cmd: pkg.StartCmd || '', stop_cmd: pkg.StopCmd || '', restart_cmd: pkg.RestartCmd || '',
             });
         } else {
-            Object.assign(packageForm, { id: '', name: '', category: 'tool', description: '', version: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
+            Object.assign(packageForm, { id: '', name: '', category: 'tool', description: '', version: '', versions: '', icon: '', install_cmd: '{}', uninstall_cmd: '{}', status_cmd: '', version_cmd: '', start_cmd: '', stop_cmd: '', restart_cmd: '' });
         }
     }
 
@@ -217,7 +254,8 @@ export function setupStore() {
         packageSaving.value = true;
         const payload = {
             id: packageForm.id, name: packageForm.name, category: packageForm.category,
-            description: packageForm.description, version: packageForm.version, icon: packageForm.icon,
+            description: packageForm.description, version: packageForm.version,
+            versions: parseVersions(packageForm.versions), icon: packageForm.icon,
             install_cmd: installCmd, uninstall_cmd: uninstallCmd,
             status_cmd: packageForm.status_cmd, version_cmd: packageForm.version_cmd,
             start_cmd: packageForm.start_cmd, stop_cmd: packageForm.stop_cmd, restart_cmd: packageForm.restart_cmd,
@@ -240,7 +278,7 @@ export function setupStore() {
     }
 
     async function handleDeletePackage(id) {
-        if (!confirm(`确定删除软件包「${id}」吗？`)) return;
+        if (!await confirmDialog(`确定删除软件包「${id}」吗？`, { title: '删除软件包' })) return;
         try {
             await deletePackage(id);
             await loadSoftwareCatalog();
@@ -253,7 +291,7 @@ export function setupStore() {
     // ─── 编程语言环境 ───
     const languages = ref([]);
     const langFormMode = ref(null);
-    const langForm = reactive({ id: '', name: '', category: 'runtime', description: '', icon: '', version_cmd: '', install_cmd: '', install_source: 'official' });
+    const langForm = reactive({ id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '', install_source: 'official' });
     const langSaving = ref(false);
     const langFormError = ref('');
     const detectedLanguages = ref([]);
@@ -375,11 +413,12 @@ export function setupStore() {
             Object.assign(langForm, {
                 id: lang.id, name: lang.name, category: lang.category || 'runtime',
                 description: lang.description || '', icon: lang.icon || '',
+                versions: (lang.versions || []).join(', '),
                 version_cmd: lang.versionCmd || lang.version_cmd || '',
                 install_cmd: lang.installCmd || lang.install_cmd || '',
             });
         } else {
-            Object.assign(langForm, { id: '', name: '', category: 'runtime', description: '', icon: '', version_cmd: '', install_cmd: '' });
+            Object.assign(langForm, { id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '' });
         }
     }
 
@@ -427,6 +466,7 @@ export function setupStore() {
         const payload = {
             id: langForm.id, name: langForm.name, category: langForm.category,
             description: langForm.description, icon: langForm.icon,
+            versions: parseVersions(langForm.versions),
             version_cmd: langForm.version_cmd, install_cmd: langForm.install_cmd,
         };
         try {
@@ -446,7 +486,7 @@ export function setupStore() {
     }
 
     async function handleDeleteLanguage(id) {
-        if (!confirm(`确定删除语言环境「${id}」吗？`)) return;
+        if (!await confirmDialog(`确定删除语言环境「${id}」吗？`, { title: '删除语言环境' })) return;
         try {
             await apiDeleteLanguage(id);
             await loadLanguages();
@@ -473,8 +513,7 @@ export function setupStore() {
         // 查找语言名称
         const lang = languages.value.find(l => l.id === languageId);
         const langName = lang ? lang.name : languageId;
-        if (!confirm(`确定要安装「${langName}」吗？`)) return;
-        if (!confirm(`再次确认：安装「${langName}」将执行安装脚本，是否继续？`)) return;
+        if (!await confirmDialog(`确定要安装「${langName}」吗？安装脚本将在服务器上执行，可能修改系统环境。`, { title: '安装语言环境', confirmText: '安装', danger: false })) return;
         langInstallName.value = langName;
         langInstallLogVisible.value = true;
         langInstallLog.value = '正在连接服务器...\n';
@@ -504,7 +543,7 @@ export function setupStore() {
         if (!selectedServer.value) return;
         const lang = languages.value.find(l => l.id === languageId);
         const langName = lang ? lang.name : languageId;
-        if (!confirm(`确定要卸载「${langName}」吗？此操作不可恢复。`)) return;
+        if (!await confirmDialog(`确定要卸载「${langName}」吗？此操作不可恢复。`, { title: '卸载语言环境', confirmText: '卸载' })) return;
         langInstallName.value = langName;
         langInstallLogVisible.value = true;
         langInstallLog.value = '正在连接服务器...\n';
@@ -595,7 +634,7 @@ export function setupStore() {
     }
 
     async function loadDockerContainers(all) {
-        if (!selectedServer.value) return;
+        if (!selectedServer.value || dockerLoading.value) return;
         dockerLoading.value = true;
         try {
             dockerContainers.value = await fetchDockerContainers(selectedServer.value, all);
@@ -619,7 +658,7 @@ export function setupStore() {
 
     async function dockerRemoveImage(id) {
         if (!selectedServer.value) return;
-        if (!confirm('确定删除镜像 ' + id + ' 吗？')) return;
+        if (!await confirmDialog(`确定删除镜像 ${id} 吗？`, { title: '删除镜像' })) return;
         try {
             await removeDockerImage(selectedServer.value, id);
             toastNotify('镜像已删除');
@@ -632,7 +671,7 @@ export function setupStore() {
     async function dockerContainerAction(id, action) {
         if (!selectedServer.value) return;
         try {
-            await dockerContainerAction(selectedServer.value, id, action);
+            await apiDockerContainerAction(selectedServer.value, id, action);
             toastNotify('操作成功: ' + action);
             loadDockerContainers(true);
         } catch (err) {
@@ -642,7 +681,7 @@ export function setupStore() {
 
     async function dockerRemoveContainer(id) {
         if (!selectedServer.value) return;
-        if (!confirm('确定删除容器 ' + id + ' 吗？')) return;
+        if (!await confirmDialog(`确定删除容器 ${id} 吗？`, { title: '删除容器' })) return;
         try {
             await removeDockerContainer(selectedServer.value, id);
             toastNotify('容器已删除');
@@ -706,18 +745,17 @@ export function setupStore() {
             toastNotify('名称和地址不能为空', true);
             return;
         }
+        const isEdit = !!dockerSourceForm.id;
         dockerSourceSaving.value = true;
         try {
-            if (dockerSourceForm.id) {
+            if (isEdit) {
                 await updateDockerSource(dockerSourceForm.id, dockerSourceForm);
             } else {
-                dockerSourceForm.id = 'src_' + Date.now();
-                await createDockerSource(dockerSourceForm);
+                await createDockerSource({ ...dockerSourceForm, id: 'src_' + Date.now() });
             }
             await loadDockerSources();
-            dockerSourceFormVisible.value = null;
             dockerSourceFormVisible.value = false;
-            toastNotify(dockerSourceForm.id ? '镜像源已更新' : '镜像源已添加');
+            toastNotify(isEdit ? '镜像源已更新' : '镜像源已添加');
         } catch (err) {
             toastNotify('保存失败: ' + err.message, true);
         } finally {
@@ -726,7 +764,7 @@ export function setupStore() {
     }
 
     async function removeDockerSource(id) {
-        if (!confirm('确定删除此镜像源吗？')) return;
+        if (!await confirmDialog('确定删除此镜像源吗？', { title: '删除镜像源' })) return;
         try {
             await deleteDockerSource(id);
             await loadDockerSources();
@@ -762,7 +800,7 @@ export function setupStore() {
 
     async function applyMirrorToServer(mirror) {
         if (!selectedServer.value) return;
-        if (!confirm(`确定要将镜像源「${mirror}」应用到当前服务器吗？Docker 将会重启。`)) return;
+        if (!await confirmDialog(`确定要将镜像源「${mirror}」应用到当前服务器吗？应用后 Docker 将会重启。`, { title: '应用镜像源', confirmText: '应用' })) return;
         try {
             await applyServerMirror(selectedServer.value, mirror);
             serverMirror.value.mirror = mirror;
@@ -791,7 +829,7 @@ export function setupStore() {
 
     async function batchDeleteImages() {
         if (!selectedImages.value.length) { toastNotify('请选择要删除的镜像', true); return; }
-        if (!confirm(`确定删除选中的 ${selectedImages.value.length} 个镜像吗？`)) return;
+        if (!await confirmDialog(`确定删除选中的 ${selectedImages.value.length} 个镜像吗？`, { title: '批量删除镜像', confirmText: '删除' })) return;
         batchActionLoading.value = true;
         try {
             const result = await batchDeleteDockerImages(selectedServer.value, selectedImages.value);
@@ -808,7 +846,7 @@ export function setupStore() {
     async function batchContainerAction(action) {
         if (!selectedContainers.value.length) { toastNotify('请选择要操作的容器', true); return; }
         const actionName = action === 'stop' ? '停止' : action === 'start' ? '启动' : action === 'restart' ? '重启' : action === 'rm' ? '删除' : action;
-        if (!confirm(`确定对选中的 ${selectedContainers.value.length} 个容器执行"${actionName}"操作吗？`)) return;
+        if (!await confirmDialog(`确定对选中的 ${selectedContainers.value.length} 个容器执行「${actionName}」操作吗？`, { title: `批量${actionName}` })) return;
         batchActionLoading.value = true;
         try {
             const result = await batchDockerContainerAction(selectedServer.value, selectedContainers.value, action);
@@ -892,7 +930,7 @@ export function setupStore() {
 
     async function handleKillProcess(pid, force) {
         if (!selectedServer.value) return;
-        if (!confirm(`确定要终止进程 PID: ${pid} 吗？${force ? '（强制终止）' : ''}`)) return;
+        if (!await confirmDialog(`确定要终止进程 PID: ${pid} 吗？${force ? '（强制终止）' : ''}`, { title: '终止进程', confirmText: '终止' })) return;
         try {
             await killProcess(selectedServer.value, pid, force);
             toastNotify(`进程 ${pid} 已终止`);
@@ -1176,7 +1214,7 @@ export function setupStore() {
     /** 删除服务器（带确认）。 */
     async function handleDeleteServer(id) {
         const server = servers.value.find(s => s.id === id);
-        if (!server || !confirm(`确定删除「${server.name}」吗？删除后连接配置不可恢复。`)) return;
+        if (!server || !await confirmDialog(`确定删除「${server.name}」吗？删除后连接配置不可恢复。`, { title: '删除服务器', confirmText: '删除' })) return;
         try {
             await apiDeleteServer(id);
             if (selectedServer.value === id) {
@@ -1250,18 +1288,27 @@ export function setupStore() {
     /** 每个软件/语言选择的安装版本 { id: version }。 */
     const selectedVersions = reactive({});
 
-    /** 获取某个软件/语言的默认版本（第一个预定义版本）。 */
-    function getDefaultVersion(versions) {
-        if (Array.isArray(versions) && versions.length > 0) {
-            return versions[0];
-        }
-        return '';
+    /** 当前展开版本下拉的卡片 id（'' 表示全部收起）。 */
+    const versionComboOpen = ref('');
+
+    /** 展开/收起版本下拉。 */
+    function toggleVersionCombo(id) {
+        versionComboOpen.value = versionComboOpen.value === id ? '' : id;
     }
 
-    /** 获取某个软件/语言当前选择的版本。 */
-    function getSelectedVersion(id, versions) {
-        return selectedVersions[id] || getDefaultVersion(versions);
+    /** 选中预置版本并收起下拉。 */
+    function pickVersion(id, v) {
+        selectedVersions[id] = v;
+        versionComboOpen.value = '';
     }
+
+    /** 点击组合框外部时收起所有版本下拉。 */
+    function handleDocClickForCombo(e) {
+        if (versionComboOpen.value && !e.target.closest('.sw-combo')) {
+            versionComboOpen.value = '';
+        }
+    }
+    document.addEventListener('click', handleDocClickForCombo);
 
     /** 未安装的软件目录。 */
     const availableSoftware = computed(() => {
@@ -1362,7 +1409,7 @@ export function setupStore() {
     async function uninstallPackage(packageId) {
         const serverId = selectedServer.value;
         if (!serverId || serverId === 'srv_local') { toastNotify('请先选择远程服务器', true); return; }
-        if (!confirm('确定要卸载此软件吗？数据可能会丢失。')) return;
+        if (!await confirmDialog('确定要卸载此软件吗？卸载后数据可能会丢失。', { title: '卸载软件', confirmText: '卸载' })) return;
         softwareOperating[packageId] = true;
         try {
             await uninstallSoftware(serverId, packageId);
@@ -1461,7 +1508,7 @@ export function setupStore() {
     /** 删除软件源。 */
     async function handleDeleteSource(id) {
         const src = sources.value.find(s => s.id === id);
-        if (!src || !confirm(`确定删除软件源「${src.name}」吗？`)) return;
+        if (!src || !await confirmDialog(`确定删除软件源「${src.name}」吗？`, { title: '删除软件源' })) return;
         try {
             await apiDeleteSource(id);
             await loadSources();
@@ -1494,27 +1541,11 @@ export function setupStore() {
         }).catch(() => {});
     });
 
-    // 初始化默认版本选择
-    watch(availableSoftware, (list) => {
-        list.forEach(pkg => {
-            if (!selectedVersions[pkg.id]) {
-                selectedVersions[pkg.id] = getDefaultVersion(pkg.versions);
-            }
-        });
-    });
-
-    watch(detectedLanguages, (list) => {
-        list.forEach(lang => {
-            if (lang.status !== 'installed' && !selectedVersions[lang.id]) {
-                selectedVersions[lang.id] = getDefaultVersion(lang.versions);
-            }
-        });
-    });
-
     onUnmounted(() => {
         clearTimeout(toastTimer);
         if (wsController) wsController.disconnect();
         window.removeEventListener('keydown', handleKeydown);
+        document.removeEventListener('click', handleDocClickForCombo);
     });
 
     function handleKeydown(event) {
@@ -1539,6 +1570,10 @@ export function setupStore() {
         servers, selectedServer, serverStatus, info,
         // UI 状态
         sidebarCollapsed, activeMenu, activeTab, configTab, themeVal, showDoc, searchQuery, activeFilter, filters, loading, loadError, wsConnected,
+        // 全局确认框
+        confirmState, okConfirm, cancelConfirm,
+        // 版本下拉组合框
+        versionComboOpen, toggleVersionCombo, pickVersion,
         // 表单状态
         formMode, formError, saving, form, toast,
         // 连接测试
@@ -1556,7 +1591,7 @@ export function setupStore() {
         testServerConnection, clearTestResult,
         // 软件管理
         softwareCatalog, softwareStatuses, softwareLoading, softwareOperating,
-        softwareSearch, selectedVersions, getSelectedVersion,
+        softwareSearch, selectedVersions,
         availableSoftware, availableSoftwareFiltered,
         loadSoftwareCatalog, loadSoftwareStatus,
         installPackage, uninstallPackage, controlPackageService, getPackageStatus,

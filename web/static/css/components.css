@@ -483,23 +483,67 @@
 .field span { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 .field span em { color: var(--color-red); font-style: normal; margin-left: 2px; }
 
-.field input, .field select {
+.field input, .field select, .field textarea {
+    width: 100%;
+    min-width: 0;
     padding: 8px 12px;
     border: 1px solid var(--card-border);
     border-radius: var(--border-radius-sm);
     background: var(--card-bg);
     color: var(--text-primary);
     font-size: 13px;
+    font-family: inherit;
     outline: none;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.field input:focus, .field select:focus {
+.field textarea {
+    resize: vertical;
+    line-height: 1.6;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.field input:hover:not(:focus):not(:disabled),
+.field select:hover:not(:focus):not(:disabled),
+.field textarea:hover:not(:focus):not(:disabled) {
+    border-color: var(--color-blue);
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
     border-color: var(--color-blue);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-.field input::placeholder { color: var(--text-muted); }
+.field input::placeholder, .field textarea::placeholder { color: var(--text-muted); }
+
+.field-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* ─── 全局确认弹窗 ─── */
+.confirm-modal {
+    max-width: 420px;
+}
+
+.confirm-modal .confirm-body {
+    padding: 20px 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    white-space: pre-line;
+}
+
+.danger-button {
+    background: var(--color-red, #ef4444) !important;
+    color: #fff !important;
+    border-color: var(--color-red, #ef4444) !important;
+}
+
+.danger-button:hover {
+    filter: brightness(1.08);
+}
 
 .form-notice {
     display: flex;
@@ -1268,14 +1312,22 @@
 .sw-installed-table {
     border: 1px solid var(--card-border, #e2e8f0);
     border-radius: 10px;
-    overflow: hidden;
 }
 
-/* 列：名称自适应 | 版本 | 状态 | 服务控制 | 操作 */
+/* 圆角改由首末行承担（表格容器不能裁剪，否则版本悬浮气泡会被切掉） */
+.sw-installed-table .sw-installed-header {
+    border-radius: 9px 9px 0 0;
+}
+
+.sw-installed-table .sw-installed-row:last-child {
+    border-radius: 0 0 9px 9px;
+}
+
+/* 列：名称自适应（140~300px） | 版本 | 状态 | 服务控制 | 弹性空隙 | 操作 */
 .sw-installed-header,
 .sw-installed-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 130px 92px 148px 92px;
+    grid-template-columns: minmax(140px, 300px) 110px 92px 148px 1fr 92px;
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
@@ -1299,7 +1351,12 @@
 /* 语言环境表格（无服务控制列，其余列样式一致） */
 .sw-installed-table.lang-table-4col .sw-installed-header,
 .sw-installed-table.lang-table-4col .sw-installed-row {
-    grid-template-columns: minmax(0, 1fr) 130px 92px 92px;
+    grid-template-columns: minmax(140px, 300px) 110px 92px 1fr 92px;
+}
+
+/* 弹性空隙列：吸收剩余宽度，让操作列贴右、内容列紧凑 */
+.sw-col-spacer {
+    min-width: 0;
 }
 
 /* 表头对齐：中间列居中，与行内容对齐 */
@@ -1341,15 +1398,56 @@
 }
 
 .sw-col-version {
+    position: relative;
     min-width: 0;
     font-size: 0.82rem;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: var(--text-secondary, #475569);
     text-align: center;
+}
+
+/* 版本文本内层截断（外层保留给悬浮气泡定位） */
+.sw-version-text {
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 版本悬浮气泡：鼠标悬浮即时显示完整版本信息 */
+.sw-col-version:not([data-title=""]):hover::after {
+    content: attr(data-title);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 380px;
+    padding: 6px 10px;
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    border-radius: 6px;
+    white-space: normal;
+    word-break: break-all;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.sw-col-version:not([data-title=""]):hover::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e293b;
+    pointer-events: none;
+    z-index: 100;
 }
 
 /* 状态徽章列居中，与表头对齐 */
@@ -1441,6 +1539,10 @@
 
     .sw-col-actions {
         justify-content: flex-start;
+    }
+
+    .sw-col-spacer {
+        display: none;
     }
 }
 
@@ -1560,42 +1662,94 @@
     gap: 6px;
 }
 
-.sw-version-select {
+/* 版本组合框：点击展开全部预置版本（来自通用配置），也可直接输入自定义版本 */
+.sw-combo {
+    position: relative;
     width: 100%;
-    padding: 6px 10px;
+}
+
+.sw-combo-input {
+    width: 100%;
+    padding: 6px 26px 6px 10px;
     border: 1px solid var(--card-border, #e2e8f0);
     border-radius: 6px;
     background: var(--card-bg, #fff);
     font-size: 0.8rem;
     color: var(--text-primary, #0f172a);
     outline: none;
-    cursor: pointer;
-    transition: border-color 0.15s;
-}
-
-.sw-version-select:focus {
-    border-color: var(--color-blue, #3b82f6);
-}
-
-.sw-version-custom {
-    width: 100%;
-    padding: 6px 10px;
-    border: 1px solid var(--card-border, #e2e8f0);
-    border-radius: 6px;
-    background: var(--card-bg, #fff);
-    font-size: 0.8rem;
-    color: var(--text-primary, #0f172a);
-    outline: none;
+    cursor: text;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.sw-version-custom:focus {
+.sw-combo-input:focus {
     border-color: var(--color-blue, #3b82f6);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-.sw-version-custom::placeholder {
+.sw-combo-input::placeholder {
     color: var(--text-muted, #9ca3af);
+}
+
+.sw-combo-arrow {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    border: none;
+    background: none;
+    padding: 4px 6px;
+    font-size: 10px;
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.sw-combo-arrow:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+.sw-combo-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 60;
+}
+
+.sw-combo-list li {
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--text-primary, #0f172a);
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.sw-combo-list li:hover {
+    background: var(--content-bg, #f1f5f9);
+}
+
+.sw-combo-list li.active {
+    color: var(--color-blue, #3b82f6);
+    font-weight: 600;
+}
+
+.sw-combo-list li.sw-combo-empty {
+    color: var(--text-muted, #9ca3af);
+    cursor: default;
+}
+
+.sw-combo-list li.sw-combo-empty:hover {
+    background: none;
 }
 
 .sw-card-footer {

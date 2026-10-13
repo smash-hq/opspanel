@@ -165,7 +165,7 @@ func (d *DB) InitDefaultData() error {
 		return fmt.Errorf("init local server: %w", err)
 	}
 
-	// 默认软件源
+	// 默认软件源（仅管理普通软件安装镜像，Docker 引擎仓库与 registry 镜像加速不在其列）
 	sources := []struct {
 		id   string
 		name string
@@ -176,10 +176,10 @@ func (d *DB) InitDefaultData() error {
 		{"src_ubuntu_aliyun", "阿里云 Ubuntu 镜像", "mirror", "https://mirrors.aliyun.com/ubuntu/"},
 		{"src_centos_official", "CentOS 官方源", "mirror", "http://mirror.centos.org/centos/"},
 		{"src_centos_aliyun", "阿里云 CentOS 镜像", "mirror", "https://mirrors.aliyun.com/centos/"},
-		{"src_docker_official", "Docker 官方源", "repo", "https://download.docker.com/linux/"},
-		{"src_docker_aliyun", "阿里云 Docker 镜像", "repo", "https://mirrors.aliyun.com/docker-ce/linux/"},
 		{"src_nodejs_official", "Node.js 官方源", "repo", "https://deb.nodesource.com/"},
 	}
+	// Docker 引擎仓库不属于软件源范畴（Docker 相关配置由「Docker 镜像源」管理），清理历史种子数据
+	d.db.Exec(`DELETE FROM software_sources WHERE id IN ('src_docker_official', 'src_docker_aliyun')`)
 	for _, s := range sources {
 		d.db.Exec(`
 			INSERT OR IGNORE INTO software_sources (id, name, type, url, enabled, priority, created_at, updated_at)

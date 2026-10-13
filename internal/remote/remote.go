@@ -46,9 +46,10 @@ func NewRemoteCollector(log *logger.Logger) *RemoteCollector {
 }
 
 // sshConn 封装 *ssh.Client，每次执行命令新建 Session。
+// SSH 协议原生支持单连接多路复用，ssh.Client 可安全并发使用，
+// 因此不做全局串行化——否则长命令（如 docker restart）会阻塞该服务器的一切操作。
 type sshConn struct {
 	client        *ssh.Client
-	mu            sync.Mutex
 	broken        atomic.Bool   // 断线标记：命令失败或保活失败时置位，池会在下次获取时重建
 	stopOnce      sync.Once     // 保证保活停止通道只关闭一次
 	stopKeepalive chan struct{} // 关闭时通知保活协程退出
@@ -94,9 +95,6 @@ func newSSHConn(srv *Server) (*sshConn, error) {
 
 // RunOnce 执行单条命令（每次新建 Session）。
 func (c *sshConn) RunOnce(cmd string) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	session, err := c.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("new session: %w", err)
@@ -140,11 +138,13 @@ func (rc *RemoteCollector) CloseConn(serverID string) {
 	rc.pool.CloseConn(serverID)
 }
 
-// RunOne 在远程服务器上执行单条命令并返回输出。所有命令均记录日志。
+// RunOne 在远程服务器上执行单条命令并返回输出。
+// 命令执行日志为 Debug 级：周期性采集（pushLoop）会高频调用，Info 级会刷屏。
+// 排查问题时将日志级别调至 debug 即可看到每条命令及输出。
 func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
 	out, err := client.RunOnce(cmd)
 	if err != nil {
-		rc.log.Infow("remote cmd error", "cmd", cmd, "error", err.Error())
+		rc.log.Debugw("remote cmd error", "cmd", cmd, "error", err.Error())
 		return ""
 	}
 	// 截断过长的输出用于日志
@@ -152,11 +152,11 @@ func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
 	if len(logOut) > 200 {
 		logOut = logOut[:200] + "..."
 	}
-	rc.log.Infow("remote cmd", "cmd", cmd, "output", logOut)
+	rc.log.Debugw("remote cmd", "cmd", cmd, "output", logOut)
 	return out
 }
 
-// RunWithSudo 先尝试直接执行命令，失败则使用 sudo -n 回退。所有命令均记录日志。
+// RunWithSudo 先尝试直接执行命令，失败则使用 sudo -n 回退。
 func (rc *RemoteCollector) RunWithSudo(client *sshConn, cmd string) string {
 	// 先尝试直接执行
 	out := rc.RunOne(client, cmd)
@@ -165,7 +165,7 @@ func (rc *RemoteCollector) RunWithSudo(client *sshConn, cmd string) string {
 	}
 	// 失败则尝试 sudo -n（免密 sudo）
 	sudoCmd := "sudo -n " + cmd
-	rc.log.Infow("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
+	rc.log.Debugw("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
 	out = rc.RunOne(client, sudoCmd)
 	return out
 }

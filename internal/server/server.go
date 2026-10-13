@@ -99,10 +99,12 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	httpSrv := &http.Server{
-		Addr:         addr,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		Addr:        addr,
+		Handler:     handler,
+		ReadTimeout: 15 * time.Second,
+		// WriteTimeout 必须容纳慢 SSH 操作（容器 start/stop/restart、软件与语言安装可达数分钟），
+		// 过短会导致服务端提前掐断连接，前端表现为 "Failed to fetch"。
+		WriteTimeout: 10 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 

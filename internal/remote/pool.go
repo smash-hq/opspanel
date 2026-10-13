@@ -202,9 +202,7 @@ func (c *sshConn) startKeepalive(interval time.Duration, onDead func()) {
 			case <-ticker.C:
 			}
 
-			c.mu.Lock()
 			_, _, err := c.client.SendRequest("keepalive@openssh.com", true, nil)
-			c.mu.Unlock()
 			if err != nil {
 				c.broken.Store(true)
 				onDead()

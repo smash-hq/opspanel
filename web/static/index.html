@@ -138,7 +138,7 @@
                     <!-- 软件源管理 -->
                     <div v-if="configTab === 'sources'">
                         <h3>软件源管理</h3>
-                        <p class="settings-desc">管理镜像源和软件仓库地址（全局生效）</p>
+                        <p class="settings-desc">管理软件安装使用的系统镜像源与软件仓库地址（全局生效，不含 Docker 镜像源）</p>
                         <div class="section-header">
                             <button class="primary-button small" @click="openSourceForm('add')">＋ 添加软件源</button>
                         </div>
@@ -439,6 +439,7 @@
                                 <span class="sw-col-version">版本</span>
                                 <span class="sw-col-status">状态</span>
                                 <span class="sw-col-service">服务控制</span>
+                                <span class="sw-col-spacer"></span>
                                 <span class="sw-col-actions">操作</span>
                             </div>
                             <div v-for="sw in softwareStatuses.filter(s => s.installed)" :key="sw.package.id" class="sw-installed-row">
@@ -446,7 +447,7 @@
                                     <span class="sw-row-icon">{{ sw.package.icon }}</span>
                                     <strong>{{ sw.package.name }}</strong>
                                 </span>
-                                <span class="sw-col-version">{{ sw.version || sw.package.version || '—' }}</span>
+                                <span class="sw-col-version" :data-title="sw.version || sw.package.version || ''"><span class="sw-version-text">{{ sw.version || sw.package.version || '—' }}</span></span>
                                 <span class="sw-col-status">
                                     <span class="sw-status-badge" :class="sw.status">{{ sw.status === 'running' ? '运行中' : sw.status === 'stopped' ? '已停止' : sw.status === 'none' ? '无服务' : '未知' }}</span>
                                 </span>
@@ -459,6 +460,7 @@
                                     </div>
                                     <span v-else class="text-muted">—</span>
                                 </span>
+                                <span class="sw-col-spacer"></span>
                                 <span class="sw-col-actions">
                                     <button class="sw-btn sw-btn-danger" @click="uninstallPackage(sw.package.id)" :disabled="softwareOperating[sw.package.id]">
                                         {{ softwareOperating[sw.package.id] ? '卸载中...' : '卸载' }}
@@ -481,14 +483,17 @@
                                     <small class="sw-card-desc">{{ pkg.description }}</small>
                                 </div>
                                 <div class="sw-card-version">
-                                    <select v-model="selectedVersions[pkg.id]" class="sw-version-select">
-                                        <option v-for="v in (pkg.versions || [])" :key="v" :value="v">{{ v }}</option>
-                                        <option value="__custom__">自定义...</option>
-                                    </select>
-                                    <input v-if="selectedVersions[pkg.id] === '__custom__'" v-model="selectedVersions[pkg.id + '_custom']" placeholder="输入版本" class="sw-version-custom">
+                                    <div class="sw-combo">
+                                        <input class="sw-combo-input" v-model.trim="selectedVersions[pkg.id]" @focus="versionComboOpen = pkg.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
+                                        <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(pkg.id)" tabindex="-1" title="展开版本列表">▾</button>
+                                        <ul class="sw-combo-list" v-if="versionComboOpen === pkg.id">
+                                            <li v-for="v in (pkg.versions || [])" :key="v" :class="{ active: selectedVersions[pkg.id] === v }" @mousedown.prevent="pickVersion(pkg.id, v)">{{ v }}</li>
+                                            <li v-if="!(pkg.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
+                                        </ul>
+                                    </div>
                                 </div>
                                 <div class="sw-card-footer">
-                                    <button class="sw-btn sw-btn-primary" @click="installPackage(pkg.id, selectedVersions[pkg.id] === '__custom__' ? (selectedVersions[pkg.id + '_custom'] || '') : (selectedVersions[pkg.id] || ''))" :disabled="softwareOperating[pkg.id] || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                    <button class="sw-btn sw-btn-primary" @click="installPackage(pkg.id, selectedVersions[pkg.id] || '')" :disabled="softwareOperating[pkg.id] || selectedServer === 'srv_local'" title="仅远程服务器可安装">
                                         {{ softwareOperating[pkg.id] ? '安装中...' : '安装' }}
                                     </button>
                                 </div>
@@ -524,6 +529,7 @@
                                     <span class="sw-col-name">语言</span>
                                     <span class="sw-col-version">版本</span>
                                     <span class="sw-col-status">状态</span>
+                                    <span class="sw-col-spacer"></span>
                                     <span class="sw-col-actions">操作</span>
                                 </div>
                                 <div v-for="lang in detectedLanguages.filter(l => l.status === 'installed')" :key="lang.id" class="sw-installed-row">
@@ -531,10 +537,11 @@
                                         <span class="sw-row-icon">{{ lang.icon || '📦' }}</span>
                                         <strong>{{ lang.name }}</strong>
                                     </span>
-                                    <span class="sw-col-version">{{ lang.version || '—' }}</span>
+                                    <span class="sw-col-version" :data-title="lang.version || ''"><span class="sw-version-text">{{ lang.version || '—' }}</span></span>
                                     <span class="sw-col-status">
                                         <span class="sw-status-badge running">已安装</span>
                                     </span>
+                                    <span class="sw-col-spacer"></span>
                                     <span class="sw-col-actions">
                                         <button class="sw-btn sw-btn-danger" @click="uninstallLang(lang.id)" :disabled="langInstallStatus === 'installing'">
                                             卸载
@@ -557,14 +564,17 @@
                                         <small class="sw-card-desc">{{ lang.id }}</small>
                                     </div>
                                     <div class="sw-card-version">
-                                        <select v-model="selectedVersions[lang.id]" class="sw-version-select">
-                                            <option v-for="v in (lang.versions || [])" :key="v" :value="v">{{ v }}</option>
-                                            <option value="__custom__">自定义...</option>
-                                        </select>
-                                        <input v-if="selectedVersions[lang.id] === '__custom__'" v-model="selectedVersions[lang.id + '_custom']" placeholder="输入版本" class="sw-version-custom">
+                                        <div class="sw-combo">
+                                            <input class="sw-combo-input" v-model.trim="selectedVersions[lang.id]" @focus="versionComboOpen = lang.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
+                                            <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(lang.id)" tabindex="-1" title="展开版本列表">▾</button>
+                                            <ul class="sw-combo-list" v-if="versionComboOpen === lang.id">
+                                                <li v-for="v in (lang.versions || [])" :key="v" :class="{ active: selectedVersions[lang.id] === v }" @mousedown.prevent="pickVersion(lang.id, v)">{{ v }}</li>
+                                                <li v-if="!(lang.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
+                                            </ul>
+                                        </div>
                                     </div>
                                     <div class="sw-card-footer">
-                                        <button class="sw-btn sw-btn-primary" @click="installLang(lang.id, selectedVersions[lang.id] === '__custom__' ? (selectedVersions[lang.id + '_custom'] || '') : (selectedVersions[lang.id] || ''))" :disabled="langInstallStatus === 'installing' || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                        <button class="sw-btn sw-btn-primary" @click="installLang(lang.id, selectedVersions[lang.id] || '')" :disabled="langInstallStatus === 'installing' || selectedServer === 'srv_local'" title="仅远程服务器可安装">
                                             安装
                                         </button>
                                     </div>
@@ -963,6 +973,8 @@
                     <label class="field"><span>分类</span><select v-model="packageForm.category"><option value="database">数据库</option><option value="web">Web</option><option value="runtime">运行时</option><option value="tool">工具</option></select></label>
                     <label class="field"><span>版本</span><input v-model.trim="packageForm.version" placeholder="例如：8.0"></label>
                     <label class="field"><span>图标</span><input v-model.trim="packageForm.icon" placeholder="例如：🐬"></label>
+                    <label class="field full"><span>可选版本</span><input v-model.trim="packageForm.versions" placeholder="逗号分隔，例如：8.0, 8.4, 9.0">
+                        <small class="field-hint">安装时供下拉选择，同时支持在安装页输入自定义版本</small></label>
                     <label class="field full"><span>描述</span><input v-model.trim="packageForm.description" placeholder="软件包简介"></label>
                 </div>
                 <div class="form-section-title">命令配置</div>
@@ -1040,6 +1052,8 @@
                     <label class="field"><span>名称 <em>*</em></span><input v-model.trim="langForm.name" placeholder="例如：Go"></label>
                     <label class="field"><span>分类</span><select v-model="langForm.category"><option value="language">编程语言</option><option value="runtime">运行时</option><option value="tool">工具</option></select></label>
                     <label class="field"><span>图标</span><input v-model.trim="langForm.icon" placeholder="例如：🐹"></label>
+                    <label class="field full"><span>可选版本</span><input v-model.trim="langForm.versions" placeholder="逗号分隔，例如：1.21, 1.22, 1.23">
+                        <small class="field-hint">安装时供下拉选择，同时支持在安装页输入自定义版本</small></label>
                     <label class="field full"><span>描述</span><input v-model.trim="langForm.description" placeholder="语言环境简介"></label>
                     <label class="field full"><span>版本检测命令 <em>*</em></span><input v-model.trim="langForm.version_cmd" placeholder="例如：go version 2>/dev/null"></label>
                 </div>
@@ -1066,6 +1080,21 @@
             <div class="modal-footer">
                 <button class="toolbar-button" @click="closeLangForm">取消</button>
                 <button class="primary-button" @click="saveLanguage" :disabled="langSaving">{{ langSaving ? '保存中...' : '保存' }}</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全局确认弹窗（替代原生 confirm） -->
+    <div class="modal-overlay" v-if="confirmState.visible" @click.self="cancelConfirm">
+        <div class="modal confirm-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">CONFIRM</span><h3>{{ confirmState.title }}</h3></div>
+                <button class="icon-button" @click="cancelConfirm" title="关闭">×</button>
+            </div>
+            <div class="modal-body confirm-body">{{ confirmState.message }}</div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="cancelConfirm">取消</button>
+                <button class="primary-button" :class="{ 'danger-button': confirmState.danger }" @click="okConfirm">{{ confirmState.confirmText }}</button>
             </div>
         </div>
     </div>
