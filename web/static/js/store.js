@@ -8,7 +8,7 @@
 // Vue 3 通过 CDN 全局加载，从 window 对象解构 API
 // 注意：import 语句会被提升，所以将 Vue 解构放在 imports 之后
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, showToast } from './utils.js';
-import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction as apiDockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror, uninstallLanguage } from './api.js';
+import { fetchServers, createServer, updateServer, deleteServer as apiDeleteServer, loadServerInfo, testConnection, fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware, uninstallSoftware, controlService, fetchSources, createSource, updateSource, deleteSource as apiDeleteSource, fetchSoftwareLog, fetchProcesses, killProcess, fetchProcessLog, fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage, detectLanguages, installLanguage, fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile, checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage, fetchDockerContainers, dockerContainerAction as apiDockerContainerAction, removeDockerContainer, dockerExec, fetchDockerLogs, fetchPackages, createPackage, updatePackage, deletePackage as apiDeletePackage, batchDeleteDockerImages, batchDockerContainerAction, fetchDockerSources, createDockerSource, updateDockerSource, deleteDockerSource as apiDeleteDockerSource, fetchServerMirror, applyServerMirror, uninstallLanguage, login as apiLogin, logout as apiLogout, fetchMe, changePassword as apiChangePassword } from './api.js';
 import { connectWS } from './ws.js';
 
 const { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } = window.Vue;
@@ -65,6 +65,110 @@ export function setupStore() {
             document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
         }
     });
+
+    // ─── 登录认证 ───
+    const authed = ref(false);
+    const authChecked = ref(false);              // 是否完成登录态探测
+    const currentUser = ref('');
+    const mustChangePassword = ref(false);       // 首次登录（仍为默认密码）强制改密
+    const loginForm = reactive({ username: 'admin', password: 'admin123' }); // 默认账密预填写
+    const loginError = ref('');
+    const loginLoading = ref(false);
+    const pwForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    const pwError = ref('');
+    const pwSaving = ref(false);
+
+    /** 探测登录态：已登录直接进入应用，否则展示登录页。 */
+    async function initAuth() {
+        try {
+            const me = await fetchMe();
+            enterApp(me.username, me.must_change_password);
+        } catch {
+            authed.value = false;
+        } finally {
+            authChecked.value = true;
+        }
+    }
+
+    /** 登录成功后进入应用并加载业务数据。 */
+    function enterApp(username, mustChange) {
+        currentUser.value = username;
+        mustChangePassword.value = !!mustChange;
+        authed.value = true;
+        loadAppData();
+    }
+
+    /** 登录后加载全部业务数据（未登录前不发任何业务请求）。 */
+    function loadAppData() {
+        loadServers();
+        loadSoftwareCatalog();
+        loadSources();
+        loadSettings();
+        loadLanguages();
+    }
+
+    /** 提交登录。 */
+    async function handleLogin() {
+        loginError.value = '';
+        if (!loginForm.username || !loginForm.password) {
+            loginError.value = '请输入用户名和密码';
+            return;
+        }
+        loginLoading.value = true;
+        try {
+            const data = await apiLogin(loginForm.username, loginForm.password);
+            enterApp(data.username, data.must_change_password);
+            if (data.must_change_password) toastNotify('首次登录，请先修改默认密码');
+        } catch (err) {
+            loginError.value = err.message;
+        } finally {
+            loginLoading.value = false;
+        }
+    }
+
+    /** 退出登录，回到登录页（重置为默认账密预填写）。 */
+    async function handleLogout() {
+        try { await apiLogout(); } catch { /* 会话可能已失效，忽略 */ }
+        leaveApp();
+        loginForm.username = 'admin';
+        loginForm.password = 'admin123';
+    }
+
+    /** 会话失效（401）时回到登录页。 */
+    function handleUnauthorized() {
+        if (!authed.value) return;
+        leaveApp();
+        toastNotify('登录已过期，请重新登录', true);
+    }
+
+    /** 清理本地登录态并断开 WebSocket。 */
+    function leaveApp() {
+        authed.value = false;
+        mustChangePassword.value = false;
+        currentUser.value = '';
+        if (wsController) wsController.disconnect();
+    }
+
+    /** 提交修改密码（首登强制改密共用）。 */
+    async function handleChangePassword() {
+        pwError.value = '';
+        if (!pwForm.oldPassword) { pwError.value = '请输入当前密码'; return; }
+        if (pwForm.newPassword.length < 8) { pwError.value = '新密码长度至少 8 位'; return; }
+        if (pwForm.newPassword !== pwForm.confirmPassword) { pwError.value = '两次输入的新密码不一致'; return; }
+        pwSaving.value = true;
+        try {
+            await apiChangePassword(pwForm.oldPassword, pwForm.newPassword);
+            mustChangePassword.value = false;
+            pwForm.oldPassword = '';
+            pwForm.newPassword = '';
+            pwForm.confirmPassword = '';
+            toastNotify('密码已修改，后续登录请使用新密码');
+        } catch (err) {
+            pwError.value = err.message;
+        } finally {
+            pwSaving.value = false;
+        }
+    }
 
     // ─── 核心数据状态 ───
     const servers = ref([]);
@@ -1707,13 +1811,10 @@ export function setupStore() {
     // ═══════════════════════════════════════════
 
     onMounted(() => {
-        loadServers();
-        loadSoftwareCatalog();
-        loadSources();
-        loadSettings();
-        loadLanguages();
+        initAuth();
         window.addEventListener('keydown', handleKeydown);
         window.addEventListener('resize', handleWindowResize);
+        window.addEventListener('smp:unauthorized', handleUnauthorized);
     });
 
     // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接）
@@ -1732,6 +1833,7 @@ export function setupStore() {
         disconnectTerminal();
         window.removeEventListener('keydown', handleKeydown);
         window.removeEventListener('resize', handleWindowResize);
+        window.removeEventListener('smp:unauthorized', handleUnauthorized);
         document.removeEventListener('click', handleDocClickForCombo);
     });
 
@@ -1749,6 +1851,11 @@ export function setupStore() {
     return {
         // 主题与图标
         theme, setTheme, themeVal, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
+        // 登录认证
+        authed, authChecked, currentUser, mustChangePassword,
+        loginForm, loginError, loginLoading,
+        pwForm, pwError, pwSaving,
+        handleLogin, handleLogout, handleChangePassword,
         // 设置
         settingsForm, settingsSaving, loadSettings, saveSettings,
         brandName, brandMark, welcomeMessage,

@@ -18,7 +18,27 @@
 </head>
 <body>
 <div id="app">
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <!-- ═══ 登录视图（未认证时全屏展示） ═══ -->
+    <div class="auth-screen" v-if="authChecked && !authed">
+        <div class="auth-card">
+            <div class="brand auth-brand">
+                <span class="brand-mark">{{ brandMark }}</span>
+                <div class="brand-copy">
+                    <strong>{{ brandName }}</strong>
+                    <span>基础设施控制台</span>
+                </div>
+            </div>
+            <form class="auth-form" @submit.prevent="handleLogin">
+                <label class="field"><span>用户名</span><input v-model="loginForm.username" autocomplete="username"></label>
+                <label class="field"><span>密码</span><input type="password" v-model="loginForm.password" autocomplete="current-password"></label>
+                <div class="auth-error" v-if="loginError">{{ loginError }}</div>
+                <button class="primary-button auth-submit" type="submit" :disabled="loginLoading">{{ loginLoading ? '登录中...' : '登 录' }}</button>
+            </form>
+            <p class="auth-hint">首次部署默认账户 admin / admin123，登录后请及时修改密码</p>
+        </div>
+    </div>
+
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" v-if="authed">
         <div class="sidebar-header">
             <div class="brand">
                 <span class="brand-mark">{{ brandMark }}</span>
@@ -81,7 +101,7 @@
         </div>
     </aside>
 
-    <main class="main">
+    <main class="main" v-if="authed">
         <header class="topbar">
             <div class="breadcrumb">
                 <template v-if="activeMenu === 'config'">
@@ -100,6 +120,7 @@
                     <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新数据">↻ <span>刷新</span></button>
                 </template>
                 <button class="topbar-icon-btn" @click="showDoc = true" title="使用文档">📖</button>
+                <button class="topbar-icon-btn" @click="handleLogout" title="退出登录 ({{ currentUser }})">⎋</button>
                 <select class="theme-select" v-model="themeVal" @change="setTheme(themeVal)" title="切换主题">
                     <option value="light">☀️ 白天</option>
                     <option value="dark">🌙 夜间</option>
@@ -1325,6 +1346,27 @@
                 <ul>
                     <li><code>/</code> — 聚焦搜索框</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 首次登录强制修改密码（不可关闭） -->
+    <div class="modal-overlay" v-if="authed && mustChangePassword">
+        <div class="modal auth-pw-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">SECURITY</span><h3>修改默认密码</h3></div>
+            </div>
+            <div class="modal-body">
+                <p class="settings-desc">检测到仍在使用默认密码，为保障安全请先设置新密码。修改后持续生效，重新部署后恢复默认。</p>
+                <form class="form-grid" @submit.prevent="handleChangePassword">
+                    <label class="field full"><span>当前密码</span><input type="password" v-model="pwForm.oldPassword" autocomplete="current-password"></label>
+                    <label class="field full"><span>新密码（至少 8 位）</span><input type="password" v-model="pwForm.newPassword" autocomplete="new-password"></label>
+                    <label class="field full"><span>确认新密码</span><input type="password" v-model="pwForm.confirmPassword" autocomplete="new-password"></label>
+                </form>
+                <div class="auth-error" v-if="pwError">{{ pwError }}</div>
+            </div>
+            <div class="modal-footer">
+                <button class="primary-button" @click="handleChangePassword" :disabled="pwSaving">{{ pwSaving ? '提交中...' : '确认修改' }}</button>
             </div>
         </div>
     </div>

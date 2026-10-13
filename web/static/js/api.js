@@ -7,16 +7,63 @@
 
 const API_PREFIX = '/api/v1';
 
+/** 广播会话失效事件（store.js 监听后回到登录页）。 */
+function notifyUnauthorized() {
+    window.dispatchEvent(new CustomEvent('smp:unauthorized'));
+}
+
 /**
  * 通用 JSON 请求封装。
  * @param {string} path - API 路径（不含前缀）
  * @param {Object} [options] - fetch 选项
  * @returns {Promise<{code: number, message: string, data: any}>}
- * @throws {Error} 网络异常或响应解析失败
+ * @throws {Error} 网络异常、未登录（401）或响应解析失败
  */
 async function request(path, options = {}) {
     const response = await fetch(API_PREFIX + path, options);
+    if (response.status === 401) {
+        notifyUnauthorized();
+        throw new Error('未登录或会话已过期');
+    }
     return response.json();
+}
+
+// --- 登录认证 ---
+
+/** 登录，成功返回 { username, must_change_password }。 */
+export async function login(username, password) {
+    const json = await request('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '登录失败');
+    return json.data;
+}
+
+/** 注销当前会话。 */
+export async function logout() {
+    const json = await request('/auth/logout', { method: 'POST' });
+    if (json.code !== 0) throw new Error(json.message || '注销失败');
+    return json.data;
+}
+
+/** 探测当前登录态，返回 { username, must_change_password }，未登录抛错。 */
+export async function fetchMe() {
+    const json = await request('/auth/me');
+    if (json.code !== 0) throw new Error(json.message || '获取登录态失败');
+    return json.data;
+}
+
+/** 修改密码（校验旧密码），成功后清除首登改密标记。 */
+export async function changePassword(oldPassword, newPassword) {
+    const json = await request('/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '修改密码失败');
+    return json.data;
 }
 
 /**
@@ -351,6 +398,10 @@ export async function fetchFilePreview(serverId, path, lines) {
 export async function downloadFile(serverId, path) {
     const params = new URLSearchParams({ server: serverId, path });
     const response = await fetch(`${API_PREFIX}/files/download?${params}`);
+    if (response.status === 401) {
+        notifyUnauthorized();
+        throw new Error('未登录或会话已过期');
+    }
     if (!response.ok) throw new Error('下载失败');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);

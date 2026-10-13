@@ -63,6 +63,9 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	}
 
 	// --- API 处理器 ---
+	authHandler := api.NewAuthHandler(log, store.DB())
+	authHandler.Register(mux)
+
 	healthHandler := api.NewHealthHandler()
 	healthHandler.Register(mux)
 
@@ -91,8 +94,9 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	fileServer := http.FileServer(http.FS(subFS))
 	mux.Handle("/", fileServer)
 
-	// --- 中间件链：Recovery → Logging → SecurityHeaders → mux ---
+	// --- 中间件链：Recovery → Logging → SecurityHeaders → Auth → mux ---
 	var handler http.Handler = mux
+	handler = authHandler.Middleware(handler)
 	handler = middleware.SecurityHeaders(handler)
 	handler = middleware.Logging(log.Named("http"))(handler)
 	handler = middleware.Recovery(log.Named("recovery"))(handler)
