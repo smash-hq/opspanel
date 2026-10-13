@@ -443,8 +443,13 @@ export function setupStore() {
     const fileDetailVisible = ref(false);
     const fileDetailData = reactive({ name: '', path: '', is_dir: false, size: 0, mode: '', mod_time: 0 });
 
+    // 权限说明文档弹窗（权限不足时的指引入口）
+    const permGuideVisible = ref(false);
+    function openPermGuide() { permGuideVisible.value = true; }
+    function closePermGuide() { permGuideVisible.value = false; }
+
     async function loadFiles(path) {
-        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        if (!selectedServer.value) return; // 本机与远程节点均支持（本机走进程内执行）
         filesLoading.value = true;
         try {
             const targetPath = path || currentFilePath.value;
@@ -643,7 +648,7 @@ export function setupStore() {
     });
 
     async function detectServerLanguages() {
-        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        if (!selectedServer.value) return; // 本机与远程节点均支持
         langDetectLoading.value = true;
         try {
             detectedLanguages.value = await detectLanguages(selectedServer.value);
@@ -735,11 +740,12 @@ export function setupStore() {
     const batchActionLoading = ref(false);
 
     async function checkDockerEnv() {
-        if (!selectedServer.value || selectedServer.value === 'srv_local') {
+        if (!selectedServer.value) {
             dockerAvailable.value = false;
             dockerTabEnabled.value = false;
             return;
         }
+        // 本机与远程节点均检测（本机需运行用户有 docker 权限，未安装/无权限时自动降级隐藏）
         try {
             const data = await checkDocker(selectedServer.value);
             dockerAvailable.value = data.available;
@@ -1063,7 +1069,7 @@ export function setupStore() {
     const processLogLoading = ref(false);
 
     async function loadProcesses(lines) {
-        if (!selectedServer.value || selectedServer.value === 'srv_local') return;
+        if (!selectedServer.value) return; // 本机与远程节点均支持
         processLoading.value = true;
         try {
             processes.value = await fetchProcesses(selectedServer.value, lines || 50);
@@ -1920,6 +1926,8 @@ export function setupStore() {
         loadFiles, navigateToPath, openFilePreview, closeFilePreview,
         openFileDetail, closeFileDetail, handleDownloadFile,
         filteredFiles, sortedEntries, getFileIcon, formatFileSize, formatModTime,
+        // 权限说明文档
+        permGuideVisible, openPermGuide, closePermGuide,
         // Web 终端
         terminalMount, terminalStatus, terminalStatusText,
         openTerminalTab, disconnectTerminal, reconnectTerminal,

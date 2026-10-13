@@ -663,7 +663,8 @@
                         <span class="warning-icon">⚠</span>
                         <div class="warning-content">
                             <strong>权限不足 — 部分文件可能无法显示</strong>
-                            <p>当前未配置 sudo 权限，部分受保护的文件和目录可能无法访问。建议为远程用户配置 NOPASSWD sudo。</p>
+                            <p>当前未配置 sudo 权限，部分受保护的文件和目录可能无法访问。建议为用户配置 NOPASSWD sudo。</p>
+                            <button class="warning-action" @click="openPermGuide">查看配置方法</button>
                         </div>
                     </div>
                     <!-- 面包屑导航 -->
@@ -1367,6 +1368,43 @@
             </div>
             <div class="modal-footer">
                 <button class="primary-button" @click="handleChangePassword" :disabled="pwSaving">{{ pwSaving ? '提交中...' : '确认修改' }}</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 权限说明文档弹窗 -->
+    <div class="modal-overlay" v-if="permGuideVisible" @click.self="closePermGuide">
+        <div class="modal perm-guide-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">PERMISSION</span><h3>权限说明</h3></div>
+                <button class="icon-button" @click="closePermGuide" title="关闭">×</button>
+            </div>
+            <div class="modal-body perm-guide-body">
+                <p class="settings-desc">服务以部署时指定的运行用户身份执行操作，无需 root 也能查看大部分信息。如遇权限不足，可参考以下方式提升权限。</p>
+
+                <div class="perm-section">
+                    <h4>本机节点</h4>
+                    <p>本机节点由服务进程直接读取 <code>/proc</code>、<code>/sys</code> 采集系统信息，通常<strong>无需任何额外权限</strong>。以下操作可能受限：</p>
+                    <ul>
+                        <li>结束其他用户的进程</li>
+                        <li>浏览受保护的文件/目录（如 <code>/etc/shadow</code>、其他用户主目录）</li>
+                        <li>管理 Docker 容器（运行用户不在 docker 组时）</li>
+                    </ul>
+                    <p><strong>方式一：配置免密 sudo（推荐）</strong>——服务执行失败时会自动尝试 <code>sudo -n</code> 免密提权：</p>
+                    <pre><code>sudo visudo -f /etc/sudoers.d/server-plane
+# 写入以下内容（smpuser 替换为服务运行用户）：
+smpuser ALL=(ALL) NOPASSWD: ALL
+# 保存后设置安全权限：
+sudo chmod 0440 /etc/sudoers.d/server-plane</code></pre>
+                    <p><strong>方式二：以 root 运行服务</strong>——修改 systemd unit 中 <code>User=root</code> 后 <code>systemctl daemon-reload &amp;&amp; systemctl restart</code>。简单直接，但权限过大，不建议在生产环境使用。</p>
+                    <p><strong>Docker 管理：</strong>将运行用户加入 docker 组（重新登录后生效）：</p>
+                    <pre><code>sudo usermod -aG docker smpuser</code></pre>
+                </div>
+
+                <div class="perm-section">
+                    <h4>远程节点</h4>
+                    <p>远程节点通过 SSH 用户执行命令，非 root 用户同样存在上述限制。建议为 SSH 用户配置 <code>NOPASSWD</code> 免密 sudo，详细步骤参见项目文档 <code>docs/sudo-setup.md</code>。</p>
+                </div>
             </div>
         </div>
     </div>

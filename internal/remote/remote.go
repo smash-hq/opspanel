@@ -141,25 +141,54 @@ func (c *sshConn) Close() error {
 	return c.client.Close()
 }
 
-// Acquire 从连接池获取服务器的可用连接；池中不存在或已断线时自动重建。
-func (rc *RemoteCollector) Acquire(srv *Server) (*sshConn, error) {
+// LocalServerID 本机节点固定 ID（与 storage/host 包一致；remote 不依赖 host 包，故此处重复定义）。
+const LocalServerID = "srv_local"
+
+// commandRunner 抽象命令执行通道：远程节点为池化 SSH 连接，本机节点为进程内执行器。
+type commandRunner interface {
+	RunOnce(cmd string) (string, error)
+	RunRaw(cmd string) ([]byte, error)
+	usable() bool
+	Close() error
+}
+
+// sharedLocal 本机执行器共享实例（无状态，可并发）。
+var sharedLocal commandRunner = &localShell{}
+
+// isLocal 判断是否本机节点（本机走进程内执行，无需 SSH）。
+func isLocal(srv *Server) bool {
+	return srv == nil || srv.ID == LocalServerID || srv.Type == "local"
+}
+
+// Acquire 获取服务器的命令执行通道：本机节点返回进程内执行器（无需 SSH 凭据与 root 权限），
+// 远程节点从连接池获取 SSH 连接（池中不存在或已断线时自动重建）。
+func (rc *RemoteCollector) Acquire(srv *Server) (commandRunner, error) {
+	if isLocal(srv) {
+		return sharedLocal, nil
+	}
 	return rc.pool.Acquire(srv)
 }
 
-// Release 归还连接到池（不关闭，由连接池统一管理生命周期）。
+// Release 归还连接到池（本机执行器为共享实例，无需归还）。
 func (rc *RemoteCollector) Release(serverID string) {
+	if serverID == LocalServerID {
+		return
+	}
 	rc.pool.Release(serverID)
 }
 
-// CloseConn 优雅关闭指定服务器的池化连接（更新/删除服务器配置时调用）。
+// CloseConn 优雅关闭指定服务器的池化连接（更新/删除服务器配置时调用；本机执行器无需处理）。
 func (rc *RemoteCollector) CloseConn(serverID string) {
+	if serverID == LocalServerID {
+		return
+	}
 	rc.pool.CloseConn(serverID)
 }
 
-// RunOne 在远程服务器上执行单条命令并返回输出。
+// RunOne 在目标服务器上执行单条命令并返回输出。
 // 命令执行日志为 Debug 级：周期性采集（pushLoop）会高频调用，Info 级会刷屏。
 // 排查问题时将日志级别调至 debug 即可看到每条命令及输出。
-func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
+func (rc *RemoteCollector) RunOne(client commandRunner, cmd string) string {
 	out, err := client.RunOnce(cmd)
 	if err != nil {
 		rc.log.Debugw("remote cmd error", "cmd", cmd, "error", err.Error())
@@ -175,7 +204,7 @@ func (rc *RemoteCollector) RunOne(client *sshConn, cmd string) string {
 }
 
 // RunWithSudo 先尝试直接执行命令，失败则使用 sudo -n 回退。
-func (rc *RemoteCollector) RunWithSudo(client *sshConn, cmd string) string {
+func (rc *RemoteCollector) RunWithSudo(client commandRunner, cmd string) string {
 	// 先尝试直接执行
 	out := rc.RunOne(client, cmd)
 	if out != "" {
