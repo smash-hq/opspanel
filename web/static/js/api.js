@@ -350,13 +350,16 @@ export async function fetchFilePreview(serverId, path, lines) {
 /** 下载文件。 */
 export async function downloadFile(serverId, path) {
     const params = new URLSearchParams({ server: serverId, path });
-    const response = await fetch(`/files/download?${params}`);
+    const response = await fetch(`${API_PREFIX}/files/download?${params}`);
     if (!response.ok) throw new Error('下载失败');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    // 优先使用后端 Content-Disposition 中的文件名（目录下载为 *.tar.gz）
+    const cd = response.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/);
+    a.download = m ? m[1] : (path.replace(/\/+$/, '').split('/').pop() || 'download');
     a.href = url;
-    a.download = path.split('/').pop() || 'download';
     a.click();
     URL.revokeObjectURL(url);
 }

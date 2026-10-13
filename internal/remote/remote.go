@@ -114,6 +114,24 @@ func (c *sshConn) RunOnce(cmd string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// RunRaw 执行单条命令并返回原始字节输出（不 TrimSpace，用于二进制传输如文件下载）。
+func (c *sshConn) RunRaw(cmd string) ([]byte, error) {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	out, err := session.CombinedOutput(cmd)
+	if err != nil {
+		var exitErr *ssh.ExitError
+		if !errors.As(err, &exitErr) {
+			c.broken.Store(true)
+		}
+	}
+	return out, err
+}
+
 // usable 返回连接是否仍可使用（未被标记断开）。
 func (c *sshConn) usable() bool { return !c.broken.Load() }
 
@@ -405,13 +423,14 @@ func (rc *RemoteCollector) InstallLanguage(srv *Server, installCmd, version stri
 
 // FileInfo 表示文件或目录的信息。
 type FileInfo struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	IsDir    bool   `json:"is_dir"`
-	Size     int64  `json:"size"`
-	Mode     string `json:"mode"`
-	ModTime  int64  `json:"mod_time"`
-	IsHidden bool   `json:"is_hidden"`
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	IsDir      bool   `json:"is_dir"`
+	Size       int64  `json:"size"`
+	Mode       string `json:"mode"`
+	ModTime    int64  `json:"mod_time"`
+	IsHidden   bool   `json:"is_hidden"`
+	LinkTarget string `json:"link_target,omitempty"` // 软链接目标（仅软链接条目非空）
 }
 
 // ListFilesResult 包含文件列表和 sudo 使用状态。
@@ -434,8 +453,9 @@ func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult
 	}
 
 	sudoUsed := false
-	// 先尝试 sudo ls -la
-	cmd := fmt.Sprintf("ls -la --time-style=long-iso %q 2>/dev/null", path)
+	// TZ=UTC + 自定义 time-style：时间输出为单字段 RFC3339，保证列数固定、时区无歧义
+	lsCmd := "env TZ=UTC ls -la --time-style=+%Y-%m-%dT%H:%M:%SZ"
+	cmd := fmt.Sprintf("%s %q 2>/dev/null", lsCmd, path)
 	out := rc.RunOne(conn, "sudo -n "+cmd)
 	if out != "" {
 		sudoUsed = true
@@ -448,24 +468,42 @@ func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult
 	}
 
 	var files []FileInfo
-	lines := strings.Split(out, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 9 {
+		// 固定 7 列：mode links owner group size time name...（name 可能含空格）
+		if len(fields) < 7 {
 			continue
 		}
-		// 跳过总计行和当前目录/父目录
-		name := strings.Join(fields[8:], " ")
-		if name == "" || name == "." || name == ".." || strings.HasPrefix(name, "total") {
+		mode := fields[0]
+		if strings.HasPrefix(mode, "total") {
 			continue
 		}
 
-		mode := fields[0]
+		name := strings.Join(fields[6:], " ")
+		var linkTarget string
+		// 软链接行尾部为 "name... -> target"，按箭头拆出名字与目标
+		for i := 6; i < len(fields)-1; i++ {
+			if fields[i] == "->" {
+				name = strings.Join(fields[6:i], " ")
+				linkTarget = strings.Join(fields[i+1:], " ")
+				break
+			}
+		}
+		if name == "" || name == "." || name == ".." {
+			continue
+		}
+
 		isDir := strings.HasPrefix(mode, "d")
 		isHidden := strings.HasPrefix(name, ".")
 
 		var size int64
 		fmt.Sscanf(fields[4], "%d", &size)
+
+		// 解析 UTC 修改时间为 Unix 时间戳
+		var modTime int64
+		if t, err := time.Parse(time.RFC3339, fields[5]); err == nil {
+			modTime = t.Unix()
+		}
 
 		// 拼接完整路径
 		fullPath := path
@@ -480,13 +518,14 @@ func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult
 		}
 
 		files = append(files, FileInfo{
-			Name:     name,
-			Path:     fullPath,
-			IsDir:    isDir,
-			Size:     size,
-			Mode:     mode,
-			ModTime:  0, // ls 输出解析时间较复杂，暂不解析
-			IsHidden: isHidden,
+			Name:       name,
+			Path:       fullPath,
+			IsDir:      isDir,
+			Size:       size,
+			Mode:       mode,
+			ModTime:    modTime,
+			IsHidden:   isHidden,
+			LinkTarget: linkTarget,
 		})
 	}
 
@@ -519,8 +558,14 @@ func (rc *RemoteCollector) GetFileInfo(srv *Server, path string) (*FileInfo, err
 	isDir := strings.Contains(parts[1], "directory")
 	mode := parts[3]
 
+	// %n 输出完整路径，名称取最后一段
+	name := path
+	if idx := strings.LastIndex(strings.TrimSuffix(path, "/"), "/"); idx >= 0 {
+		name = strings.TrimSuffix(path, "/")[idx+1:]
+	}
+
 	return &FileInfo{
-		Name:    parts[0],
+		Name:    name,
 		Path:    path,
 		IsDir:   isDir,
 		Size:    size,
@@ -553,7 +598,7 @@ func (rc *RemoteCollector) ReadFileContent(srv *Server, path string, lines int) 
 	return rc.RunWithSudo(conn, cmd), nil
 }
 
-// DownloadFile 读取文件内容用于下载。
+// DownloadFile 读取文件内容用于下载；目录会打包为 tar.gz 返回。
 func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, string, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
@@ -561,14 +606,42 @@ func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, strin
 	}
 	defer rc.Release(srv.ID)
 
-	cmd := fmt.Sprintf("cat %q 2>/dev/null", path)
-	out := rc.RunWithSudo(conn, cmd)
+	// 去掉尾部分隔符，拆出父目录与名称
+	clean := strings.TrimSuffix(path, "/")
+	if clean == "" {
+		clean = "/"
+	}
+	parent, name := "/", clean
+	if idx := strings.LastIndex(clean, "/"); idx >= 0 {
+		parent = clean[:idx]
+		name = clean[idx+1:]
+		if parent == "" {
+			parent = "/"
+		}
+	}
+	if name == "" {
+		return nil, "", fmt.Errorf("invalid path: %s", path)
+	}
 
-	// 提取文件名
-	parts := strings.Split(path, "/")
-	filename := parts[len(parts)-1]
+	// 目录打包为 tar.gz，普通文件直接 cat
+	cmd := fmt.Sprintf("if [ -d %q ]; then tar -czf - -C %q %q 2>/dev/null; else cat %q 2>/dev/null; fi", clean, parent, name, clean)
 
-	return []byte(out), filename, nil
+	data, err := conn.RunRaw(cmd)
+	if len(data) == 0 {
+		// 权限不足时 sudo 回退
+		data, _ = conn.RunRaw("sudo -n " + cmd)
+	}
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("cannot download: %s", path)
+	}
+
+	// gzip 魔数（1f 8b）说明走的是 tar 打包分支
+	filename := name
+	if len(data) > 2 && data[0] == 0x1f && data[1] == 0x8b {
+		filename = name + ".tar.gz"
+	}
+
+	return data, filename, nil
 }
 
 // KillProcess 终止指定 PID 的进程。

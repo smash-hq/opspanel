@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Plane · 服务器管理</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" href="/api/v1/settings/favicon">
     <!-- 样式表：按 base → layout → components → states 顺序加载 -->
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/layout.css">
@@ -21,9 +21,9 @@
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
             <div class="brand">
-                <span class="brand-mark">SP</span>
+                <span class="brand-mark">{{ brandMark }}</span>
                 <div class="brand-copy" v-show="!sidebarCollapsed">
-                    <strong>Server Plane</strong>
+                    <strong>{{ brandName }}</strong>
                     <span>基础设施控制台</span>
                 </div>
             </div>
@@ -184,6 +184,7 @@
                                     <span class="package-category">{{ pkg.category }}</span>
                                 </div>
                                 <div class="package-actions">
+                                    <button @click="openConfigDetail('pkg', pkg)" title="详情">ℹ</button>
                                     <button @click="openPackageForm('edit', pkg)" title="编辑">✎</button>
                                     <button class="danger" @click="handleDeletePackage(pkg.id)" title="删除">×</button>
                                 </div>
@@ -197,28 +198,20 @@
                         <div class="section-header">
                             <button class="primary-button small" @click="openLangForm('add')">＋ 添加语言</button>
                         </div>
-                        <div class="languages-grid">
-                            <div v-for="lang in languages" :key="lang.id" class="language-row">
-                                <span class="lang-icon">{{ lang.icon || '📦' }}</span>
-                                <div class="lang-info">
+                        <div class="packages-list">
+                            <div v-for="lang in languages" :key="lang.id" class="package-card">
+                                <span class="package-icon">{{ lang.icon || '📦' }}</span>
+                                <div class="package-info">
                                     <strong>{{ lang.name }}</strong>
                                     <small>{{ lang.description }}</small>
+                                    <span class="package-category">{{ lang.category }}</span>
                                 </div>
-                                <div class="lang-meta">
-                                    <span class="lang-cmd-toggle" @click="lang._expanded = !lang._expanded">
-                                        {{ lang._expanded ? '▾ 收起' : '▸ 详情' }}
-                                    </span>
-                                </div>
-                                <div class="lang-actions">
+                                <div class="package-actions">
+                                    <button @click="openConfigDetail('lang', lang)" title="详情">ℹ</button>
                                     <button @click="openLangForm('edit', lang)" title="编辑">✎</button>
                                     <button class="danger" @click="deleteLanguage(lang.id)" title="删除">×</button>
                                 </div>
                             </div>
-                        </div>
-                        <!-- 展开的详情区域 -->
-                        <div v-for="lang in languages.filter(l => l._expanded)" :key="'detail-'+lang.id" class="lang-expand-detail">
-                            <div class="lang-detail-row"><span class="detail-label">版本检测:</span><code>{{ lang.version_cmd || '未配置' }}</code></div>
-                            <div class="lang-detail-row"><span class="detail-label">安装脚本:</span><pre>{{ lang.install_cmd || '未配置' }}</pre></div>
                         </div>
                     </div>
                     <!-- Docker 镜像源管理 -->
@@ -289,6 +282,7 @@
                 <h2>选择一台服务器开始管理</h2>
                 <p>从左侧节点列表中选择一台服务器，查看系统信息、管理软件和服务。</p>
                 <div class="empty-state-hint">💡 提示：点击左侧节点进行选择</div>
+                <div class="welcome-text" v-if="welcomeMessage">{{ welcomeMessage }}</div>
             </section>
 
             <!-- ═══ 已选节点 ═══ -->
@@ -667,50 +661,37 @@
                         </div>
                         <button class="toolbar-button" @click="loadFiles()" :disabled="filesLoading">↻ 刷新</button>
                     </div>
-                    <!-- 文件列表 -->
+                    <!-- 文件列表（目录在前、名称排序，类似 ls -l） -->
                     <div v-if="filesLoading" class="loading-state" style="padding:20px;">加载中...</div>
-                    <div v-else-if="!filteredFiles.length" class="list-empty">
+                    <div v-else-if="!sortedEntries.length" class="list-empty">
                         <span class="empty-icon">⌁</span><strong>空目录</strong>
                     </div>
-                    <div v-else>
-                        <!-- 文件夹区域 -->
-                        <div v-if="filteredDirs.length" class="file-section">
-                            <div class="file-section-title">
-                                <span class="section-icon">📁</span>文件夹 ({{ filteredDirs.length }})
-                            </div>
-                            <div class="folder-grid">
-                                <div v-for="file in filteredDirs" :key="file.path" class="folder-card" @click="navigateToPath(file.path)">
-                                    <span class="folder-icon-big">{{ file.is_hidden ? '🔒' : '📁' }}</span>
-                                    <span class="folder-name">{{ file.name }}</span>
-                                    <span class="folder-meta">{{ file.mode }}</span>
-                                </div>
-                            </div>
+                    <div v-else class="file-section">
+                        <div class="file-section-title">
+                            <span class="section-icon">📂</span>条目 ({{ sortedEntries.length }})
                         </div>
-                        <!-- 文件区域 -->
-                        <div v-if="filteredRegFiles.length" class="file-section">
-                            <div class="file-section-title">
-                                <span class="section-icon">📄</span>文件 ({{ filteredRegFiles.length }})
+                        <div class="file-table">
+                            <div class="file-table-header">
+                                <span class="ft-name">名称</span>
+                                <span class="ft-size">大小</span>
+                                <span class="ft-mode">权限</span>
+                                <span class="ft-time">修改时间</span>
+                                <span class="ft-actions">操作</span>
                             </div>
-                            <div class="file-table">
-                                <div class="file-table-header">
-                                    <span class="ft-name">名称</span>
-                                    <span class="ft-size">大小</span>
-                                    <span class="ft-mode">权限</span>
-                                    <span class="ft-actions">操作</span>
-                                </div>
-                                <div v-for="file in filteredRegFiles" :key="file.path" class="file-table-row">
-                                    <span class="ft-name">
-                                        <span class="ft-icon">{{ file.is_hidden ? '🔒' : getFileIcon(file.name) }}</span>
-                                        <span class="ft-link" @click="openFilePreview(file)">{{ file.name }}</span>
-                                    </span>
-                                    <span class="ft-size">{{ formatFileSize(file.size) }}</span>
-                                    <span class="ft-mode">{{ file.mode }}</span>
-                                    <span class="ft-actions">
-                                        <button class="ft-btn" @click="openFilePreview(file)" title="预览">👁</button>
-                                        <button class="ft-btn" @click="openFileDetail(file)" title="详情">ℹ</button>
-                                        <button class="ft-btn" @click="handleDownloadFile(file)" title="下载">⬇</button>
-                                    </span>
-                                </div>
+                            <div v-for="file in sortedEntries" :key="file.path" class="file-table-row" :class="{ 'is-dir-row': file.is_dir }">
+                                <span class="ft-name">
+                                    <span class="ft-icon">{{ file.is_hidden ? '🔒' : (file.is_dir ? '📁' : (file.link_target ? '🔗' : getFileIcon(file.name))) }}</span>
+                                    <span class="ft-link" :class="{ 'ft-link-dir': file.is_dir }" @click="file.is_dir ? navigateToPath(file.path) : openFilePreview(file)">{{ file.name }}</span>
+                                    <span class="ft-link-target" v-if="file.link_target" :title="'链接目标: ' + file.link_target">→ {{ file.link_target }}</span>
+                                </span>
+                                <span class="ft-size">{{ file.is_dir ? '—' : formatFileSize(file.size) }}</span>
+                                <span class="ft-mode">{{ file.mode }}</span>
+                                <span class="ft-time">{{ formatModTime(file.mod_time) }}</span>
+                                <span class="ft-actions">
+                                    <button class="ft-btn" v-if="!file.is_dir" @click="openFilePreview(file)" title="预览">👁</button>
+                                    <button class="ft-btn" @click="openFileDetail(file)" title="详情">ℹ</button>
+                                    <button class="ft-btn" @click="handleDownloadFile(file)" :title="file.is_dir ? '下载（tar.gz 打包）' : '下载'">⬇</button>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -1096,6 +1077,73 @@
             <div class="modal-footer">
                 <button class="toolbar-button" @click="closeLangForm">取消</button>
                 <button class="primary-button" @click="saveLanguage" :disabled="langSaving">{{ langSaving ? '保存中...' : '保存' }}</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置详情弹窗（软件包 / 语言环境通用） -->
+    <div class="modal-overlay" v-if="configDetailVisible" @click.self="closeConfigDetail">
+        <div class="modal config-detail-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">{{ configDetailType === 'pkg' ? 'PACKAGE DETAILS' : 'LANGUAGE DETAILS' }}</span><h3>{{ configDetailData.name }} · 配置详情</h3></div>
+                <button class="icon-button" @click="closeConfigDetail" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="cd-head">
+                    <span class="cd-icon">{{ configDetailData.icon || '📦' }}</span>
+                    <div class="cd-head-info">
+                        <strong>{{ configDetailData.name }}</strong>
+                        <small>{{ configDetailData.description || '暂无描述' }}</small>
+                    </div>
+                    <span class="package-category">{{ configDetailData.category }}</span>
+                </div>
+                <div class="cd-section" v-if="configDetailVersions.length">
+                    <div class="form-section-title">可选版本</div>
+                    <div class="cd-versions">
+                        <span v-for="v in configDetailVersions" :key="v" class="cd-version-chip">{{ v }}</span>
+                    </div>
+                </div>
+                <div class="cd-section" v-if="configDetailData.version_cmd">
+                    <div class="form-section-title">版本检测</div>
+                    <div class="cd-cmd-row"><span class="detail-label">检测命令</span><code>{{ configDetailData.version_cmd }}</code></div>
+                </div>
+                <template v-if="configDetailType === 'pkg'">
+                    <div class="cd-section" v-if="configDetailInstall.length">
+                        <div class="form-section-title">安装命令</div>
+                        <div v-for="[mgr, cmds] in configDetailInstall" :key="'i-' + mgr" class="cd-cmd-group">
+                            <span class="cd-mgr-badge">{{ mgr }}</span>
+                            <pre v-for="(c, i) in cmds" :key="i">{{ c }}</pre>
+                        </div>
+                    </div>
+                    <div class="cd-section" v-if="configDetailUninstall.length">
+                        <div class="form-section-title">卸载命令</div>
+                        <div v-for="[mgr, cmds] in configDetailUninstall" :key="'u-' + mgr" class="cd-cmd-group">
+                            <span class="cd-mgr-badge">{{ mgr }}</span>
+                            <pre v-for="(c, i) in cmds" :key="i">{{ c }}</pre>
+                        </div>
+                    </div>
+                    <div class="cd-section" v-if="configDetailData.status_cmd || configDetailData.start_cmd || configDetailData.stop_cmd || configDetailData.restart_cmd">
+                        <div class="form-section-title">生命周期命令</div>
+                        <div class="cd-cmd-row" v-if="configDetailData.status_cmd"><span class="detail-label">状态查询</span><code>{{ configDetailData.status_cmd }}</code></div>
+                        <div class="cd-cmd-row" v-if="configDetailData.start_cmd"><span class="detail-label">启动服务</span><code>{{ configDetailData.start_cmd }}</code></div>
+                        <div class="cd-cmd-row" v-if="configDetailData.stop_cmd"><span class="detail-label">停止服务</span><code>{{ configDetailData.stop_cmd }}</code></div>
+                        <div class="cd-cmd-row" v-if="configDetailData.restart_cmd"><span class="detail-label">重启服务</span><code>{{ configDetailData.restart_cmd }}</code></div>
+                    </div>
+                </template>
+                <template v-else>
+                    <div class="cd-section" v-if="configDetailData.install_cmd">
+                        <div class="form-section-title">安装脚本</div>
+                        <pre class="cd-pre">{{ configDetailData.install_cmd }}</pre>
+                    </div>
+                    <div class="cd-section" v-if="configDetailData.uninstall_cmd">
+                        <div class="form-section-title">卸载命令</div>
+                        <pre class="cd-pre">{{ configDetailData.uninstall_cmd }}</pre>
+                    </div>
+                </template>
+                <div class="cd-empty" v-if="configDetailEmpty">该配置暂无详细信息</div>
+            </div>
+            <div class="modal-footer">
+                <button class="primary-button" @click="closeConfigDetail">关闭</button>
             </div>
         </div>
     </div>

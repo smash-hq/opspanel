@@ -102,7 +102,19 @@ export function setupStore() {
         } catch (err) {
             // 使用默认值
         }
+        applyBrand();
     }
+
+    // 将启动信息应用到界面（标题 / favicon），品牌名通过 computed 响应式更新
+    function applyBrand() {
+        document.title = `${brandName.value} · 服务器管理`;
+        const link = document.querySelector('link[rel="icon"]');
+        if (link) link.href = '/api/v1/settings/favicon?' + Date.now();
+    }
+
+    const brandName = computed(() => settingsForm.panelName || 'Server Plane');
+    const brandMark = computed(() => settingsForm.panelName ? settingsForm.panelName.slice(0, 2).toUpperCase() : 'SP');
+    const welcomeMessage = computed(() => settingsForm.welcomeMessage);
 
     async function saveSettings() {
         settingsSaving.value = true;
@@ -118,6 +130,7 @@ export function setupStore() {
                     welcome_message: settingsForm.welcomeMessage,
                 }),
             });
+            applyBrand();
             toastNotify('设置已保存');
         } catch (err) {
             toastNotify('保存失败: ' + err.message, true);
@@ -495,6 +508,34 @@ export function setupStore() {
             toastNotify(err.message, true);
         }
     }
+
+    // ─── 配置详情弹窗（软件包 / 语言环境通用） ───
+    const configDetailVisible = ref(false);
+    const configDetailType = ref('pkg');
+    const configDetailData = ref({});
+
+    function openConfigDetail(type, item) {
+        configDetailType.value = type;
+        configDetailData.value = item || {};
+        configDetailVisible.value = true;
+    }
+
+    function closeConfigDetail() {
+        configDetailVisible.value = false;
+    }
+
+    const configDetailVersions = computed(() => configDetailData.value.versions || []);
+    const configDetailInstall = computed(() => Object.entries(configDetailData.value.install_cmd || {}));
+    const configDetailUninstall = computed(() => Object.entries(configDetailData.value.uninstall_cmd || {}));
+    const configDetailEmpty = computed(() => {
+        const d = configDetailData.value;
+        if (!d || !d.id) return true;
+        const hasLifecycle = d.status_cmd || d.start_cmd || d.stop_cmd || d.restart_cmd;
+        if (configDetailType.value === 'pkg') {
+            return !d.version_cmd && !Object.keys(d.install_cmd || {}).length && !Object.keys(d.uninstall_cmd || {}).length && !hasLifecycle;
+        }
+        return !d.version_cmd && !d.install_cmd && !d.uninstall_cmd;
+    });
 
     async function detectServerLanguages() {
         if (!selectedServer.value || selectedServer.value === 'srv_local') return;
@@ -1278,6 +1319,7 @@ export function setupStore() {
         formMode.value = 'add';
         formError.value = '';
         Object.assign(form, emptyForm());
+        form.port = settingsForm.defaultSSHPort || 22;
     }
 
     /** 打开「编辑服务器」表单。 */
@@ -1468,8 +1510,12 @@ export function setupStore() {
         return files.value.filter(f => f.name.toLowerCase().includes(q));
     });
 
-    const filteredDirs = computed(() => filteredFiles.value.filter(f => f.is_dir));
-    const filteredRegFiles = computed(() => filteredFiles.value.filter(f => !f.is_dir));
+    // 目录在前、组内按名称排序（类似 ls -l 的默认展示）
+    const sortedEntries = computed(() =>
+        [...filteredFiles.value].sort((a, b) =>
+            (Number(b.is_dir) - Number(a.is_dir)) || a.name.localeCompare(b.name)
+        )
+    );
 
     function getFileIcon(name) {
         const ext = name.split('.').pop()?.toLowerCase();
@@ -1493,6 +1539,12 @@ export function setupStore() {
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+    }
+
+    /** Unix 时间戳 → 本地时间字符串（文件修改时间）。 */
+    function formatModTime(ts) {
+        if (!ts) return '—';
+        return new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false });
     }
 
     /** 加载软件目录。 */
@@ -1699,6 +1751,7 @@ export function setupStore() {
         theme, setTheme, themeVal, faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
         // 设置
         settingsForm, settingsSaving, loadSettings, saveSettings,
+        brandName, brandMark, welcomeMessage,
         // 日志查看
         logModalVisible, logData, logLoading, logLines, viewLog, closeLogModal,
         // 数据状态
@@ -1738,6 +1791,10 @@ export function setupStore() {
         packageFormMode, packageForm, packageSaving, packageFormError,
         openPackageForm, closePackageForm, savePackage,
         deletePackage: handleDeletePackage,
+        // 配置详情弹窗（软件包 / 语言环境通用）
+        configDetailVisible, configDetailType, configDetailData,
+        openConfigDetail, closeConfigDetail,
+        configDetailVersions, configDetailInstall, configDetailUninstall, configDetailEmpty,
         // 进程管理
         processes, processLoading, processLogVisible, processLogData, processLogLoading,
         loadProcesses, killProcess: handleKillProcess, viewProcessLog, closeProcessLog,
@@ -1753,8 +1810,8 @@ export function setupStore() {
         filePreviewVisible, filePreviewData, filePreviewLoading,
         fileDetailVisible, fileDetailData,
         loadFiles, navigateToPath, openFilePreview, closeFilePreview,
-        openFileDetail, closeFileDetail, downloadFile: handleDownloadFile,
-        filteredFiles, filteredDirs, filteredRegFiles, getFileIcon, formatFileSize,
+        openFileDetail, closeFileDetail, handleDownloadFile,
+        filteredFiles, sortedEntries, getFileIcon, formatFileSize, formatModTime,
         // Web 终端
         terminalMount, terminalStatus, terminalStatusText,
         openTerminalTab, disconnectTerminal, reconnectTerminal,

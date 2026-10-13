@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -74,7 +75,12 @@ func (h *SettingsHandler) handleSettings(w http.ResponseWriter, r *http.Request)
 		if key == "" {
 			// 返回所有设置
 			OK(w, map[string]string{
-				"theme": h.getMeta("theme", "system"),
+				"theme":            h.getMeta("theme", "system"),
+				"panel_name":       h.getMeta("panel_name", ""),
+				"admin_email":      h.getMeta("admin_email", ""),
+				"push_interval":    h.getMeta("push_interval", "3"),
+				"default_ssh_port": h.getMeta("default_ssh_port", "22"),
+				"welcome_message":  h.getMeta("welcome_message", ""),
 			})
 			return
 		}
@@ -105,13 +111,7 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 		// 检查是否有自定义 favicon
 		customPath := filepath.Join(h.dataDir, "favicon.custom")
 		if data, err := os.ReadFile(customPath); err == nil {
-			ct := "image/x-icon"
-			if strings.HasSuffix(customPath, ".png") {
-				ct = "image/png"
-			} else if strings.HasSuffix(customPath, ".svg") {
-				ct = "image/svg+xml"
-			}
-			w.Header().Set("Content-Type", ct)
+			w.Header().Set("Content-Type", detectImageType(data))
 			w.Write(data)
 			return
 		}
@@ -142,6 +142,25 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 	default:
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 	}
+}
+
+// detectImageType 通过魔数嗅探图片 Content-Type（favicon 上传时不保存后缀，需按内容判断）。
+func detectImageType(data []byte) string {
+	switch {
+	case len(data) >= 8 && bytes.Equal(data[:8], []byte("\x89PNG\r\n\x1a\n")):
+		return "image/png"
+	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+		return "image/jpeg"
+	case len(data) >= 4 && bytes.Equal(data[:4], []byte("GIF8")):
+		return "image/gif"
+	case len(data) >= 4 && data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x01 && data[3] == 0x00:
+		return "image/x-icon"
+	case len(data) > 0:
+		if trimmed := bytes.TrimLeft(data, " \t\r\n\xef\xbb\xbf"); len(trimmed) > 0 && trimmed[0] == '<' {
+			return "image/svg+xml"
+		}
+	}
+	return "application/octet-stream"
 }
 
 // getMeta 从 meta 表读取值。
