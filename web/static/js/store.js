@@ -959,6 +959,138 @@ export function setupStore() {
         processLogVisible.value = false;
     }
 
+    // ─── Web 终端（独立 SSH 会话，不占用监控 WS） ───
+    const terminalMount = ref(null);          // xterm 挂载容器（模板 ref）
+    const terminalStatus = ref('closed');     // connecting | connected | closed | error
+    let term = null;                          // xterm 实例（非响应式，避免代理开销）
+    let termFit = null;                       // FitAddon 实例
+    let termWS = null;                        // 终端 WebSocket
+
+    const terminalStatusText = computed(() => ({
+        connecting: '连接中...',
+        connected: '已连接',
+        closed: '未连接',
+        error: '连接失败',
+    }[terminalStatus.value] || '未连接'));
+
+    /** 点击终端 Tab：拦截本地节点，其余进入并初始化终端。 */
+    function openTerminalTab() {
+        if (!selectedServer.value) { toastNotify('请先选择服务器', true); return; }
+        if (selectedServer.value === 'srv_local') { toastNotify('本地节点暂不支持终端', true); return; }
+        activeTab.value = 'terminal';
+        nextTick(() => initTerminal());
+    }
+
+    /** 初始化 xterm 并建立终端 WebSocket。 */
+    function initTerminal() {
+        if (!terminalMount.value || terminalStatus.value === 'connecting') return;
+        destroyTerminal();
+        terminalStatus.value = 'connecting';
+
+        term = new window.Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: '"SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace',
+            scrollback: 5000,
+            theme: { background: '#0d1117', foreground: '#e6edf3', cursor: '#58a6ff', selectionBackground: 'rgba(56, 139, 253, 0.4)' },
+        });
+        termFit = new window.FitAddon.FitAddon();
+        term.loadAddon(termFit);
+        term.open(terminalMount.value);
+        try { termFit.fit(); } catch (e) { /* 容器尚未布局时忽略 */ }
+
+        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+        termWS = new WebSocket(`${protocol}://${location.host}/api/v1/terminal?server=${encodeURIComponent(selectedServer.value)}`);
+        termWS.binaryType = 'arraybuffer';
+
+        termWS.onopen = () => {
+            terminalStatus.value = 'connected';
+            term.focus();
+            sendTerminalResize();
+        };
+        termWS.onmessage = (event) => {
+            // 二进制帧 = SSH 原始输出
+            if (event.data instanceof ArrayBuffer) {
+                term && term.write(new Uint8Array(event.data));
+                return;
+            }
+            // 文本帧 = 控制消息（exit）
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'exit') {
+                    term && term.write('\r\n\x1b[33m● ' + (msg.error ? '连接失败: ' + msg.error : '会话已结束') + '\x1b[0m\r\n');
+                    terminalStatus.value = msg.error ? 'error' : 'closed';
+                }
+            } catch (e) { /* 忽略 */ }
+        };
+        termWS.onclose = () => {
+            if (terminalStatus.value === 'connecting') {
+                terminalStatus.value = 'error';
+                term && term.write('\r\n\x1b[31m● 连接失败，请检查 SSH 配置\x1b[0m\r\n');
+            } else if (terminalStatus.value === 'connected') {
+                terminalStatus.value = 'closed';
+                term && term.write('\r\n\x1b[31m● 连接已断开\x1b[0m\r\n');
+            }
+        };
+        termWS.onerror = () => {
+            if (terminalStatus.value === 'connecting') terminalStatus.value = 'error';
+        };
+
+        // 键盘输入 → SSH stdin
+        term.onData(data => {
+            if (termWS && termWS.readyState === WebSocket.OPEN) {
+                termWS.send(JSON.stringify({ type: 'input', data }));
+            }
+        });
+        // 容器尺寸变化 → 远端 PTY resize
+        term.onResize(({ cols, rows }) => sendResizeMsg(cols, rows));
+    }
+
+    /** 按当前容器大小自适应并同步远端 PTY 尺寸。 */
+    function sendTerminalResize() {
+        if (!term || !termFit) return;
+        try { termFit.fit(); } catch (e) { /* 忽略 */ }
+        sendResizeMsg(term.cols, term.rows);
+    }
+
+    function sendResizeMsg(cols, rows) {
+        if (termWS && termWS.readyState === WebSocket.OPEN) {
+            termWS.send(JSON.stringify({ type: 'resize', cols, rows }));
+        }
+    }
+
+    /** 重新连接终端。 */
+    function reconnectTerminal() {
+        nextTick(() => initTerminal());
+    }
+
+    /** 主动断开终端会话。 */
+    function disconnectTerminal() {
+        destroyTerminal();
+        terminalStatus.value = 'closed';
+    }
+
+    /** 销毁终端资源（WS + xterm 实例）。 */
+    function destroyTerminal() {
+        if (termWS) {
+            termWS.onclose = null;
+            termWS.onmessage = null;
+            try { termWS.close(); } catch (e) { /* 忽略 */ }
+            termWS = null;
+        }
+        if (term) { term.dispose(); term = null; }
+        termFit = null;
+    }
+
+    /** 窗口尺寸变化时重新自适应终端。 */
+    function handleWindowResize() {
+        if (activeTab.value === 'terminal' && terminalStatus.value === 'connected') sendTerminalResize();
+    }
+
+    // 切走终端 Tab 或切换服务器时断开会话，避免残留 SSH 连接
+    watch(activeTab, tab => { if (tab !== 'terminal') disconnectTerminal(); });
+    watch(selectedServer, () => disconnectTerminal());
+
     // ─── Toast 状态 ───
     const toast = reactive({ visible: false, message: '', error: false });
 
@@ -1529,6 +1661,7 @@ export function setupStore() {
         loadSettings();
         loadLanguages();
         window.addEventListener('keydown', handleKeydown);
+        window.addEventListener('resize', handleWindowResize);
     });
 
     // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接）
@@ -1544,7 +1677,9 @@ export function setupStore() {
     onUnmounted(() => {
         clearTimeout(toastTimer);
         if (wsController) wsController.disconnect();
+        disconnectTerminal();
         window.removeEventListener('keydown', handleKeydown);
+        window.removeEventListener('resize', handleWindowResize);
         document.removeEventListener('click', handleDocClickForCombo);
     });
 
@@ -1620,6 +1755,9 @@ export function setupStore() {
         loadFiles, navigateToPath, openFilePreview, closeFilePreview,
         openFileDetail, closeFileDetail, downloadFile: handleDownloadFile,
         filteredFiles, filteredDirs, filteredRegFiles, getFileIcon, formatFileSize,
+        // Web 终端
+        terminalMount, terminalStatus, terminalStatusText,
+        openTerminalTab, disconnectTerminal, reconnectTerminal,
         // Docker 管理
         dockerAvailable, dockerVersion, dockerTabEnabled,
         dockerImages, dockerContainers, dockerLoading,

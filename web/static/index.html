@@ -11,7 +11,10 @@
     <link rel="stylesheet" href="/css/components.css">
     <link rel="stylesheet" href="/css/states.css">
     <link rel="stylesheet" href="/css/cards.css">
+    <link rel="stylesheet" href="/vendor/xterm/xterm.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/vendor/xterm/xterm.js"></script>
+    <script src="/vendor/xterm/addon-fit.js"></script>
 </head>
 <body>
 <div id="app">
@@ -298,6 +301,7 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="onDockerTabClick()" :title="dockerTabEnabled ? '' : '未检测到 Docker 环境，点击重新检测'">Docker</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'terminal', disabled: selectedServer === 'srv_local' || !selectedServer }" @click="openTerminalTab()" :title="selectedServer === 'srv_local' ? '本地节点暂不支持终端' : ''">终端</button>
                     <button class="bc-tab disabled" title="即将推出">集群管理</button>
                     <button class="bc-tab disabled" title="即将推出">安全</button>
                     <button class="bc-tab disabled" title="即将推出">定时任务</button>
@@ -896,6 +900,18 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- 终端 Tab -->
+                <div v-if="activeTab === 'terminal'" class="node-tab-content">
+                    <div class="terminal-toolbar">
+                        <span class="terminal-host">⌨ {{ currentServerName }}</span>
+                        <span class="terminal-status" :class="terminalStatus"><i></i>{{ terminalStatusText }}</span>
+                        <span class="terminal-toolbar-spacer"></span>
+                        <button class="toolbar-button" v-if="terminalStatus === 'connected'" @click="disconnectTerminal">⏻ 断开</button>
+                        <button class="toolbar-button" v-else @click="reconnectTerminal">↻ 重新连接</button>
+                    </div>
+                    <div class="terminal-wrap" ref="terminalMount"></div>
                 </div>
             </section>
 

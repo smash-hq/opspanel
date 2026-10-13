@@ -91,6 +91,9 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 
 	// 服务器镜像源配置
 	mux.HandleFunc("/api/v1/docker/mirror", h.handleDockerMirror) // GET 获取服务器当前镜像源 / POST 应用镜像源
+
+	// 交互式终端（WebSocket）
+	mux.HandleFunc("/api/v1/terminal", h.handleTerminal)
 }
 
 // --- 软件目录与安装 ---
