@@ -3,8 +3,9 @@ package api
 // AuthHandler 提供登录认证、会话管理与账户持久化。
 //
 // 账户信息持久化在 meta 表（key = auth_user）。首次部署时懒初始化默认账户
-// admin/admin123 并标记 must_change，首次登录后前端强制修改密码；修改后的
-// 密码随 SQLite 数据持续生效，重新部署（清空数据目录）后恢复默认账户。
+// admin/admin123；修改后的密码随 SQLite 数据持续生效，重新部署（清空数据
+// 目录）后恢复默认账户。首次登录强制改密由 enforcePasswordChange 开关控制，
+// 当前项目完善前暂时关闭。
 
 import (
 	"crypto/rand"
@@ -30,6 +31,10 @@ const (
 	sessionTTL     = 7 * 24 * time.Hour
 	minPasswordLen = 8  // 新密码最小长度
 	maxPasswordLen = 72 // bcrypt 输入上限
+
+	// enforcePasswordChange 控制首次登录是否强制修改默认密码。
+	// 项目完善前暂时关闭；置为 true 即可恢复强制改密流程。
+	enforcePasswordChange = false
 )
 
 // authUserRecord 是持久化的账户信息。
@@ -109,7 +114,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	h.setSessionCookie(w, h.newSession())
 	h.log.Infow("user logged in", "username", user.Username, "must_change", user.MustChange)
-	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange})
+	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange && enforcePasswordChange})
 }
 
 // handleLogout: POST 注销当前会话并清除 Cookie。
@@ -145,7 +150,7 @@ func (h *AuthHandler) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := h.loadUser()
-	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange})
+	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange && enforcePasswordChange})
 }
 
 // handleChangePassword: POST {"old_password","new_password"} 校验旧密码后更新。
@@ -213,7 +218,7 @@ func (h *AuthHandler) loadUser() authUserRecord {
 	if err != nil {
 		h.log.Errorw("hash default password failed", "error", err)
 	}
-	u := authUserRecord{Username: defaultUsername, PasswordHash: string(hash), MustChange: true}
+	u := authUserRecord{Username: defaultUsername, PasswordHash: string(hash), MustChange: enforcePasswordChange}
 	if err := h.saveUser(u); err != nil {
 		h.log.Errorw("init default user failed", "error", err)
 	}
