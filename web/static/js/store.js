@@ -202,6 +202,7 @@ export function setupStore() {
                 settingsForm.pushInterval = parseInt(json.data.push_interval) || 3;
                 settingsForm.defaultSSHPort = parseInt(json.data.default_ssh_port) || 22;
                 settingsForm.welcomeMessage = json.data.welcome_message || '';
+                hasCustomFavicon.value = json.data.has_custom_favicon === '1';
             }
         } catch (err) {
             // 使用默认值

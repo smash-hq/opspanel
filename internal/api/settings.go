@@ -74,13 +74,19 @@ func (h *SettingsHandler) handleSettings(w http.ResponseWriter, r *http.Request)
 		key := strings.TrimPrefix(r.URL.Path, "/api/v1/settings/")
 		if key == "" {
 			// 返回所有设置
+			_, favErr := os.Stat(filepath.Join(h.dataDir, "favicon.custom"))
+			hasCustom := "0"
+			if favErr == nil {
+				hasCustom = "1"
+			}
 			OK(w, map[string]string{
-				"theme":            h.getMeta("theme", "system"),
-				"panel_name":       h.getMeta("panel_name", ""),
-				"admin_email":      h.getMeta("admin_email", ""),
-				"push_interval":    h.getMeta("push_interval", "3"),
-				"default_ssh_port": h.getMeta("default_ssh_port", "22"),
-				"welcome_message":  h.getMeta("welcome_message", ""),
+				"theme":              h.getMeta("theme", "system"),
+				"panel_name":         h.getMeta("panel_name", ""),
+				"admin_email":        h.getMeta("admin_email", ""),
+				"push_interval":      h.getMeta("push_interval", "3"),
+				"default_ssh_port":   h.getMeta("default_ssh_port", "22"),
+				"welcome_message":    h.getMeta("welcome_message", ""),
+				"has_custom_favicon": hasCustom,
 			})
 			return
 		}
