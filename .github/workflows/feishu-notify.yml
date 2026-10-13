@@ -1,99 +1,180 @@
-name: Feishu Notify All Events
+name: Feishu Repo Notify
+
+# 仓库关键动作回调飞书通知（push / PR / 审批 / Issue / Release / Star / Fork / 分支变更）。
+# 每类事件生成独立的卡片标题、配色与关键内容。
 
 on:
   push:
   pull_request:
     types: [opened, reopened, closed, synchronize]
   pull_request_review:
-    types: [submitted, edited, dismissed]
-  pull_request_review_comment:
-    types: [created, edited, deleted]
-  create:
-  delete:
-  fork:
-  public:
-  watch:
-    types: [started]
-
+    types: [submitted]
   issues:
-    types: [opened, edited, milestoned, pinned, reopened, closed]
+    types: [opened, reopened, closed]
   issue_comment:
-    types: [created, deleted]
-  discussion:
-    types: [created, edited, answered]
-  discussion_comment:
-    types: [created, deleted]
-
+    types: [created]
   release:
     types: [published]
-  registry_package:
-    types: [published]
+  watch:
+    types: [started]
+  fork:
+  create:
+  delete:
 
-  label:
-    types: [created, deleted]
-  milestone:
-    types: [opened, deleted]
-  project:
-    types: [created, deleted, reopened]
-  project_card:
-    types: [created, deleted]
-  project_column:
-    types: [created, deleted]
-
-  check_run:
-    types: [rerequested, completed]
-  check_suite:
-    types: [completed]
-  deployment_status:
-  status:
-  page_build:
-
-  branch_protection_rule:
-    types: [created, deleted]
+permissions: {}
 
 jobs:
   send-event:
     name: Feishu Webhook
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Send Feishu Message
         env:
           WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          # ── 通用字段 ──
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          REPO_URL: ${{ github.event.repository.html_url }}
+          BRANCH: ${{ github.ref_name }}
+          SENDER: ${{ github.event.sender.login }}
+          ACTION: ${{ github.event.action }}
+          DELETED: ${{ github.event.deleted || false }}
+          # ── push ──
+          PUSHER: ${{ github.event.pusher.name }}
+          COMMIT_COUNT: ${{ github.event.commits != null && length(github.event.commits) || 0 }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.username || github.event.head_commit.author.name }}
+          COMMIT_HASH: ${{ github.event.head_commit.id }}
+          COMMIT_URL: ${{ github.event.head_commit.url || github.event.compare }}
+          # ── pull_request / review ──
+          PR_MERGED: ${{ github.event.pull_request.merged || false }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          # ── issue / comment ──
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+          # ── release / star / fork / 分支标签 ──
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_AUTHOR: ${{ github.event.release.author.login }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          STARS: ${{ github.event.repository.stargazers_count }}
+          FORKS: ${{ github.event.repository.forks_count }}
+          FORK_REPO: ${{ github.event.forkee.full_name }}
+          REF_TYPE: ${{ github.event.ref_type }}
+          REF_NAME: ${{ github.event.ref }}
         run: |
-          EVENT="${{ github.event_name }}"
-          REPO="${{ github.repository }}"
-          ACTOR="${{ github.actor }}"
-          BRANCH="${{ github.ref_name }}"
+          set -euo pipefail
 
-          COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}"
-          COMMIT_HASH="${{ github.event.head_commit.id || github.event.pull_request.head.sha || 'N/A' }}"
-          COMMIT_URL="${{ github.event.head_commit.url || github.event.pull_request.html_url || 'N/A' }}"
+          # 未配置 Webhook（如 fork 仓库无 secrets）时静默跳过，不报错
+          [ -n "$WEBHOOK" ] || { echo "FEISHU_BOT_WEBHOOK 未配置，跳过通知"; exit 0; }
 
-          cat > payload.json <<EOF
-          {
-            "msg_type": "interactive",
-            "card": {
-              "elements": [
-                {
-                  "tag": "div",
-                  "text": {
-                    "content": "**🔔 GitHub Event Notification**\n\n**Event:** ${EVENT}\n**Repository:** ${REPO}\n**Branch:** ${BRANCH}\n**Triggered By:** ${ACTOR}\n\n**Commit / PR:**\n${COMMIT_MSG}\n\n**Commit Hash:** ${COMMIT_HASH}\n\n[View Details](${COMMIT_URL})",
-                    "tag": "lark_md"
-                  }
-                }
-              ],
-              "header": {
-                "title": {
-                  "content": "📢 GitHub → Feishu",
-                  "tag": "plain_text"
-                }
-              }
+          TITLE="📢 仓库事件：$EVENT"
+          COLOR="grey"
+          DETAIL=""
+
+          case "$EVENT" in
+            push)
+              PUSHER="${PUSHER:-$SENDER}"; [ -n "$PUSHER" ] || PUSHER="N/A"
+              if [ "$DELETED" = "true" ]; then
+                TITLE="🗑 分支已删除"; COLOR="grey"
+                DETAIL=$(printf '**分支：** %s\n**操作人：** %s' "$BRANCH" "$PUSHER")
+              else
+                TITLE="🚀 新代码推送"; COLOR="blue"
+                MSG="$(printf '%s' "$COMMIT_MSG" | head -n1)"; [ -n "$MSG" ] || MSG="无提交信息"
+                HASH="${COMMIT_HASH:0:7}"; [ -n "$HASH" ] || HASH="N/A"
+                LINK=""
+                if [ -n "$COMMIT_URL" ]; then LINK=$(printf '\n[查看提交](%s)' "$COMMIT_URL"); fi
+                DETAIL=$(printf '**动作：** 代码推送（%s 个提交）\n**分支：** %s\n**操作人：** %s\n\n**最新提交：** %s\n**提交者：** %s · %s%s' "$COMMIT_COUNT" "$BRANCH" "$PUSHER" "$MSG" "$COMMIT_AUTHOR" "$HASH" "$LINK")
+              fi
+              ;;
+            pull_request)
+              PR_TITLE="${PR_TITLE:-N/A}"; PR_AUTHOR="${PR_AUTHOR:-N/A}"
+              if [ "$PR_MERGED" = "true" ]; then
+                TITLE="✅ PR 已合并 #$PR_NUM"; COLOR="green"; ACTDESC="merged（合并完成）"
+              elif [ "$ACTION" = "closed" ]; then
+                TITLE="❌ PR 已关闭 #$PR_NUM"; COLOR="grey"; ACTDESC="closed（未合并关闭）"
+              elif [ "$ACTION" = "opened" ]; then
+                TITLE="🔀 新 PR #$PR_NUM"; COLOR="wathet"; ACTDESC="opened（新开 PR）"
+              elif [ "$ACTION" = "reopened" ]; then
+                TITLE="🔁 PR 重新打开 #$PR_NUM"; COLOR="wathet"; ACTDESC="reopened（重新打开）"
+              else
+                TITLE="🔄 PR 更新 #$PR_NUM"; COLOR="blue"; ACTDESC="synchronize（有新提交）"
+              fi
+              DETAIL=$(printf '**动作：** %s\n**标题：** %s\n**分支：** %s → %s\n**作者：** %s\n\n[查看详情](%s)' "$ACTDESC" "$PR_TITLE" "$PR_HEAD" "$PR_BASE" "$PR_AUTHOR" "$PR_URL")
+              ;;
+            pull_request_review)
+              PR_TITLE="${PR_TITLE:-N/A}"; REVIEWER="${REVIEWER:-N/A}"
+              case "$REVIEW_STATE" in
+                approved)          TITLE="👍 PR 审批通过 #$PR_NUM"; COLOR="green";  STATEDESC="APPROVED（同意）";;
+                changes_requested) TITLE="⚠️ PR 需要修改 #$PR_NUM"; COLOR="orange"; STATEDESC="CHANGES_REQUESTED（要求修改）";;
+                *)                 TITLE="💬 PR 审批评论 #$PR_NUM"; COLOR="grey";   STATEDESC="${REVIEW_STATE:-N/A}";;
+              esac
+              DETAIL=$(printf '**结论：** %s\n**审批人：** %s\n**PR：** %s\n\n[查看详情](%s)' "$STATEDESC" "$REVIEWER" "$PR_TITLE" "$PR_URL")
+              ;;
+            issues)
+              ISSUE_TITLE="${ISSUE_TITLE:-N/A}"; ISSUE_AUTHOR="${ISSUE_AUTHOR:-N/A}"
+              case "$ACTION" in
+                opened)   TITLE="🐛 新 Issue #$ISSUE_NUM"; COLOR="yellow"; ACTDESC="opened（新提交）";;
+                reopened) TITLE="🔁 Issue 重新打开 #$ISSUE_NUM"; COLOR="orange"; ACTDESC="reopened（重新打开）";;
+                *)        TITLE="✅ Issue 已关闭 #$ISSUE_NUM"; COLOR="green"; ACTDESC="closed（关闭）";;
+              esac
+              DETAIL=$(printf '**动作：** %s\n**标题：** %s\n**发起人：** %s\n\n[查看详情](%s)' "$ACTDESC" "$ISSUE_TITLE" "$ISSUE_AUTHOR" "$ISSUE_URL")
+              ;;
+            issue_comment)
+              TITLE="💬 Issue 新评论"; COLOR="indigo"
+              COMMENT_BODY="${COMMENT_BODY:0:600}"
+              DETAIL=$(printf '**评论人：** %s\n**Issue：** #%s %s\n\n**内容：** %s\n\n[查看详情](%s)' "${COMMENT_AUTHOR:-N/A}" "$ISSUE_NUM" "${ISSUE_TITLE:-N/A}" "$COMMENT_BODY" "$COMMENT_URL")
+              ;;
+            release)
+              TITLE="📦 新版本发布"; COLOR="carmine"
+              DETAIL=$(printf '**版本：** %s（%s）\n**发布人：** %s\n\n[查看 Release](%s)' "${RELEASE_NAME:-N/A}" "${RELEASE_TAG:-N/A}" "${RELEASE_AUTHOR:-N/A}" "$RELEASE_URL")
+              ;;
+            watch)
+              TITLE="⭐ 收到新 Star"; COLOR="yellow"
+              DETAIL=$(printf '**用户：** %s 给仓库点了 Star\n**当前 Star 数：** %s\n\n[查看仓库](%s)' "${SENDER:-N/A}" "${STARS:-?}" "$REPO_URL")
+              ;;
+            fork)
+              TITLE="🍴 收到新 Fork"; COLOR="purple"
+              DETAIL=$(printf '**用户：** %s fork 了仓库\n**新仓库：** %s\n**当前 Fork 数：** %s' "${SENDER:-N/A}" "${FORK_REPO:-N/A}" "${FORKS:-?}")
+              ;;
+            create)
+              TITLE="🌱 新建分支"; COLOR="green"
+              [ "$REF_TYPE" = "tag" ] && TITLE="🏷 新建标签"
+              DETAIL=$(printf '**类型：** %s\n**名称：** %s\n**操作人：** %s' "${REF_TYPE:-?}" "${REF_NAME:-?}" "${SENDER:-N/A}")
+              ;;
+            delete)
+              TITLE="🗑 删除分支/标签"; COLOR="grey"
+              DETAIL=$(printf '**类型：** %s\n**名称：** %s\n**操作人：** %s' "${REF_TYPE:-?}" "${REF_NAME:-?}" "${SENDER:-N/A}")
+              ;;
+            *)
+              TITLE="📢 仓库事件：$EVENT"
+              DETAIL=$(printf '**事件：** %s\n**操作人：** %s\n**分支：** %s' "$EVENT" "${SENDER:-N/A}" "$BRANCH")
+              ;;
+          esac
+
+          # 统一附加仓库信息行（空值兜底）
+          REPO="${REPO:-unknown/unknown}"
+          REPO_URL="${REPO_URL:-https://github.com/$REPO}"
+          FULL=$(printf '**仓库：** [%s](%s)\n%s' "$REPO" "$REPO_URL" "$DETAIL")
+
+          # 卡片 payload 由 jq 现场生成（全字段安全转义），管道直连 curl，不落任何临时文件
+          jq -n --arg t "$TITLE" --arg c "$COLOR" --arg b "$FULL" '{
+            msg_type: "interactive",
+            card: {
+              header: { template: $c, title: { tag: "plain_text", content: $t } },
+              elements: [ { tag: "div", text: { tag: "lark_md", content: $b } } ]
             }
-          }
-          EOF
-
-          curl -X POST -H "Content-Type: application/json" \
-            -d @payload.json "$WEBHOOK"
+          }' | curl -sS -X POST -H "Content-Type: application/json" -d @- "$WEBHOOK" > /dev/null
+          echo "已推送 Feishu 通知：$TITLE"
