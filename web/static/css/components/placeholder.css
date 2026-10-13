@@ -1,0 +1,91 @@
+/* ─── 占位视图（即将推出） ─── */
+.placeholder-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.placeholder-icon {
+    font-size: 56px;
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+.placeholder-view h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.placeholder-view > p {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+    max-width: 400px;
+}
+
+.placeholder-features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    width: 100%;
+    max-width: 480px;
+    margin-bottom: 28px;
+}
+
+.feature-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    transition: box-shadow var(--transition-normal);
+}
+
+.feature-card:hover {
+    box-shadow: var(--card-shadow-hover);
+}
+
+.feature-card span {
+    font-size: 22px;
+}
+
+.feature-card div {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.feature-card strong {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.feature-card small {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.placeholder-coming-soon {
+    padding: 8px 20px;
+    background: var(--color-blue-light);
+    color: var(--color-blue);
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .placeholder-features {
+        grid-template-columns: 1fr;
+    }
+}
+

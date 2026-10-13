@@ -5,14 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Plane · 服务器管理</title>
     <link rel="icon" href="/api/v1/settings/favicon">
-    <!-- 样式表：按 base → layout → components → states 顺序加载 -->
+    <!-- 样式表：按 base → layout → components（按域拆分，级联顺序见下）→ states 顺序加载 -->
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/layout.css">
-    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/components/buttons.css">
+    <link rel="stylesheet" href="/css/components/dashboard.css">
+    <link rel="stylesheet" href="/css/components/modals.css">
+    <link rel="stylesheet" href="/css/components/server-form.css">
+    <link rel="stylesheet" href="/css/components/alerts.css">
+    <link rel="stylesheet" href="/css/components/placeholder.css">
+    <link rel="stylesheet" href="/css/components/software.css">
+    <link rel="stylesheet" href="/css/components/software-sources.css">
+    <link rel="stylesheet" href="/css/components/settings.css">
+    <link rel="stylesheet" href="/css/components/tables.css">
+    <link rel="stylesheet" href="/css/components/install-cards.css">
+    <link rel="stylesheet" href="/css/components/log-viewer.css">
+    <link rel="stylesheet" href="/css/components/layout.css">
+    <link rel="stylesheet" href="/css/components/sidebar.css">
+    <link rel="stylesheet" href="/css/components/permission-alert.css">
+    <link rel="stylesheet" href="/css/components/processes.css">
+    <link rel="stylesheet" href="/css/components/languages.css">
+    <link rel="stylesheet" href="/css/components/files.css">
+    <link rel="stylesheet" href="/css/components/docker.css">
+    <link rel="stylesheet" href="/css/components/files-table.css">
+    <link rel="stylesheet" href="/css/components/perm-guide.css">
+    <link rel="stylesheet" href="/css/components/system-info.css">
+    <link rel="stylesheet" href="/css/components/config-detail.css">
+    <link rel="stylesheet" href="/css/components/docker-mirrors.css">
+    <link rel="stylesheet" href="/css/components/languages-table.css">
+    <link rel="stylesheet" href="/css/components/terminal.css">
+    <link rel="stylesheet" href="/css/components/login.css">
     <link rel="stylesheet" href="/css/states.css">
     <link rel="stylesheet" href="/css/cards.css">
     <link rel="stylesheet" href="/vendor/xterm/xterm.css">
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- 第三方库全部本地 vendor（面板为内网工具，不依赖任何外网 CDN） -->
+    <script src="/vendor/vue/vue.global.prod.js"></script>
     <script src="/vendor/xterm/xterm.js"></script>
     <script src="/vendor/xterm/addon-fit.js"></script>
 </head>
@@ -1411,7 +1438,7 @@ sudo chmod 0440 /etc/sudoers.d/server-plane</code></pre>
 
     <div class="toast" :class="{ visible: toast.visible, error: toast.error }">{{ toast.message }}</div>
 </div>
-<!-- ES Module 入口：import js/store.js → Vue.createApp → mount -->
+<!-- ES Module 入口：import js/store/index.js → Vue.createApp → mount -->
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

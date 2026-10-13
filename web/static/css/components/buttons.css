@@ -1,0 +1,59 @@
+/* ============================================================
+   components.css — 组件层
+   按钮、卡片、面板、表单、模态框、列表项、信息网格
+   ============================================================ */
+
+/* ─── 按钮 ─── */
+.toolbar-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.toolbar-button:hover {
+    background: var(--content-bg);
+    border-color: #d1d5db;
+    color: var(--text-primary);
+}
+
+.toolbar-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.primary-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: var(--border-radius-sm);
+    background: var(--color-blue);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.primary-button:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.primary-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.primary-button.compact-button { padding: 7px 12px; }
+
+.danger-icon { color: var(--color-red) !important; }
+.danger-icon:hover { background: var(--color-red-light) !important; }
+

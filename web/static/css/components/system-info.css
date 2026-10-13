@@ -1,0 +1,139 @@
+/* ─── 系统信息卡片 ─── */
+.info-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.info-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.info-card:hover {
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
+}
+
+.info-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--content-bg, #f1f5f9);
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+}
+
+.info-card-icon {
+    font-size: 1.3rem;
+}
+
+.info-card-header h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    margin: 0;
+}
+
+.info-card-body {
+    padding: 12px 18px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+    font-size: 0.85rem;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-key {
+    color: var(--text-muted, #64748b);
+    font-weight: 500;
+}
+
+.info-value {
+    color: var(--text-primary, #0f172a);
+    font-weight: 500;
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.info-model {
+    font-size: 0.75rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* 磁盘卡片 */
+.disk-card-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+}
+
+.disk-card-row:last-child {
+    border-bottom: none;
+}
+
+.disk-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.disk-card-mount {
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    font-size: 0.85rem;
+}
+
+.disk-card-percent {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.disk-card-percent.ok { background: var(--color-green-light, #ecfdf5); color: var(--color-green, #10b981); }
+.disk-card-percent.warn { background: var(--color-amber-light, #fffbeb); color: var(--color-amber, #f59e0b); }
+.disk-card-percent.crit { background: var(--color-red-light, #fef2f2); color: var(--color-red, #ef4444); }
+
+.disk-card-bar {
+    height: 6px;
+    background: var(--content-bg, #f1f5f9);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.disk-card-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+}
+
+.disk-card-size {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+}
+
+@media (max-width: 768px) {
+    .info-cards {
+        grid-template-columns: 1fr;
+    }
+}
+

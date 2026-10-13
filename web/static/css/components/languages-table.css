@@ -1,0 +1,148 @@
+/* ─── 语言环境表格 ─── */
+.lang-table {
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.lang-table-header {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 100px 120px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--content-bg, #f1f5f9);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    gap: 12px;
+}
+
+.lang-table-row {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 100px 120px;
+    align-items: center;
+    padding: 12px 16px;
+    border-top: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    transition: all 0.15s;
+    gap: 12px;
+    min-height: 48px;
+}
+
+.lang-table-row:last-child {
+    border-bottom: none;
+}
+
+.lang-table-row:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.lang-table-row:nth-child(even) {
+    background: rgba(248, 250, 252, 0.5);
+}
+
+.lang-table-row:nth-child(even):hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.lang-table-row.installed {
+    border-left: 3px solid var(--color-green, #10b981);
+}
+
+.lang-col-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.lang-row-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.lang-col-name strong {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+}
+
+.lang-col-version {
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lang-status-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.lang-status-badge.installed {
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.lang-status-badge.not_installed {
+    background: var(--content-bg, #f3f4f6);
+    color: var(--text-muted, #94a3b8);
+}
+
+.lang-col-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.lang-action-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #475569);
+    white-space: nowrap;
+}
+
+.lang-action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lang-action-btn.install {
+    background: var(--color-blue, #3b82f6);
+    border-color: var(--color-blue, #3b82f6);
+    color: #fff;
+}
+
+.lang-action-btn.install:hover {
+    background: #2563eb;
+}
+
+.lang-action-btn.uninstall {
+    background: var(--color-red-light, #fef2f2);
+    border-color: var(--color-red, #ef4444);
+    color: var(--color-red, #ef4444);
+}
+
+.lang-action-btn.uninstall:hover {
+    background: var(--color-red, #ef4444);
+    color: #fff;
+}
+
+.lang-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+

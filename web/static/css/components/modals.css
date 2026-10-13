@@ -1,0 +1,179 @@
+/* ─── 模态框 ─── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.2s ease;
+}
+
+.modal {
+    width: 100%;
+    max-width: 520px;
+    background: var(--card-bg);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    animation: slideUp 0.25s ease;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.modal-header h3 { font-size: 16px; font-weight: 600; margin-top: 2px; }
+.modal-header .icon-button { color: var(--text-muted); font-size: 20px; }
+.modal-header .icon-button:hover { background: #f3f4f6; color: var(--text-primary); }
+
+.modal-body { padding: 20px 24px; }
+
+.form-intro {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--content-bg);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: 20px;
+}
+
+.form-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--border-radius-sm);
+    background: var(--color-blue-light);
+    color: var(--color-blue);
+    font-size: 18px;
+}
+
+.form-intro strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.form-intro small { font-size: 12px; color: var(--text-dim); }
+
+.form-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    margin-top: 16px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field.full { grid-column: 1 / -1; }
+
+.field span { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.field span em { color: var(--color-red); font-style: normal; margin-left: 2px; }
+
+.field input, .field select, .field textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.field textarea {
+    resize: vertical;
+    line-height: 1.6;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.field input:hover:not(:focus):not(:disabled),
+.field select:hover:not(:focus):not(:disabled),
+.field textarea:hover:not(:focus):not(:disabled) {
+    border-color: var(--color-blue);
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--color-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.field input::placeholder, .field textarea::placeholder { color: var(--text-muted); }
+
+.field-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* ─── 全局确认弹窗 ─── */
+.confirm-modal {
+    max-width: 420px;
+}
+
+.confirm-modal .confirm-body {
+    padding: 20px 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    white-space: pre-line;
+}
+
+.danger-button {
+    background: var(--color-red, #ef4444) !important;
+    color: #fff !important;
+    border-color: var(--color-red, #ef4444) !important;
+}
+
+.danger-button:hover {
+    filter: brightness(1.08);
+}
+
+.form-notice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: var(--color-blue-light);
+    border-radius: var(--border-radius-sm);
+    font-size: 12px;
+    color: var(--color-blue);
+    line-height: 1.4;
+}
+
+.form-error {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--color-red-light);
+    border-radius: var(--border-radius-sm);
+    font-size: 12px;
+    color: var(--color-red);
+    border-left: 3px solid var(--color-red);
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--card-border);
+}
+

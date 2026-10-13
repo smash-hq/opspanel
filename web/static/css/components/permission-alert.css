@@ -1,0 +1,71 @@
+/* ─── 权限警告 ─── */
+.permission-warning {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--color-amber-light, #fffbeb);
+    border: 1px solid var(--color-amber, #f59e0b);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.permission-warning .warning-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.permission-warning .warning-content {
+    flex: 1;
+}
+
+.permission-warning .warning-content strong {
+    font-size: 0.9rem;
+    color: #92400e;
+}
+
+.permission-warning .warning-content p {
+    font-size: 0.8rem;
+    color: #92400e;
+    margin-top: 4px;
+    opacity: 0.8;
+}
+
+.permission-warning .warning-details {
+    margin-top: 8px;
+}
+
+.permission-warning .warning-details summary {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #92400e;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.permission-warning .warning-docs {
+    margin-top: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.permission-warning .warning-docs p {
+    margin-bottom: 4px;
+}
+
+.permission-warning .warning-docs pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 4px 0;
+    font-size: 0.75rem;
+    overflow-x: auto;
+}
+
+.permission-warning .warning-tip {
+    margin-top: 8px;
+    font-weight: 500;
+}
+

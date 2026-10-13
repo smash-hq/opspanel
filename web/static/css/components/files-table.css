@@ -1,0 +1,170 @@
+/* ─── 文件管理（优化版）─── */
+.file-section {
+    margin-bottom: 20px;
+}
+
+.file-section:last-child {
+    margin-bottom: 0;
+}
+
+.file-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+    margin-bottom: 12px;
+}
+
+.section-icon {
+    font-size: 1rem;
+}
+
+/* 文件表格 */
+.file-table {
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.file-table-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--content-bg, #f8fafc);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.file-table-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-top: 1px solid var(--card-border, #e5e7eb);
+    font-size: 0.85rem;
+    transition: background 0.1s;
+}
+
+.file-table-row:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.ft-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.ft-size { width: 90px; flex-shrink: 0; text-align: right; }
+.ft-mode { width: 90px; flex-shrink: 0; text-align: center; }
+.ft-time { width: 150px; flex-shrink: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.ft-actions { width: 120px; flex-shrink: 0; display: flex; gap: 4px; justify-content: flex-end; }
+
+.ft-link-target {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}
+
+.ft-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.ft-link {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--text-primary, #0f172a);
+}
+
+.ft-link:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+/* 目录名称：主题色加粗，与普通文件区分 */
+.ft-link-dir {
+    font-weight: 600;
+    color: var(--color-blue, #3b82f6);
+}
+
+.ft-link-dir:hover {
+    text-decoration: underline;
+}
+
+.ft-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.ft-btn:hover {
+    background: var(--content-bg, #f9fafb);
+    border-color: var(--color-blue, #3b82f6);
+}
+
+.ft-btn.danger:hover {
+    background: var(--color-red-light, #fef2f2);
+    border-color: var(--color-red, #ef4444);
+}
+
+/* ─── 文件权限警告 ─── */
+.file-sudo-warning {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--color-amber-light, #fffbeb);
+    border: 1px solid var(--color-amber, #f59e0b);
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
+
+.file-sudo-warning .warning-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.file-sudo-warning .warning-content strong {
+    font-size: 0.85rem;
+    color: #92400e;
+}
+
+.file-sudo-warning .warning-content p {
+    font-size: 0.75rem;
+    color: #92400e;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+.file-sudo-warning .warning-action {
+    margin-top: 8px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    color: #92400e;
+    background: transparent;
+    border: 1px solid var(--color-amber, #f59e0b);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.file-sudo-warning .warning-action:hover {
+    background: var(--color-amber, #f59e0b);
+    color: #fff;
+}
+

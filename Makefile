@@ -1,21 +1,26 @@
-.PHONY: all build build-linux build-linux-arm64 build-darwin build-windows run dev stop status restart clean test fmt vet deps docker help
+.DEFAULT_GOAL := help
+.PHONY: all build build-all build-linux build-linux-arm64 build-darwin build-windows \
+        run dev start stop status restart \
+        test fmt fmt-check vet version clean deps docker help
 
 # ============================================================
 # 变量
 # ============================================================
 BINARY_NAME   := smp-server
 MAIN_PATH     := ./cmd/server
+VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+GIT_COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PORT          ?= 18080
 DOCKER_IMAGE  ?= smash-hq/server-management:latest
-LDFLAGS       := -w -s
+LDFLAGS       := -w -s -X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT)
 PID_FILE      := /tmp/$(BINARY_NAME).pid
 
 # ============================================================
 # 帮助
 # ============================================================
-## help: 显示所有可用目标
+## help: 显示所有可用目标（默认）
 help:
-	@echo "Server Plane - 服务器管理面板"
+	@echo "Server Plane $(VERSION) - 服务器管理面板"
 	@echo ""
 	@echo "用法: make <目标>"
 	@echo ""
@@ -25,14 +30,17 @@ help:
 # ============================================================
 # 构建
 # ============================================================
-## all: 完整流程（格式化 + 检查 + 编译）
+## all: 完整流程（格式化 + 静态检查 + 编译），提交前必跑
 all: fmt vet build
 
-## build: 编译当前平台二进制
+## build: 编译当前平台二进制（注入版本号）
 build:
-	@echo "==> 编译 $(BINARY_NAME)..."
+	@echo "==> 编译 $(BINARY_NAME) ($(VERSION))..."
 	CGO_ENABLED=0 go build -ldflags='$(LDFLAGS)' -o $(BINARY_NAME) $(MAIN_PATH)
 	@echo "==> 编译完成: ./$(BINARY_NAME)"
+
+## build-all: 交叉编译全平台产物（linux/darwin/windows）
+build-all: build-linux build-linux-arm64 build-darwin build-windows
 
 ## build-linux: 编译 Linux amd64 二进制（静态链接）
 build-linux:
@@ -46,42 +54,46 @@ build-linux-arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags='$(LDFLAGS) -extldflags "-static"' -o $(BINARY_NAME)-arm64 $(MAIN_PATH)
 	@echo "==> 编译完成: ./$(BINARY_NAME)-arm64"
 
-## build-darwin: 编译 macOS 二进制
+## build-darwin: 编译 macOS amd64 二进制
 build-darwin:
 	@echo "==> 编译 $(BINARY_NAME) darwin/amd64..."
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags='$(LDFLAGS)' -o $(BINARY_NAME)-darwin $(MAIN_PATH)
 	@echo "==> 编译完成: ./$(BINARY_NAME)-darwin"
 
-## build-windows: 编译 Windows 二进制
+## build-windows: 编译 Windows amd64 二进制
 build-windows:
 	@echo "==> 编译 $(BINARY_NAME) windows/amd64..."
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags='$(LDFLAGS)' -o $(BINARY_NAME).exe $(MAIN_PATH)
 	@echo "==> 编译完成: ./$(BINARY_NAME).exe"
 
+## version: 显示当前版本号
+version:
+	@echo "$(VERSION)"
+
 # ============================================================
 # 运行管理
 # ============================================================
-## run: 编译并启动服务（前台运行）
+## run: 编译并前台启动服务（Ctrl+C 停止）
 run: build
 	@echo "==> 启动服务 (端口 $(PORT))..."
-	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || true
+	@lsof -ti:$(PORT) | xargs kill 2>/dev/null || true
 	@sleep 1
 	@echo "==> 服务已启动: http://localhost:$(PORT)"
 	@./$(BINARY_NAME)
 
-## dev: 开发模式（直接 go run，无编译步骤）
+## dev: 开发模式（go run 直接启动，改前端刷新即生效）
 dev:
 	@echo "==> 开发模式启动 (端口 $(PORT))..."
-	go run $(MAIN_PATH)/main.go
+	go run $(MAIN_PATH)
 
-## start: 编译并后台启动服务
+## start: 编译并后台启动服务（日志写入 /tmp/$(BINARY_NAME).log）
 start: build
 	@echo "==> 后台启动服务 (端口 $(PORT))..."
-	@lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || true
+	@lsof -ti:$(PORT) | xargs kill 2>/dev/null || true
 	@sleep 1
-	@nohup ./$(BINARY_NAME) > /tmp/$(BINARY_NAME).log 2>&1 &
-	@echo $$! > $(PID_FILE)
-	@echo "==> 服务已启动: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE))"
+	@nohup ./$(BINARY_NAME) > /tmp/$(BINARY_NAME).log 2>&1 & \
+	echo $$! > $(PID_FILE)
+	@echo "==> 服务已启动: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE)))"
 
 ## stop: 停止后台服务
 stop:
@@ -98,7 +110,7 @@ stop:
 		fi \
 	else \
 		echo "==> 通过端口 $(PORT) 查找服务..."; \
-		lsof -ti:$(PORT) | xargs kill -9 2>/dev/null || echo "端口 $(PORT) 未占用"; \
+		lsof -ti:$(PORT) | xargs kill 2>/dev/null || echo "端口 $(PORT) 未占用"; \
 	fi
 
 ## status: 查看服务运行状态
@@ -127,12 +139,22 @@ restart: stop
 ## test: 运行测试
 test:
 	@echo "==> 运行测试..."
-	go test -v ./...
+	go test ./...
 
 ## fmt: 格式化代码
 fmt:
 	@echo "==> 格式化代码..."
 	go fmt ./...
+
+## fmt-check: 检查代码格式（CI 用，不修改文件）
+fmt-check:
+	@echo "==> 检查代码格式..."
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "以下文件未通过 gofmt 检查:"; echo "$$unformatted"; \
+		exit 1; \
+	fi; \
+	echo "==> 格式检查通过"
 
 ## vet: 静态检查
 vet:
@@ -163,6 +185,5 @@ docker:
 clean:
 	@echo "==> 清理..."
 	rm -f $(BINARY_NAME) $(BINARY_NAME)-arm64 $(BINARY_NAME)-darwin $(BINARY_NAME).exe
-	rm -f $(PID_FILE) /tmp/$(BINARY_NAME).log /tmp/smp-server
-	rm -rf /tmp/go-build-*/ 2>/dev/null || true
+	rm -f $(PID_FILE) /tmp/$(BINARY_NAME).log
 	@echo "==> 清理完成"

@@ -1,0 +1,66 @@
+/* ─── 权限说明文档弹窗 ─── */
+.perm-guide-modal {
+    max-width: 560px;
+    width: calc(100vw - 48px);
+}
+
+.perm-guide-body {
+    max-height: 62vh;
+    overflow-y: auto;
+}
+
+.perm-section {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--card-border, #e2e8f0);
+}
+
+.perm-section h4 {
+    font-size: 0.9rem;
+    margin: 0 0 8px;
+    color: var(--text-primary, #1e293b);
+}
+
+.perm-section p {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #64748b);
+    line-height: 1.6;
+    margin: 6px 0;
+}
+
+.perm-section ul {
+    margin: 6px 0;
+    padding-left: 20px;
+}
+
+.perm-section ul li {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #64748b);
+    line-height: 1.7;
+}
+
+.perm-section pre {
+    background: var(--bg-tertiary, #f1f5f9);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+}
+
+.perm-section pre code {
+    font-size: 0.75rem;
+    font-family: var(--font-mono, 'SF Mono', Menlo, Consolas, monospace);
+    color: var(--text-primary, #1e293b);
+    white-space: pre;
+}
+
+.perm-section code {
+    font-size: 0.78rem;
+    font-family: var(--font-mono, 'SF Mono', Menlo, Consolas, monospace);
+    background: var(--bg-tertiary, #f1f5f9);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--color-red, #ef4444);
+}
+

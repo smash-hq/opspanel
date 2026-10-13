@@ -68,7 +68,11 @@ internal/
   storage/        SQLite 持久化
   server/         HTTP 服务组装
   ws/             WebSocket 推送
-web/static/       前端（go:embed 嵌入）
+web/static/       前端（go:embed 嵌入，无构建链 ES Module）
+  js/api/         API 客户端（按业务域拆分：auth / docker / files / software…）
+  js/store/       响应式状态（按业务域拆分，共享 ctx 模式，index.js 组装）
+  css/components/ 组件样式（按域拆分，index.html 按序加载保持级联）
+  vendor/         本地第三方库（vue、xterm，内网零外联）
 ```
 
 ## 提交规范
@@ -89,8 +93,9 @@ refactor: 抽离 Docker 检测逻辑
 1. 从 `main` 拉取功能分支：`feat/<简短描述>` 或 `fix/<简短描述>`
 2. 开发完成后推送分支并向 `main` 发起 PR
 3. PR 描述包含：改动内容、动机、自测方式
-4. 确保本地 `make all` 通过、不引入新的编译警告
-5. 等待维护者评审，按反馈迭代后合并
+4. 涉及用户可见功能或行为变更时，同步更新 [CHANGELOG.md](CHANGELOG.md) 的 Unreleased 节
+5. 确保本地 `make all` 通过（CI 会执行 `make fmt-check vet build test`，任一失败将无法合并）
+6. 等待维护者评审，按反馈迭代后合并
 
 ## 贡献软件包与语言定义
 
@@ -120,6 +125,6 @@ refactor: 抽离 Docker 检测逻辑
 
 ## 安全问题报告
 
-Server Plane 定位为**内网工具，无内置认证**，请勿在公网暴露使用（详见 [README 安全声明](README.md#️-安全声明)）。
+Server Plane 定位为**内网工具**：内置单管理员登录认证，但安全机制较薄（无 HTTPS、无多因素、无审计日志），请勿在公网暴露使用（详见 [SECURITY.md](SECURITY.md) 与 [README 安全声明](README.md#️-安全声明)）。
 
-如发现代码层面的安全缺陷（命令注入、路径穿越、凭证处理不当等），请勿公开 Issue，通过 GitHub 私信联系维护者，我们会在修复后致谢。
+如发现代码层面的安全缺陷（命令注入、路径穿越、凭证处理不当等），请勿公开 Issue，通过 [GitHub Security Advisories](https://github.com/smash-hq/server-management/security/advisories/new) 私下报告，我们会在修复后致谢。

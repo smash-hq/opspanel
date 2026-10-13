@@ -1,0 +1,38 @@
+name: CI
+
+# 推送到 main 与所有 PR 的基础质量门禁：格式检查 + 静态检查 + 编译 + 测试。
+# 仓库事件飞书通知由 feishu-notify.yml 负责，与本工作流互不干扰。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format / Vet / Build / Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Format check
+        run: make fmt-check
+
+      - name: Vet
+        run: make vet
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test

@@ -1,0 +1,169 @@
+/* ─── 文件管理 ─── */
+.file-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px;
+    background: var(--content-bg, #f8fafc);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+}
+
+.bc-home {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-blue, #3b82f6);
+}
+
+.bc-home:hover {
+    background: var(--color-blue-light, #eff6ff);
+}
+
+.bc-sep {
+    color: var(--text-muted, #94a3b8);
+}
+
+.bc-segment {
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--text-secondary, #475569);
+}
+
+.bc-segment:hover {
+    background: var(--card-bg, #fff);
+    color: var(--color-blue, #3b82f6);
+}
+
+.file-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.file-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 8px;
+}
+
+.file-search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    color: var(--text-primary, #0f172a);
+}
+
+.file-search input:focus {
+    outline: none;
+}
+
+.file-list {
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.file-list-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--content-bg, #f8fafc);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.file-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-top: 1px solid var(--card-border, #e5e7eb);
+    font-size: 0.85rem;
+    transition: background 0.1s;
+}
+
+.file-row:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.file-row.is-dir {
+    background: rgba(59, 130, 246, 0.03);
+}
+
+.col-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.col-size { width: 90px; flex-shrink: 0; text-align: right; }
+.col-mode { width: 80px; flex-shrink: 0; text-align: center; }
+.col-actions { width: 120px; flex-shrink: 0; display: flex; gap: 4px; justify-content: flex-end; }
+
+.file-icon {
+    font-size: 1.1rem;
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--text-primary, #0f172a);
+}
+
+.file-name:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+.file-row.is-dir .file-name {
+    font-weight: 500;
+    color: var(--color-blue, #3b82f6);
+}
+
+/* ─── 文件预览/详情弹窗 ─── */
+.file-preview-modal {
+    max-width: 900px;
+}
+
+.file-detail-modal {
+    max-width: 500px;
+}
+
+.file-detail-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.file-detail-grid .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--content-bg, #f8fafc);
+    border-radius: 8px;
+}
+
+.file-detail-grid .detail-label {
+    font-size: 0.8rem;
+    color: var(--text-muted, #94a3b8);
+    font-weight: 500;
+}
+
+.file-detail-grid code {
+    padding: 2px 6px;
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+

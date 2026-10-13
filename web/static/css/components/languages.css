@@ -1,0 +1,178 @@
+/* ─── Tab 顶部刷新工具栏（软件管理 / 语言环境共用） ─── */
+.sw-tab-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 16px;
+}
+
+/* ─── 已检测语言环境（表格式）─── */
+.detected-languages-grid {
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.detected-lang-card {
+    display: grid;
+    grid-template-columns: 48px 1fr 140px;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    transition: all 0.15s;
+    gap: 16px;
+    min-height: 56px;
+}
+
+.detected-lang-card:last-child {
+    border-bottom: none;
+}
+
+.detected-lang-card:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.detected-lang-card.installed {
+    border-left: 3px solid var(--color-green, #10b981);
+}
+
+.detected-lang-card:not(.installed) {
+    opacity: 0.7;
+}
+
+.detected-lang-card:nth-child(even) {
+    background: rgba(248, 250, 252, 0.5);
+}
+
+.detected-lang-card:nth-child(even):hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.detected-lang-icon {
+    font-size: 1.5rem;
+    text-align: center;
+}
+
+.detected-lang-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.detected-lang-info strong {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+}
+
+.detected-lang-info small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.detected-lang-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.detected-lang-info strong {
+    font-size: 0.9rem;
+}
+
+.detected-lang-info small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.detected-lang-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.lang-status-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.lang-status-badge.installed {
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.lang-status-badge.not_installed {
+    background: var(--content-bg, #f3f4f6);
+    color: var(--text-muted, #94a3b8);
+}
+
+/* ─── 语言表单弹窗 ─── */
+.lang-form-modal {
+    max-width: 600px;
+}
+
+.form-tip {
+    padding: 10px 14px;
+    background: var(--color-blue-light, #eff6ff);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #475569);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.form-tip .tip-icon {
+    flex-shrink: 0;
+}
+
+.form-tip code {
+    background: rgba(59, 130, 246, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+}
+
+/* ─── 安装日志 ─── */
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+}
+
+.log-status {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.log-status.installing {
+    background: var(--color-amber-light, #fffbeb);
+    color: var(--color-amber, #f59e0b);
+}
+
+.log-status.ok {
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.log-status.error {
+    background: var(--color-red-light, #fef2f2);
+    color: var(--color-red, #ef4444);
+}
+

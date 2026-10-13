@@ -29,7 +29,7 @@ cd server-management && make run
 
 适合：个人开发机、小团队内网服务器、嵌入式/国产化环境的轻量运维。
 
-> ⚠️ **内网工具，请勿暴露公网**：当前版本无内置认证，SSH 凭证存储于本地 SQLite。详见[安全声明](#️-安全声明)。
+> ⚠️ **内网工具，请勿暴露公网**：面板内置单管理员登录认证，但安全机制较薄（无 HTTPS、无审计日志、多因素缺失），SSH 凭证存储于本地 SQLite。详见[安全声明](#️-安全声明)。
 
 ## 功能总览
 
@@ -42,6 +42,7 @@ cd server-management && make run
 | 📁 **文件管理** | 远程目录树形浏览、文本预览、文件下载、sudo 权限检测 |
 | ⚙️ **进程管理** | 全量进程列表（CPU/内存/命令），SIGTERM/SIGKILL 终止，进程日志查看 |
 | 🎨 **界面体验** | 白天/夜间/跟随系统三态主题，标签页图标自定义，桌面与移动端响应式 |
+| 🔐 **登录认证** | 单管理员账户登录，bcrypt 密码哈希，Cookie 会话 7 天滑动续期，支持在线修改密码 |
 
 **底层特性**：SSH 连接池（按需建连、空闲回收、断线自动重建、30s 保活）、SQLite WAL 并发读写、优雅启停、多平台交叉编译。
 
@@ -72,6 +73,8 @@ make build && ./smp-server
 ```
 
 服务默认监听 `http://localhost:18080`，浏览器访问即可使用。
+
+> 🔑 **默认账户**：首次启动自动创建管理员账户 **admin / admin123**，请登录后尽快在面板中修改密码。查看版本：`./smp-server --version`。
 
 ### 停止与重启
 
@@ -231,8 +234,9 @@ make build-windows        # Windows
 
 ### 配置文件
 
+完整示例见 [config.example.yaml](config.example.yaml)，将其复制为 `config.yaml`（或 `/etc/smp/config.yaml`）后按需修改：
+
 ```yaml
-# config.yaml
 server:
   host: "0.0.0.0"
   port: 18080
@@ -252,6 +256,17 @@ log:
 ```
 
 ## API 接口
+
+### 认证
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/auth/login` | 登录，成功后下发会话 Cookie |
+| POST | `/api/v1/auth/logout` | 登出并销毁会话 |
+| GET | `/api/v1/auth/me` | 当前登录用户信息 |
+| POST | `/api/v1/auth/change-password` | 修改管理员密码 |
+
+除登录接口与静态资源外，所有 API（含 `/api/v1/health`）与 WebSocket 均需携带有效会话 Cookie。
 
 ### 服务器管理
 
@@ -361,12 +376,27 @@ server-management/
 │   ├── system/          # 系统信息采集（gopsutil）
 │   ├── logger/          # 结构化日志（zap）
 │   └── ws/              # WebSocket 推送
-├── web/                 # 前端
-│   └── static/          # 静态资源（css/js/html，go:embed 嵌入）
+├── web/                 # 前端（go:embed 嵌入二进制）
+│   ├── static.go        # embed.FS 声明
+│   └── static/
+│       ├── index.html   # 单页入口
+│       ├── css/
+│       │   ├── base.css / layout.css / cards.css / states.css
+│       │   └── components/  # 组件样式（按域拆分，按序加载保持级联）
+│       ├── js/              # 原生 JS（ES Module，无构建链）
+│       │   ├── app.js       # 应用装配入口
+│       │   ├── api/         # API 客户端（按业务域拆分）
+│       │   ├── store/       # 响应式状态（按业务域拆分，共享 ctx 模式）
+│       │   └── utils.js / ws.js
+│       └── vendor/          # 本地第三方库（vue、xterm，内网零外联）
 ├── docs/                # 文档
 ├── data/                # 运行时数据（git ignored，smp.db 自动生成）
+├── config.example.yaml  # 配置文件示例
 ├── Makefile             # 构建与运行管理
 ├── Dockerfile           # Docker 多阶段构建
+├── CHANGELOG.md         # 变更日志
+├── SECURITY.md          # 安全策略
+├── .github/workflows/   # CI 与通知工作流
 └── go.mod               # Go 模块定义
 ```
 
@@ -382,7 +412,7 @@ server-management/
 
 1. **本软件会执行远程命令**：通过 SSH 连接远程服务器并执行系统命令（包括 sudo 操作），可能导致系统配置变更、数据丢失或服务中断。
 2. **凭证存储**：服务器连接信息（密码、私钥）存储在本地 SQLite 数据库中，虽有文件权限保护，但**不应用于生产环境或高安全要求场景**。
-3. **无认证机制**：当前版本**无内置用户认证和访问控制**，任何能访问面板的人都可以执行所有操作。
+3. **认证机制较薄**：面板内置单管理员登录认证（bcrypt + Cookie 会话），但无多因素、无审计日志、无失败锁定；会话凭证一旦泄露即等同完全控制权限，请务必配合内网隔离与 HTTPS 使用。
 4. **责任免除**：**一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏等）均与本项目无关**。使用者需自行承担所有风险。
 5. **维护边界**：开发者仅对正常功能范围内的缺陷提供自愿维护，**不构成服务承诺**；使用环境、误操作、二次开发引入的问题及数据恢复等诉求不在维护范围内，详见[协议第七条](LICENSE)。
 6. **使用建议**：仅在内网/开发环境使用，不要暴露到公网，务必配置防火墙和访问控制。

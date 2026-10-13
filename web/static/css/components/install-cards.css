@@ -1,0 +1,213 @@
+/* ─── 操作按钮（统一规格） ─── */
+.sw-btn {
+    min-width: 64px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.sw-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.sw-btn-primary {
+    background: var(--color-blue, #3b82f6);
+    color: #fff;
+    border-color: var(--color-blue, #3b82f6);
+}
+
+.sw-btn-primary:hover:not(:disabled) {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+.sw-btn-danger {
+    background: var(--color-red, #ef4444);
+    color: #fff;
+    border-color: var(--color-red, #ef4444);
+}
+
+.sw-btn-danger:hover:not(:disabled) {
+    background: #dc2626;
+    border-color: #dc2626;
+}
+
+.sw-btn-ghost {
+    background: transparent;
+    color: var(--text-muted, #94a3b8);
+    border-color: var(--card-border, #e2e8f0);
+}
+
+.sw-btn-ghost:disabled {
+    background: var(--content-bg, #f1f5f9);
+}
+
+/* ─── 可安装软件卡片网格 ─── */
+.sw-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+}
+
+.sw-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 16px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    transition: all 0.2s;
+    min-height: 160px;
+}
+
+.sw-card:hover {
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
+    border-color: var(--color-blue, #3b82f6);
+    transform: translateY(-2px);
+}
+
+.sw-card-icon {
+    font-size: 2.4rem;
+    margin-bottom: 10px;
+}
+
+.sw-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    width: 100%;
+}
+
+.sw-card-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+}
+
+.sw-card-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.sw-card-version {
+    margin-top: 10px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 版本组合框：点击展开全部预置版本（来自通用配置），也可直接输入自定义版本 */
+.sw-combo {
+    position: relative;
+    width: 100%;
+}
+
+.sw-combo-input {
+    width: 100%;
+    padding: 6px 26px 6px 10px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 6px;
+    background: var(--card-bg, #fff);
+    font-size: 0.8rem;
+    color: var(--text-primary, #0f172a);
+    outline: none;
+    cursor: text;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sw-combo-input:focus {
+    border-color: var(--color-blue, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.sw-combo-input::placeholder {
+    color: var(--text-muted, #9ca3af);
+}
+
+.sw-combo-arrow {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    border: none;
+    background: none;
+    padding: 4px 6px;
+    font-size: 10px;
+    color: var(--text-muted, #64748b);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.sw-combo-arrow:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+.sw-combo-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 60;
+}
+
+.sw-combo-list li {
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--text-primary, #0f172a);
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.sw-combo-list li:hover {
+    background: var(--content-bg, #f1f5f9);
+}
+
+.sw-combo-list li.active {
+    color: var(--color-blue, #3b82f6);
+    font-weight: 600;
+}
+
+.sw-combo-list li.sw-combo-empty {
+    color: var(--text-muted, #9ca3af);
+    cursor: default;
+}
+
+.sw-combo-list li.sw-combo-empty:hover {
+    background: none;
+}
+
+.sw-card-footer {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+

@@ -1,6 +1,6 @@
-// 国产异构服务器管理面板 - 入口
+// Server Plane 服务器管理面板 - 入口
 //
-// 启动后访问 http://<host>:8080 查看仪表盘，
+// 启动后访问 http://<host>:18080 查看控制台，
 // REST API: /api/v1/health, /api/v1/system/info
 // WebSocket: /ws
 package main
@@ -21,7 +21,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version 与 gitCommit 由构建时通过 -ldflags 注入（见 Makefile）。
 var (
+	version   = "dev"
+	gitCommit = "unknown"
+
 	cfgFile string
 	cfg     *config.Config
 	log     *logger.Logger
@@ -29,10 +33,11 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "smp-server",
-		Short: "国产异构服务器管理面板",
-		Long:  "单机优先的 Go 原生服务器运维平台，提供浏览器控制台与 REST/WebSocket API。",
-		RunE:  runServer,
+		Use:     "smp-server",
+		Short:   "Server Plane — 服务器管理面板",
+		Long:    "单机优先的 Go 原生服务器运维平台，提供浏览器控制台与 REST/WebSocket API。",
+		Version: version + " (commit: " + gitCommit + ")",
+		RunE:    runServer,
 	}
 
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "配置文件路径 (默认: ./config.yaml)")

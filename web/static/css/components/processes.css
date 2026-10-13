@@ -1,0 +1,177 @@
+/* ─── 进程管理 ─── */
+.process-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.process-toolbar h3 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* ─── 进程管理概览 ─── */
+.process-overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.overview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 16px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+.overview-card:hover {
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
+}
+
+.overview-label {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    font-weight: 500;
+}
+
+.overview-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+}
+
+.overview-foot {
+    font-size: 0.7rem;
+    color: var(--text-dim, #64748b);
+}
+
+.process-table {
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.process-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    background: var(--content-bg, #f1f5f9);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.process-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    border-top: 1px solid var(--card-border, #e2e8f0);
+    font-size: 0.85rem;
+    transition: all 0.15s;
+    line-height: 1.5;
+}
+
+.process-row:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+    box-shadow: inset 3px 0 0 var(--color-blue, #3b82f6);
+}
+
+.col-pid {
+    width: 70px;
+    flex-shrink: 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-muted, #64748b);
+}
+
+.col-user {
+    width: 100px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary, #475569);
+}
+
+.col-cpu {
+    width: 80px;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.col-mem {
+    width: 80px;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.col-cmd {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary, #475569);
+    padding: 0 12px;
+}
+
+.col-actions {
+    width: 120px;
+    flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.col-cpu.warn {
+    color: var(--color-red, #ef4444);
+    font-weight: 600;
+}
+
+/* 交替行背景 */
+.process-row:nth-child(even) {
+    background: rgba(248, 250, 252, 0.5);
+}
+
+.process-row:nth-child(even):hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.col-cpu.warn { color: var(--color-red, #ef4444); font-weight: 600; }
+
+.proc-btn {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.proc-btn:hover {
+    background: var(--content-bg, #f9fafb);
+    border-color: var(--color-blue, #3b82f6);
+}
+
+.proc-btn.danger:hover {
+    background: var(--color-red-light, #fef2f2);
+    border-color: var(--color-red, #ef4444);
+}
+

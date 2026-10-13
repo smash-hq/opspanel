@@ -1,0 +1,226 @@
+/* ─── 软件管理视图 ─── */
+.software-view {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.software-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.software-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin: 4px 0 6px;
+}
+
+.software-header p {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.software-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.software-server-badge {
+    padding: 6px 14px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--color-blue-light);
+    color: var(--color-blue);
+}
+
+.software-server-badge.local {
+    background: var(--color-green-light);
+    color: var(--color-green);
+}
+
+.software-server-badge.none {
+    background: #f3f4f6;
+    color: var(--text-muted);
+}
+
+/* 未选择服务器提示 */
+.software-no-server {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.no-server-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.software-no-server h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.software-no-server p {
+    font-size: 14px;
+    color: var(--text-dim);
+    max-width: 360px;
+    margin-bottom: 20px;
+}
+
+/* 软件分区标题 */
+.software-section {
+    margin-bottom: 24px;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    color: var(--text-primary);
+}
+
+.section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--color-blue-light);
+    color: var(--color-blue);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* 软件卡片网格 */
+.software-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+.software-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius);
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+}
+
+.software-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.software-card.installed {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.02), #fff);
+}
+
+.software-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.software-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.software-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.software-info strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.software-info small {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.software-status-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.software-status-badge.running {
+    background: var(--color-green-light);
+    color: var(--color-green);
+}
+
+.software-status-badge.stopped {
+    background: var(--color-red-light);
+    color: var(--color-red);
+}
+
+.software-status-badge.unknown,
+.software-status-badge.none {
+    background: #f3f4f6;
+    color: var(--text-muted);
+}
+
+.software-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.software-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.software-actions .toolbar-button.small,
+.software-actions .primary-button.small {
+    padding: 5px 12px;
+    font-size: 12px;
+}
+
+.toolbar-button.danger-text {
+    color: var(--color-red);
+}
+
+.toolbar-button.danger-text:hover {
+    background: var(--color-red-light);
+}
+
+/* 软件分类筛选（侧栏内） */
+.sidebar-content .filter-tabs button span {
+    display: none;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .software-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .software-header {
+        flex-direction: column;
+        gap: 12px;
+    }
+}

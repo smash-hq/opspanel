@@ -97,3 +97,13 @@ export function showToast(toast, message, error = false) {
     toast.visible = true;
     return setTimeout(() => { toast.visible = false; }, 2800);
 }
+
+/**
+ * 解析逗号/空格分隔的版本串为数组（去空、去重）。
+ * @param {string} str - 原始版本串，如 "1.20, 1.21  1.20"
+ * @returns {string[]} 去重后的版本数组
+ */
+export function parseVersions(str) {
+    const seen = new Set();
+    return (str || '').split(/[,，\s]+/).map(s => s.trim()).filter(Boolean).filter(v => !seen.has(v) && seen.add(v));
+}

@@ -1,0 +1,246 @@
+/* ─── 软件状态卡片 ─── */
+.sw-status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ─── 软件状态卡片（表格式对齐）─── */
+/* ─── 已安装软件/语言表格（软件管理与语言环境共用同一套样式） ─── */
+.sw-installed-table {
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+}
+
+/* 圆角改由首末行承担（表格容器不能裁剪，否则版本悬浮气泡会被切掉） */
+.sw-installed-table .sw-installed-header {
+    border-radius: 9px 9px 0 0;
+}
+
+.sw-installed-table .sw-installed-row:last-child {
+    border-radius: 0 0 9px 9px;
+}
+
+/* 列：名称自适应（140~300px） | 版本 | 状态 | 服务控制 | 弹性空隙 | 操作 */
+.sw-installed-header,
+.sw-installed-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 300px) 110px 92px 148px 1fr 92px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+}
+
+.sw-installed-header {
+    background: var(--content-bg, #f1f5f9);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sw-installed-row {
+    padding: 12px 16px;
+    border-top: 1px solid var(--card-border, #e2e8f0);
+    transition: background 0.15s;
+}
+
+/* 语言环境表格（无服务控制列，其余列样式一致） */
+.sw-installed-table.lang-table-4col .sw-installed-header,
+.sw-installed-table.lang-table-4col .sw-installed-row {
+    grid-template-columns: minmax(140px, 300px) 110px 92px 1fr 92px;
+}
+
+/* 弹性空隙列：吸收剩余宽度，让操作列贴右、内容列紧凑 */
+.sw-col-spacer {
+    min-width: 0;
+}
+
+/* 表头对齐：中间列居中，与行内容对齐 */
+.sw-installed-header .sw-col-version,
+.sw-installed-header .sw-col-status {
+    text-align: center;
+}
+
+.sw-installed-row:hover {
+    background: var(--content-bg, #f8fafc);
+}
+
+.sw-col-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    min-width: 0;
+}
+
+.sw-col-name strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sw-row-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    background: var(--content-bg, #f1f5f9);
+    border-radius: 8px;
+}
+
+.sw-col-version {
+    position: relative;
+    min-width: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary, #475569);
+    text-align: center;
+}
+
+/* 版本文本内层截断（外层保留给悬浮气泡定位） */
+.sw-version-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 版本悬浮气泡：鼠标悬浮即时显示完整版本信息 */
+.sw-col-version:not([data-title=""]):hover::after {
+    content: attr(data-title);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 380px;
+    padding: 6px 10px;
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    border-radius: 6px;
+    white-space: normal;
+    word-break: break-all;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.sw-col-version:not([data-title=""]):hover::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e293b;
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* 状态徽章列居中，与表头对齐 */
+.sw-col-status {
+    display: flex;
+    justify-content: center;
+}
+
+.sw-status-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+.sw-status-badge.running {
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.sw-status-badge.stopped {
+    background: var(--color-red-light, #fef2f2);
+    color: var(--color-red, #ef4444);
+}
+
+.sw-status-badge.none, .sw-status-badge.unknown {
+    background: var(--content-bg, #f3f4f6);
+    color: var(--text-muted, #94a3b8);
+}
+
+.sw-col-service {
+    display: flex;
+    justify-content: center;
+}
+
+.sw-service-btns {
+    display: flex;
+    gap: 4px;
+}
+
+.sw-svc-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.sw-svc-btn:hover:not(:disabled) {
+    background: var(--content-bg, #f9fafb);
+    border-color: var(--color-blue, #3b82f6);
+}
+
+.sw-svc-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.sw-col-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ─── 已安装表格响应式：窄屏收起表头，行内容改为两列流式排布 ─── */
+@media (max-width: 720px) {
+    .sw-installed-header {
+        display: none;
+    }
+
+    .sw-installed-row,
+    .sw-installed-table.lang-table-4col .sw-installed-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 16px;
+        padding: 14px 16px;
+    }
+
+    .sw-col-name {
+        grid-column: 1 / -1;
+    }
+
+    .sw-col-actions {
+        justify-content: flex-start;
+    }
+
+    .sw-col-spacer {
+        display: none;
+    }
+}
+

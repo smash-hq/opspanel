@@ -1,0 +1,51 @@
+/* ─── 系统设置 ─── */
+.settings-view {
+    max-width: 720px;
+}
+
+.settings-section {
+    margin-bottom: 32px;
+}
+
+.settings-section h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.settings-desc {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}
+
+/* ─── 网站图标 ─── */
+.favicon-upload {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.favicon-preview {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    background: var(--content-bg, #f9fafb);
+    border: 1px solid var(--card-border, #e5e7eb);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.favicon-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.favicon-actions {
+    display: flex;
+    gap: 8px;
+}
+
