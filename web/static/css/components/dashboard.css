@@ -278,6 +278,11 @@
 .info-grid > div { display: flex; flex-direction: column; gap: 3px; }
 .info-grid small { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .info-grid strong { font-size: 13px; font-weight: 500; color: var(--text-primary); word-break: break-all; }
+
+/* 主定义在本文件，响应式规则须随行以避免被后加载的同名规则覆盖 */
+@media (max-width: 768px) {
+    .info-grid { grid-template-columns: 1fr; }
+}
 .accent-text { color: var(--color-blue) !important; }
 
 /* ─── 网络接口列表 ─── */

@@ -77,6 +77,11 @@
     gap: 12px;
 }
 
+/* 主定义在本文件，响应式规则须随行以避免被后加载的同名规则覆盖 */
+@media (max-width: 768px) {
+    .form-grid { grid-template-columns: 1fr; }
+}
+
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field.full { grid-column: 1 / -1; }
 

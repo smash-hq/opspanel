@@ -110,14 +110,15 @@ export function setupLanguages(ctx) {
             version_cmd: langForm.version_cmd, install_cmd: langForm.install_cmd,
         };
         try {
-            if (langFormMode.value === 'edit') {
+            const isEdit = langFormMode.value === 'edit';
+            if (isEdit) {
                 await updateLanguage(langForm.id, payload);
             } else {
                 await createLanguage(payload);
             }
             await loadLanguages();
             langFormMode.value = null;
-            ctx.toastNotify(langFormMode.value === 'edit' ? '语言已更新' : '语言已添加');
+            ctx.toastNotify(isEdit ? '语言已更新' : '语言已添加');
         } catch (err) {
             langFormError.value = err.message;
         } finally {

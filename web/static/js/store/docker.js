@@ -71,7 +71,7 @@ export function setupDocker(ctx) {
     }
 
     async function loadDockerImages() {
-        if (!ctx.selectedServer.value) return;
+        if (!ctx.selectedServer.value || dockerLoading.value) return;
         dockerLoading.value = true;
         try {
             dockerImages.value = await fetchDockerImages(ctx.selectedServer.value);

@@ -9,6 +9,8 @@
 
 const { onMounted, onUnmounted, watch } = window.Vue;
 
+import { setPushPaused } from '../api/settings.js';
+
 export function setupLifecycle(ctx) {
     onMounted(() => {
         ctx.initAuth();
@@ -17,14 +19,9 @@ export function setupLifecycle(ctx) {
         window.addEventListener('smp:unauthorized', ctx.handleUnauthorized);
     });
 
-    // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接）
+    // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接；尽力而为）
     watch(ctx.activeTab, (tab) => {
-        const paused = tab !== 'system';
-        fetch('/api/v1/settings/push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paused }),
-        }).catch(() => {});
+        setPushPaused(tab !== 'system').catch(() => {});
     });
 
     onUnmounted(() => {

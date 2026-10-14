@@ -20,8 +20,11 @@ export function connectWS(serverId, callbacks) {
     let ws = null;
     let reconnectTimer = null;
     let closed = false;
+    let attempts = 0; // 连续失败次数，用于重连退避
 
     const { onSnapshot, onOpen, onClose } = callbacks || {};
+    // 重连退避序列（毫秒）：1s → 2s → 5s → 10s 封顶，避免服务下线时无限高频重连
+    const BACKOFF_MS = [1000, 2000, 5000, 10000];
 
     function open() {
         if (!serverId || closed) return;
@@ -29,6 +32,7 @@ export function connectWS(serverId, callbacks) {
         ws = new WebSocket(`${protocol}://${location.host}/ws?server=${encodeURIComponent(serverId)}`);
 
         ws.onopen = () => {
+            attempts = 0;
             if (typeof onOpen === 'function') onOpen();
         };
 
@@ -47,7 +51,11 @@ export function connectWS(serverId, callbacks) {
 
         ws.onclose = () => {
             if (typeof onClose === 'function') onClose();
-            if (!closed) reconnectTimer = setTimeout(open, 3000);
+            if (!closed) {
+                const delay = BACKOFF_MS[Math.min(attempts, BACKOFF_MS.length - 1)];
+                attempts++;
+                reconnectTimer = setTimeout(open, delay);
+            }
         };
 
         ws.onerror = () => {

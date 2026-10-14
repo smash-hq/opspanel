@@ -5,6 +5,7 @@
  */
 
 import { fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile } from '../api/files.js';
+import { fmtBytes } from '../utils.js';
 
 const { ref, reactive, computed } = window.Vue;
 
@@ -130,13 +131,6 @@ export function setupFiles(ctx) {
         return icons[ext] || '📄';
     }
 
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 B';
-        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
-    }
-
     /** Unix 时间戳 → 本地时间字符串（文件修改时间）。 */
     function formatModTime(ts) {
         if (!ts) return '—';
@@ -150,6 +144,6 @@ export function setupFiles(ctx) {
         permGuideVisible, openPermGuide, closePermGuide,
         loadFiles, navigateToPath, openFilePreview, closeFilePreview,
         openFileDetail, closeFileDetail, handleDownloadFile,
-        filteredFiles, sortedEntries, getFileIcon, formatFileSize, formatModTime,
+        filteredFiles, sortedEntries, getFileIcon, formatFileSize: fmtBytes, formatModTime,
     });
 }

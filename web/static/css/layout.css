@@ -209,12 +209,6 @@
     opacity: 1;
 }
 
-/* 收起态添加按钮 */
-.add-button.compact-add {
-    justify-content: center;
-    padding: 6px;
-}
-
 .sidebar-header {
     display: flex;
     align-items: center;
@@ -726,8 +720,6 @@
     .metric-grid { grid-template-columns: 1fr; }
     .welcome-row { flex-direction: column; gap: 12px; }
     .server-hero { flex-direction: column; align-items: flex-start; gap: 16px; }
-    .form-grid { grid-template-columns: 1fr; }
-    .info-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {

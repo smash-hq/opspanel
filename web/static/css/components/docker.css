@@ -194,11 +194,6 @@
     color: #6b7280;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
 .docker-ctr-time {
     font-size: 0.75rem;
     color: var(--text-muted, #64748b);

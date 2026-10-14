@@ -6,6 +6,7 @@
  */
 
 import { showToast } from '../utils.js';
+import { getSettings, updateSettings, uploadFaviconFile, resetFaviconFile } from '../api/settings.js';
 
 const { ref, reactive, computed } = window.Vue;
 
@@ -31,8 +32,7 @@ export function setupUi(ctx) {
 
     async function loadSettings() {
         try {
-            const res = await fetch('/api/v1/settings/');
-            const json = await res.json();
+            const json = await getSettings();
             if (json.code === 0 && json.data) {
                 settingsForm.panelName = json.data.panel_name || '';
                 settingsForm.adminEmail = json.data.admin_email || '';
@@ -61,17 +61,14 @@ export function setupUi(ctx) {
     async function saveSettings() {
         settingsSaving.value = true;
         try {
-            await fetch('/api/v1/settings/', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    panel_name: settingsForm.panelName,
-                    admin_email: settingsForm.adminEmail,
-                    push_interval: settingsForm.pushInterval,
-                    default_ssh_port: settingsForm.defaultSSHPort,
-                    welcome_message: settingsForm.welcomeMessage,
-                }),
+            const json = await updateSettings({
+                panel_name: settingsForm.panelName,
+                admin_email: settingsForm.adminEmail,
+                push_interval: settingsForm.pushInterval,
+                default_ssh_port: settingsForm.defaultSSHPort,
+                welcome_message: settingsForm.welcomeMessage,
             });
+            if (json.code !== 0) throw new Error(json.message || '未知错误');
             applyBrand();
             ctx.toastNotify('设置已保存');
         } catch (err) {
@@ -93,19 +90,13 @@ export function setupUi(ctx) {
             return;
         }
         try {
-            const resp = await fetch('/api/v1/settings/favicon', {
-                method: 'POST',
-                body: file,
-            });
-            if (resp.ok) {
-                faviconTs.value = Date.now();
-                hasCustomFavicon.value = true;
-                // 更新 head 中的 favicon
-                document.querySelector('link[rel="icon"]').href = '/api/v1/settings/favicon?' + faviconTs.value;
-                ctx.toastNotify('图标已更新');
-            } else {
-                ctx.toastNotify('上传失败', true);
-            }
+            const json = await uploadFaviconFile(file);
+            if (json.code !== 0) throw new Error(json.message || '上传失败');
+            faviconTs.value = Date.now();
+            hasCustomFavicon.value = true;
+            // 更新 head 中的 favicon
+            document.querySelector('link[rel="icon"]').href = '/api/v1/settings/favicon?' + faviconTs.value;
+            ctx.toastNotify('图标已更新');
         } catch (err) {
             ctx.toastNotify('上传失败: ' + err.message, true);
         }
@@ -113,13 +104,14 @@ export function setupUi(ctx) {
 
     async function resetFavicon() {
         try {
-            await fetch('/api/v1/settings/favicon', { method: 'DELETE' });
+            const json = await resetFaviconFile();
+            if (json.code !== 0) throw new Error(json.message || '操作失败');
             faviconTs.value = Date.now();
             hasCustomFavicon.value = false;
             document.querySelector('link[rel="icon"]').href = '/favicon.svg';
             ctx.toastNotify('已恢复默认图标');
         } catch (err) {
-            ctx.toastNotify('操作失败', true);
+            ctx.toastNotify('操作失败: ' + err.message, true);
         }
     }
 

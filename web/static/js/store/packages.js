@@ -60,14 +60,15 @@ export function setupPackages(ctx) {
             start_cmd: packageForm.start_cmd, stop_cmd: packageForm.stop_cmd, restart_cmd: packageForm.restart_cmd,
         };
         try {
-            if (packageFormMode.value === 'edit') {
+            const isEdit = packageFormMode.value === 'edit';
+            if (isEdit) {
                 await updatePackage(packageForm.id, payload);
             } else {
                 await createPackage(payload);
             }
             await ctx.loadSoftwareCatalog();
             packageFormMode.value = null;
-            ctx.toastNotify(packageFormMode.value === 'edit' ? '软件包已更新' : '软件包已添加');
+            ctx.toastNotify(isEdit ? '软件包已更新' : '软件包已添加');
         } catch (err) {
             packageFormError.value = err.message;
         } finally {

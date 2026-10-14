@@ -6,6 +6,8 @@
 
 const { ref } = window.Vue;
 
+import { updateSettings } from '../api/settings.js';
+
 export function setupTheme(ctx) {
     const theme = ref(localStorage.getItem('smp_theme') || 'system');
     applyTheme(theme.value);
@@ -28,12 +30,8 @@ export function setupTheme(ctx) {
         ctx.themeVal.value = t;
         localStorage.setItem('smp_theme', t);
         applyTheme(t);
-        // 持久化到后端
-        fetch('/api/v1/settings/', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ theme: t }),
-        }).catch(() => {});
+        // 持久化到后端（尽力而为：本地已生效，失败不打断交互）
+        updateSettings({ theme: t }).catch(() => {});
     }
 
     // 监听系统主题变化
