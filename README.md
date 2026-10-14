@@ -8,7 +8,7 @@
 [![Single Binary](https://img.shields.io/badge/交付-单二进制-8A2BE2?style=flat)](#为什么选择-server-plane)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
 
-Go 原生服务器运维面板。单二进制 + 内嵌前端 + SQLite，**零外部依赖、零 Agent**——远程服务器只要开着 SSH，浏览器里就是完整的控制台：实时监控、软件商店、Docker、文件、进程，一屏尽览。
+Go 原生服务器运维面板。单二进制 + 内嵌前端 + SQLite，**零外部依赖、零 Agent**——远程服务器只要开着 SSH，浏览器里就是完整的控制台：实时监控、软件商店、Docker、文件、进程，一屏尽览。**所有数据仅存本地，不上云、无遥测。**
 
 ```bash
 git clone https://github.com/smash-hq/server-management.git
@@ -208,6 +208,8 @@ make build-windows        # Windows
 ```
 
 ## 数据存储
+
+> 🔒 **数据不出内网**：所有数据（服务器配置、SSH 凭证、监控快照、面板设置）仅存储在本地 `data/` 目录的 SQLite 文件中。项目**无任何遥测、数据上报或云端同步逻辑**，部署机器完全不联网也能正常使用。
 
 使用 **SQLite**（`modernc.org/sqlite`，纯 Go 实现，无需 CGO）作为本地存储引擎，数据库文件位于 `data/smp.db`。
 

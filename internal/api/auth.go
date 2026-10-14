@@ -8,9 +8,11 @@ package api
 // 当前项目完善前暂时关闭。
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -105,14 +107,20 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := h.loadUser()
+	user := h.loadUser(r.Context())
 	if req.Username != user.Username ||
 		bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		Fail(w, http.StatusUnauthorized, 401, "用户名或密码错误")
 		return
 	}
 
-	h.setSessionCookie(w, h.newSession())
+	token, err := h.newSession()
+	if err != nil {
+		// 随机源故障时拒绝签发可预测 token
+		Fail(w, http.StatusInternalServerError, 500, "internal error")
+		return
+	}
+	h.setSessionCookie(w, token)
 	h.log.Infow("user logged in", "username", user.Username, "must_change", user.MustChange)
 	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange && enforcePasswordChange})
 }
@@ -149,7 +157,7 @@ func (h *AuthHandler) handleMe(w http.ResponseWriter, r *http.Request) {
 		Fail(w, http.StatusUnauthorized, 401, "未登录或会话已过期")
 		return
 	}
-	user := h.loadUser()
+	user := h.loadUser(r.Context())
 	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange && enforcePasswordChange})
 }
 
@@ -173,7 +181,7 @@ func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	user := h.loadUser()
+	user := h.loadUser(r.Context())
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)) != nil {
 		Fail(w, http.StatusBadRequest, 400, "当前密码不正确")
 		return
@@ -194,7 +202,7 @@ func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Reques
 	}
 	user.PasswordHash = string(hash)
 	user.MustChange = false
-	if err := h.saveUser(user); err != nil {
+	if err := h.saveUser(r.Context(), user); err != nil {
 		h.log.Errorw("save user failed", "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "保存账户信息失败")
 		return
@@ -204,10 +212,9 @@ func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Reques
 }
 
 // loadUser 读取账户信息；首次部署（无记录）时懒初始化默认账户并持久化。
-func (h *AuthHandler) loadUser() authUserRecord {
+func (h *AuthHandler) loadUser(ctx context.Context) authUserRecord {
 	if h.db != nil {
-		var raw string
-		if err := h.db.Raw().QueryRow(`SELECT value FROM meta WHERE key = ?`, authMetaKey).Scan(&raw); err == nil && raw != "" {
+		if raw, err := h.db.GetMeta(ctx, authMetaKey); err == nil && raw != "" {
 			var u authUserRecord
 			if json.Unmarshal([]byte(raw), &u) == nil && u.Username != "" && u.PasswordHash != "" {
 				return u
@@ -219,14 +226,14 @@ func (h *AuthHandler) loadUser() authUserRecord {
 		h.log.Errorw("hash default password failed", "error", err)
 	}
 	u := authUserRecord{Username: defaultUsername, PasswordHash: string(hash), MustChange: enforcePasswordChange}
-	if err := h.saveUser(u); err != nil {
+	if err := h.saveUser(ctx, u); err != nil {
 		h.log.Errorw("init default user failed", "error", err)
 	}
 	return u
 }
 
 // saveUser 将账户信息写入 meta 表。
-func (h *AuthHandler) saveUser(u authUserRecord) error {
+func (h *AuthHandler) saveUser(ctx context.Context, u authUserRecord) error {
 	if h.db == nil {
 		return nil
 	}
@@ -234,17 +241,15 @@ func (h *AuthHandler) saveUser(u authUserRecord) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.db.Raw().Exec(`
-		INSERT INTO meta (key, value) VALUES (?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, authMetaKey, string(raw))
-	return err
+	return h.db.SetMeta(ctx, authMetaKey, string(raw))
 }
 
 // newSession 生成随机 token 并登记会话（顺带清理过期会话）。
-func (h *AuthHandler) newSession() string {
+func (h *AuthHandler) newSession() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		h.log.Errorw("generate session token failed", "error", err)
+		return "", fmt.Errorf("generate session token: %w", err)
 	}
 	token := hex.EncodeToString(b)
 
@@ -257,7 +262,7 @@ func (h *AuthHandler) newSession() string {
 	}
 	h.sessions[token] = now.Add(sessionTTL)
 	h.mu.Unlock()
-	return token
+	return token, nil
 }
 
 // cookieToken 从请求 Cookie 中提取会话 token。

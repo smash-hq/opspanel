@@ -92,12 +92,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 		log.Infow("shutdown signal received")
 	case err := <-errCh:
 		log.Errorw("server error", "error", err)
+		_ = srv.CloseStore()
 		return err
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Server.ShutdownTimeout)*time.Second)
 	defer cancel()
-	srv.Shutdown(shutdownCtx)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		// 超时未能在限期内排空连接（如慢 SSH 请求），记录后由进程退出强制回收
+		log.Errorw("graceful shutdown incomplete, forcing exit", "error", err)
+	}
 	// 关闭数据库连接
 	if storeErr := srv.CloseStore(); storeErr != nil {
 		log.Errorw("store close failed", "error", storeErr)

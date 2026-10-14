@@ -30,7 +30,7 @@ func (h *SystemHandler) handleInfo(w http.ResponseWriter, r *http.Request) {
 	// 支持 ?server=<id> 指定目标服务器，默认本机
 	serverID := r.URL.Query().Get("server")
 
-	info, err := h.collector.Snapshot(serverID)
+	info, err := h.collector.Snapshot(r.Context(), serverID)
 	if err != nil {
 		h.log.Errorw("snapshot failed", "server", serverID, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to collect system info: "+err.Error())

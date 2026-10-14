@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/smash-hq/server-management/internal/ws"
 )
 
-// wsUpgrader 终端 WebSocket 升级器（MVP 阶段允许所有来源，与监控 WS 保持一致）。
+// wsUpgrader 终端 WebSocket 升级器：与监控 WS 一致，校验 Origin 同源。
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin:     ws.CheckSameOrigin,
 }
 
 // terminalClientMsg 是前端发来的控制消息。
@@ -38,7 +40,7 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 		Fail(w, http.StatusBadRequest, 400, "server id required")
 		return
 	}
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return

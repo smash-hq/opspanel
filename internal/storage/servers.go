@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -34,12 +35,15 @@ func NewServerStore(db *DB) *ServerStore {
 }
 
 // List 返回所有服务器配置（按创建时间排序）。
-func (s *ServerStore) List() []*Server {
-	rows, err := s.db.Raw().Query(`
+func (s *ServerStore) List(ctx context.Context) ([]*Server, error) {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	rows, err := s.db.Raw().QueryContext(ctx, `
 		SELECT id, name, type, host, port, username, auth_type, password, key_path, created_at
 		FROM servers ORDER BY created_at ASC`)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("query servers: %w", err)
 	}
 	defer rows.Close()
 
@@ -48,17 +52,21 @@ func (s *ServerStore) List() []*Server {
 		srv := &Server{}
 		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Type, &srv.Host, &srv.Port,
 			&srv.Username, &srv.AuthType, &srv.Password, &srv.KeyPath, &srv.CreatedAt); err != nil {
-			continue
+			return nil, fmt.Errorf("scan server row: %w", err)
 		}
 		servers = append(servers, srv)
 	}
-	return servers
+	// 捕获迭代过程中发生的 I/O 错误，避免静默返回不完整列表
+	return servers, rows.Err()
 }
 
 // Get 按 ID 查找服务器。
-func (s *ServerStore) Get(id string) (*Server, bool) {
+func (s *ServerStore) Get(ctx context.Context, id string) (*Server, bool) {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	srv := &Server{}
-	err := s.db.Raw().QueryRow(`
+	err := s.db.Raw().QueryRowContext(ctx, `
 		SELECT id, name, type, host, port, username, auth_type, password, key_path, created_at
 		FROM servers WHERE id = ?`, id).Scan(
 		&srv.ID, &srv.Name, &srv.Type, &srv.Host, &srv.Port,
@@ -70,7 +78,7 @@ func (s *ServerStore) Get(id string) (*Server, bool) {
 }
 
 // Add 新增服务器配置。
-func (s *ServerStore) Add(srv *Server) error {
+func (s *ServerStore) Add(ctx context.Context, srv *Server) error {
 	if srv.ID == "" {
 		srv.ID = generateID()
 	}
@@ -81,7 +89,10 @@ func (s *ServerStore) Add(srv *Server) error {
 		srv.CreatedAt = time.Now().Unix()
 	}
 
-	_, err := s.db.Raw().Exec(`
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, err := s.db.Raw().ExecContext(ctx, `
 		INSERT INTO servers (id, name, type, host, port, username, auth_type, password, key_path, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		srv.ID, srv.Name, srv.Type, srv.Host, srv.Port,
@@ -93,14 +104,17 @@ func (s *ServerStore) Add(srv *Server) error {
 }
 
 // Update 修改已有配置。
-func (s *ServerStore) Update(srv *Server) error {
+func (s *ServerStore) Update(ctx context.Context, srv *Server) error {
 	if srv.CreatedAt == 0 {
-		if existing, ok := s.Get(srv.ID); ok {
+		if existing, ok := s.Get(ctx, srv.ID); ok {
 			srv.CreatedAt = existing.CreatedAt
 		}
 	}
 
-	res, err := s.db.Raw().Exec(`
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	res, err := s.db.Raw().ExecContext(ctx, `
 		UPDATE servers SET name=?, type=?, host=?, port=?, username=?, auth_type=?, password=?, key_path=?
 		WHERE id=?`,
 		srv.Name, srv.Type, srv.Host, srv.Port, srv.Username, srv.AuthType, srv.Password, srv.KeyPath, srv.ID)
@@ -115,11 +129,15 @@ func (s *ServerStore) Update(srv *Server) error {
 }
 
 // Delete 移除配置。
-func (s *ServerStore) Delete(id string) error {
+func (s *ServerStore) Delete(ctx context.Context, id string) error {
 	if id == "srv_local" {
 		return fmt.Errorf("cannot delete local server entry")
 	}
-	res, err := s.db.Raw().Exec(`DELETE FROM servers WHERE id = ?`, id)
+
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	res, err := s.db.Raw().ExecContext(ctx, `DELETE FROM servers WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete server: %w", err)
 	}
@@ -131,9 +149,12 @@ func (s *ServerStore) Delete(id string) error {
 }
 
 // Count 返回服务器数量。
-func (s *ServerStore) Count() int {
+func (s *ServerStore) Count(ctx context.Context) int {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	var count int
-	_ = s.db.Raw().QueryRow(`SELECT COUNT(*) FROM servers`).Scan(&count)
+	_ = s.db.Raw().QueryRowContext(ctx, `SELECT COUNT(*) FROM servers`).Scan(&count)
 	return count
 }
 

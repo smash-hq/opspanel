@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -35,14 +36,17 @@ func NewSoftwareStore(db *DB) *SoftwareStore {
 }
 
 // InitDefaultPackages 写入内置软件包目录（幂等）。
-func (s *SoftwareStore) InitDefaultPackages(packages []*SoftwarePackage) error {
+func (s *SoftwareStore) InitDefaultPackages(ctx context.Context, packages []*SoftwarePackage) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	for _, pkg := range packages {
 		installJSON, _ := json.Marshal(pkg.InstallCmd)
 		uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
 		versionsJSON, _ := json.Marshal(pkg.Versions)
 
-		_, err := s.db.Raw().Exec(`
+		_, err := s.db.Raw().ExecContext(ctx, `
 			INSERT OR REPLACE INTO software_packages
 			(id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 			 status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd, created_at, updated_at)
@@ -59,8 +63,11 @@ func (s *SoftwareStore) InitDefaultPackages(packages []*SoftwarePackage) error {
 }
 
 // ListPackages 返回所有软件包。
-func (s *SoftwareStore) ListPackages() []*SoftwarePackage {
-	rows, err := s.db.Raw().Query(`
+func (s *SoftwareStore) ListPackages(ctx context.Context) []*SoftwarePackage {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	rows, err := s.db.Raw().QueryContext(ctx, `
 		SELECT id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 		       status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd
 		FROM software_packages ORDER BY category, name`)
@@ -101,8 +108,8 @@ func (s *SoftwareStore) ListPackages() []*SoftwarePackage {
 }
 
 // GetPackage 按 ID 获取软件包。
-func (s *SoftwareStore) GetPackage(id string) (*SoftwarePackage, bool) {
-	pkgs := s.ListPackages()
+func (s *SoftwareStore) GetPackage(ctx context.Context, id string) (*SoftwarePackage, bool) {
+	pkgs := s.ListPackages(ctx)
 	for _, pkg := range pkgs {
 		if pkg.ID == id {
 			return pkg, true
@@ -112,13 +119,16 @@ func (s *SoftwareStore) GetPackage(id string) (*SoftwarePackage, bool) {
 }
 
 // UpdatePackage 更新软件包定义。
-func (s *SoftwareStore) UpdatePackage(pkg *SoftwarePackage) error {
+func (s *SoftwareStore) UpdatePackage(ctx context.Context, pkg *SoftwarePackage) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	installJSON, _ := json.Marshal(pkg.InstallCmd)
 	uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
 	versionsJSON, _ := json.Marshal(pkg.Versions)
 	now := time.Now().Unix()
 
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		UPDATE software_packages SET name=?, category=?, description=?, version=?, versions=?, icon=?,
 			install_cmd=?, uninstall_cmd=?, status_cmd=?, version_cmd=?, start_cmd=?, stop_cmd=?,
 			restart_cmd=?, updated_at=? WHERE id=?`,
@@ -130,16 +140,20 @@ func (s *SoftwareStore) UpdatePackage(pkg *SoftwarePackage) error {
 }
 
 // AddPackage 新增自定义软件包。
-func (s *SoftwareStore) AddPackage(pkg *SoftwarePackage) error {
+func (s *SoftwareStore) AddPackage(ctx context.Context, pkg *SoftwarePackage) error {
 	if pkg.ID == "" {
 		return fmt.Errorf("package id is required")
 	}
+
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	installJSON, _ := json.Marshal(pkg.InstallCmd)
 	uninstallJSON, _ := json.Marshal(pkg.UninstallCmd)
 	versionsJSON, _ := json.Marshal(pkg.Versions)
 	now := time.Now().Unix()
 
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		INSERT INTO software_packages
 		(id, name, category, description, version, versions, icon, install_cmd, uninstall_cmd,
 		 status_cmd, version_cmd, start_cmd, stop_cmd, restart_cmd, created_at, updated_at)
@@ -152,8 +166,11 @@ func (s *SoftwareStore) AddPackage(pkg *SoftwarePackage) error {
 }
 
 // DeletePackage 删除软件包。
-func (s *SoftwareStore) DeletePackage(id string) error {
-	_, err := s.db.Raw().Exec(`DELETE FROM software_packages WHERE id = ?`, id)
+func (s *SoftwareStore) DeletePackage(ctx context.Context, id string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, err := s.db.Raw().ExecContext(ctx, `DELETE FROM software_packages WHERE id = ?`, id)
 	return err
 }
 
@@ -172,8 +189,11 @@ type SourceRecord struct {
 }
 
 // ListSources 返回所有软件源。
-func (s *SoftwareStore) ListSources() []*SourceRecord {
-	rows, err := s.db.Raw().Query(`
+func (s *SoftwareStore) ListSources(ctx context.Context) []*SourceRecord {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	rows, err := s.db.Raw().QueryContext(ctx, `
 		SELECT id, name, type, url, enabled, priority, created_at, updated_at
 		FROM software_sources ORDER BY priority ASC`)
 	if err != nil {
@@ -196,10 +216,13 @@ func (s *SoftwareStore) ListSources() []*SourceRecord {
 }
 
 // GetSource 按 ID 获取软件源。
-func (s *SoftwareStore) GetSource(id string) (*SourceRecord, bool) {
+func (s *SoftwareStore) GetSource(ctx context.Context, id string) (*SourceRecord, bool) {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	var src SourceRecord
 	var enabled int
-	err := s.db.Raw().QueryRow(`
+	err := s.db.Raw().QueryRowContext(ctx, `
 		SELECT id, name, type, url, enabled, priority, created_at, updated_at
 		FROM software_sources WHERE id = ?`, id).Scan(
 		&src.ID, &src.Name, &src.Type, &src.URL, &enabled,
@@ -212,13 +235,16 @@ func (s *SoftwareStore) GetSource(id string) (*SourceRecord, bool) {
 }
 
 // AddSource 新增软件源。
-func (s *SoftwareStore) AddSource(src *SourceRecord) error {
+func (s *SoftwareStore) AddSource(ctx context.Context, src *SourceRecord) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	enabled := 0
 	if src.Enabled {
 		enabled = 1
 	}
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		INSERT INTO software_sources (id, name, type, url, enabled, priority, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		src.ID, src.Name, src.Type, src.URL, enabled, src.Priority, now, now)
@@ -226,13 +252,16 @@ func (s *SoftwareStore) AddSource(src *SourceRecord) error {
 }
 
 // UpdateSource 更新软件源。
-func (s *SoftwareStore) UpdateSource(src *SourceRecord) error {
+func (s *SoftwareStore) UpdateSource(ctx context.Context, src *SourceRecord) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	enabled := 0
 	if src.Enabled {
 		enabled = 1
 	}
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		UPDATE software_sources SET name=?, type=?, url=?, enabled=?, priority=?, updated_at=?
 		WHERE id=?`,
 		src.Name, src.Type, src.URL, enabled, src.Priority, now, src.ID)
@@ -240,8 +269,11 @@ func (s *SoftwareStore) UpdateSource(src *SourceRecord) error {
 }
 
 // DeleteSource 删除软件源。
-func (s *SoftwareStore) DeleteSource(id string) error {
-	_, err := s.db.Raw().Exec(`DELETE FROM software_sources WHERE id = ?`, id)
+func (s *SoftwareStore) DeleteSource(ctx context.Context, id string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, err := s.db.Raw().ExecContext(ctx, `DELETE FROM software_sources WHERE id = ?`, id)
 	return err
 }
 
@@ -273,9 +305,12 @@ func NewLanguageStore(db *DB) *LanguageStore {
 }
 
 // InitDefaultLanguages 写入内置语言环境定义（幂等）。
-func (s *LanguageStore) InitDefaultLanguages() error {
+func (s *LanguageStore) InitDefaultLanguages(ctx context.Context) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	// 清理不属于编程语言的条目（如 Docker 属于软件包）
-	_, _ = s.db.Raw().Exec(`DELETE FROM languages WHERE id = 'docker'`)
+	_, _ = s.db.Raw().ExecContext(ctx, `DELETE FROM languages WHERE id = 'docker'`)
 	now := time.Now().Unix()
 	defaults := []*LanguageRecord{
 		{ID: "go", Name: "Go", Category: "language", Description: "Google 开发的高性能编译语言", Icon: "🐹", VersionCmd: "go version 2>/dev/null", InstallCmd: "apt-get install -y golang-go || yum install -y golang || dnf install -y golang", Versions: []string{"1.21", "1.22", "1.23"}, CreatedAt: now, UpdatedAt: now},
@@ -289,7 +324,7 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 	}
 	for _, lang := range defaults {
 		versionsJSON, _ := json.Marshal(lang.Versions)
-		_, err := s.db.Raw().Exec(`
+		_, err := s.db.Raw().ExecContext(ctx, `
 			INSERT OR IGNORE INTO languages (id, name, category, description, icon, version_cmd, install_cmd, versions, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, string(versionsJSON), lang.CreatedAt, lang.UpdatedAt)
@@ -301,8 +336,11 @@ func (s *LanguageStore) InitDefaultLanguages() error {
 }
 
 // ListLanguages 返回所有语言环境。
-func (s *LanguageStore) ListLanguages() []*LanguageRecord {
-	rows, err := s.db.Raw().Query(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages ORDER BY category, name`)
+func (s *LanguageStore) ListLanguages(ctx context.Context) []*LanguageRecord {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	rows, err := s.db.Raw().QueryContext(ctx, `SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages ORDER BY category, name`)
 	if err != nil {
 		return nil
 	}
@@ -322,10 +360,13 @@ func (s *LanguageStore) ListLanguages() []*LanguageRecord {
 }
 
 // GetLanguage 按 ID 获取语言环境。
-func (s *LanguageStore) GetLanguage(id string) (*LanguageRecord, bool) {
+func (s *LanguageStore) GetLanguage(ctx context.Context, id string) (*LanguageRecord, bool) {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	var lang LanguageRecord
 	var versionsJSON string
-	err := s.db.Raw().QueryRow(`SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
+	err := s.db.Raw().QueryRowContext(ctx, `SELECT id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at FROM languages WHERE id = ?`, id).Scan(
 		&lang.ID, &lang.Name, &lang.Category, &lang.Description, &lang.Icon, &lang.VersionCmd, &lang.InstallCmd, &lang.UninstallCmd, &versionsJSON, &lang.CreatedAt, &lang.UpdatedAt)
 	if err != nil {
 		return nil, false
@@ -335,13 +376,17 @@ func (s *LanguageStore) GetLanguage(id string) (*LanguageRecord, bool) {
 }
 
 // AddLanguage 新增自定义语言环境。
-func (s *LanguageStore) AddLanguage(lang *LanguageRecord) error {
+func (s *LanguageStore) AddLanguage(ctx context.Context, lang *LanguageRecord) error {
 	if lang.ID == "" {
 		return fmt.Errorf("language id is required")
 	}
+
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	versionsJSON, _ := json.Marshal(lang.Versions)
 	now := time.Now().Unix()
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		INSERT INTO languages (id, name, category, description, icon, version_cmd, install_cmd, uninstall_cmd, versions, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		lang.ID, lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, string(versionsJSON), now, now)
@@ -349,10 +394,13 @@ func (s *LanguageStore) AddLanguage(lang *LanguageRecord) error {
 }
 
 // UpdateLanguage 更新语言环境定义。
-func (s *LanguageStore) UpdateLanguage(lang *LanguageRecord) error {
+func (s *LanguageStore) UpdateLanguage(ctx context.Context, lang *LanguageRecord) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	versionsJSON, _ := json.Marshal(lang.Versions)
 	now := time.Now().Unix()
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		UPDATE languages SET name=?, category=?, description=?, icon=?, version_cmd=?, install_cmd=?, uninstall_cmd=?, versions=?, updated_at=?
 		WHERE id=?`,
 		lang.Name, lang.Category, lang.Description, lang.Icon, lang.VersionCmd, lang.InstallCmd, lang.UninstallCmd, string(versionsJSON), now, lang.ID)
@@ -360,8 +408,11 @@ func (s *LanguageStore) UpdateLanguage(lang *LanguageRecord) error {
 }
 
 // DeleteLanguage 删除语言环境。
-func (s *LanguageStore) DeleteLanguage(id string) error {
-	_, err := s.db.Raw().Exec(`DELETE FROM languages WHERE id = ?`, id)
+func (s *LanguageStore) DeleteLanguage(ctx context.Context, id string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, err := s.db.Raw().ExecContext(ctx, `DELETE FROM languages WHERE id = ?`, id)
 	return err
 }
 
@@ -389,7 +440,10 @@ func NewDockerSourceStore(db *DB) *DockerSourceStore {
 }
 
 // InitDefaultSources 写入内置镜像源（幂等）。
-func (s *DockerSourceStore) InitDefaultSources() error {
+func (s *DockerSourceStore) InitDefaultSources(ctx context.Context) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	sources := []*DockerSource{
 		{ID: "dockerhub", Name: "Docker Hub 官方", URL: "https://registry-1.docker.io", Enabled: true, IsDefault: true, CreatedAt: now, UpdatedAt: now},
@@ -410,7 +464,7 @@ func (s *DockerSourceStore) InitDefaultSources() error {
 		if src.IsDefault {
 			isDefault = 1
 		}
-		_, err := s.db.Raw().Exec(`
+		_, err := s.db.Raw().ExecContext(ctx, `
 			INSERT OR IGNORE INTO docker_sources (id, name, url, enabled, is_default, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			src.ID, src.Name, src.URL, enabled, isDefault, src.CreatedAt, src.UpdatedAt)
@@ -422,8 +476,11 @@ func (s *DockerSourceStore) InitDefaultSources() error {
 }
 
 // ListSources 返回所有镜像源。
-func (s *DockerSourceStore) ListSources() []*DockerSource {
-	rows, err := s.db.Raw().Query(`SELECT id, name, url, enabled, is_default, created_at, updated_at FROM docker_sources ORDER BY is_default DESC, name`)
+func (s *DockerSourceStore) ListSources(ctx context.Context) []*DockerSource {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	rows, err := s.db.Raw().QueryContext(ctx, `SELECT id, name, url, enabled, is_default, created_at, updated_at FROM docker_sources ORDER BY is_default DESC, name`)
 	if err != nil {
 		return nil
 	}
@@ -444,16 +501,20 @@ func (s *DockerSourceStore) ListSources() []*DockerSource {
 }
 
 // AddSource 新增镜像源。
-func (s *DockerSourceStore) AddSource(src *DockerSource) error {
+func (s *DockerSourceStore) AddSource(ctx context.Context, src *DockerSource) error {
 	if src.ID == "" {
 		return fmt.Errorf("source id is required")
 	}
+
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	enabled := 0
 	if src.Enabled {
 		enabled = 1
 	}
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		INSERT INTO docker_sources (id, name, url, enabled, is_default, created_at, updated_at)
 		VALUES (?, ?, ?, ?, 0, ?, ?)`,
 		src.ID, src.Name, src.URL, enabled, now, now)
@@ -461,13 +522,16 @@ func (s *DockerSourceStore) AddSource(src *DockerSource) error {
 }
 
 // UpdateSource 更新镜像源。
-func (s *DockerSourceStore) UpdateSource(src *DockerSource) error {
+func (s *DockerSourceStore) UpdateSource(ctx context.Context, src *DockerSource) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
 	now := time.Now().Unix()
 	enabled := 0
 	if src.Enabled {
 		enabled = 1
 	}
-	_, err := s.db.Raw().Exec(`
+	_, err := s.db.Raw().ExecContext(ctx, `
 		UPDATE docker_sources SET name=?, url=?, enabled=?, updated_at=?
 		WHERE id=?`,
 		src.Name, src.URL, enabled, now, src.ID)
@@ -475,14 +539,20 @@ func (s *DockerSourceStore) UpdateSource(src *DockerSource) error {
 }
 
 // DeleteSource 删除镜像源。
-func (s *DockerSourceStore) DeleteSource(id string) error {
-	_, err := s.db.Raw().Exec(`DELETE FROM docker_sources WHERE id = ?`, id)
+func (s *DockerSourceStore) DeleteSource(ctx context.Context, id string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, err := s.db.Raw().ExecContext(ctx, `DELETE FROM docker_sources WHERE id = ?`, id)
 	return err
 }
 
 // SetDefaultSource 设置默认镜像源。
-func (s *DockerSourceStore) SetDefaultSource(id string) error {
-	_, _ = s.db.Raw().Exec(`UPDATE docker_sources SET is_default = 0`)
-	_, err := s.db.Raw().Exec(`UPDATE docker_sources SET is_default = 1, enabled = 1 WHERE id = ?`, id)
+func (s *DockerSourceStore) SetDefaultSource(ctx context.Context, id string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+
+	_, _ = s.db.Raw().ExecContext(ctx, `UPDATE docker_sources SET is_default = 0`)
+	_, err := s.db.Raw().ExecContext(ctx, `UPDATE docker_sources SET is_default = 1, enabled = 1 WHERE id = ?`, id)
 	return err
 }

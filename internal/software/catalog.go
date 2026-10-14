@@ -2,6 +2,8 @@
 package software
 
 import (
+	"context"
+
 	"github.com/smash-hq/server-management/internal/storage"
 )
 
@@ -191,10 +193,10 @@ func ListByCategory(category string) []*Package {
 }
 
 // LoadFromStore 从数据库存储刷新内存索引。
-func LoadFromStore(swStore interface {
-	ListPackages() []*Package
+func LoadFromStore(ctx context.Context, swStore interface {
+	ListPackages(ctx context.Context) []*Package
 }) {
-	for _, pkg := range swStore.ListPackages() {
+	for _, pkg := range swStore.ListPackages(ctx) {
 		PackageIndex[pkg.ID] = pkg
 	}
 }

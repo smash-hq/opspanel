@@ -3,6 +3,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -80,26 +81,35 @@ func (h *SettingsHandler) handleSettings(w http.ResponseWriter, r *http.Request)
 				hasCustom = "1"
 			}
 			OK(w, map[string]string{
-				"theme":              h.getMeta("theme", "system"),
-				"panel_name":         h.getMeta("panel_name", ""),
-				"admin_email":        h.getMeta("admin_email", ""),
-				"push_interval":      h.getMeta("push_interval", "3"),
-				"default_ssh_port":   h.getMeta("default_ssh_port", "22"),
-				"welcome_message":    h.getMeta("welcome_message", ""),
+				"theme":              h.getMeta(r.Context(), "theme", "system"),
+				"panel_name":         h.getMeta(r.Context(), "panel_name", ""),
+				"admin_email":        h.getMeta(r.Context(), "admin_email", ""),
+				"push_interval":      h.getMeta(r.Context(), "push_interval", "3"),
+				"default_ssh_port":   h.getMeta(r.Context(), "default_ssh_port", "22"),
+				"welcome_message":    h.getMeta(r.Context(), "welcome_message", ""),
 				"has_custom_favicon": hasCustom,
 			})
 			return
 		}
-		OK(w, map[string]string{key: h.getMeta(key, "")})
-
+		if reservedSettingKey(key) {
+			Fail(w, http.StatusForbidden, 403, "reserved setting key")
+			return
+		}
+		OK(w, map[string]string{key: h.getMeta(r.Context(), key, "")})
 	case http.MethodPut:
 		var settings map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
 			Fail(w, http.StatusBadRequest, 400, "invalid request body")
 			return
 		}
+		for key := range settings {
+			if reservedSettingKey(key) {
+				Fail(w, http.StatusForbidden, 403, "reserved setting key: "+key)
+				return
+			}
+		}
 		for key, value := range settings {
-			if err := h.setMeta(key, value); err != nil {
+			if err := h.setMeta(r.Context(), key, value); err != nil {
 				h.log.Errorw("save setting failed", "key", key, "error", err)
 			}
 		}
@@ -118,6 +128,7 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 		customPath := filepath.Join(h.dataDir, "favicon.custom")
 		if data, err := os.ReadFile(customPath); err == nil {
 			w.Header().Set("Content-Type", detectImageType(data))
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Write(data)
 			return
 		}
@@ -130,6 +141,11 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			Fail(w, http.StatusBadRequest, 400, "file too large (max 1MB)")
+			return
+		}
+		// 仅接受位图格式：SVG 可携带脚本（存储型 XSS 载体），非图片一律拒绝
+		if ct := detectImageType(data); ct == "image/svg+xml" || ct == "application/octet-stream" {
+			Fail(w, http.StatusBadRequest, 400, "only PNG/JPEG/GIF/ICO images are allowed")
 			return
 		}
 		customPath := filepath.Join(h.dataDir, "favicon.custom")
@@ -148,6 +164,12 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 	default:
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 	}
+}
+
+// reservedSettingKey 认证模块内部使用的保留键前缀，禁止经通用设置 API 读写，
+// 防止管理员凭据（auth_user）被读取或篡改。
+func reservedSettingKey(key string) bool {
+	return strings.HasPrefix(key, "auth_")
 }
 
 // detectImageType 通过魔数嗅探图片 Content-Type（favicon 上传时不保存后缀，需按内容判断）。
@@ -169,13 +191,12 @@ func detectImageType(data []byte) string {
 	return "application/octet-stream"
 }
 
-// getMeta 从 meta 表读取值。
-func (h *SettingsHandler) getMeta(key, defaultVal string) string {
+// getMeta 从 meta 表读取值（透传请求 ctx，超时兜底由 storage 层实施）。
+func (h *SettingsHandler) getMeta(ctx context.Context, key, defaultVal string) string {
 	if h.db == nil {
 		return defaultVal
 	}
-	var val string
-	err := h.db.Raw().QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&val)
+	val, err := h.db.GetMeta(ctx, key)
 	if err != nil {
 		return defaultVal
 	}
@@ -183,12 +204,9 @@ func (h *SettingsHandler) getMeta(key, defaultVal string) string {
 }
 
 // setMeta 写入 meta 表。
-func (h *SettingsHandler) setMeta(key, value string) error {
+func (h *SettingsHandler) setMeta(ctx context.Context, key, value string) error {
 	if h.db == nil {
 		return nil
 	}
-	_, err := h.db.Raw().Exec(`
-		INSERT INTO meta (key, value) VALUES (?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
-	return err
+	return h.db.SetMeta(ctx, key, value)
 }

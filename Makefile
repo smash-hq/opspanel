@@ -73,11 +73,10 @@ version:
 # ============================================================
 # 运行管理
 # ============================================================
-## run: 编译并前台启动服务（Ctrl+C 停止）
+## run: 编译并前台启动服务（Ctrl+C 停止；启动前优雅停止旧进程）
 run: build
 	@echo "==> 启动服务 (端口 $(PORT))..."
-	@lsof -ti:$(PORT) | xargs kill 2>/dev/null || true
-	@sleep 1
+	@-$(MAKE) --no-print-directory stop
 	@echo "==> 服务已启动: http://localhost:$(PORT)"
 	@./$(BINARY_NAME)
 
@@ -89,29 +88,33 @@ dev:
 ## start: 编译并后台启动服务（日志写入 /tmp/$(BINARY_NAME).log）
 start: build
 	@echo "==> 后台启动服务 (端口 $(PORT))..."
-	@lsof -ti:$(PORT) | xargs kill 2>/dev/null || true
-	@sleep 1
+	@-$(MAKE) --no-print-directory stop
 	@nohup ./$(BINARY_NAME) > /tmp/$(BINARY_NAME).log 2>&1 & \
 	echo $$! > $(PID_FILE)
 	@echo "==> 服务已启动: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE)))"
 
-## stop: 停止后台服务
+## stop: 优雅停止服务（等待进程退出，超时 kill -9 兜底）
 stop:
 	@if [ -f $(PID_FILE) ]; then \
-		PID=$$(cat $(PID_FILE)); \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "==> 停止服务 (PID: $$PID)"; \
-			kill $$PID; \
-			rm -f $(PID_FILE); \
-			echo "==> 已停止"; \
-		else \
-			echo "==> 进程 $$PID 不存在"; \
-			rm -f $(PID_FILE); \
-		fi \
+		PIDS=$$(cat $(PID_FILE)); rm -f $(PID_FILE); \
 	else \
-		echo "==> 通过端口 $(PORT) 查找服务..."; \
-		lsof -ti:$(PORT) | xargs kill 2>/dev/null || echo "端口 $(PORT) 未占用"; \
-	fi
+		PIDS=$$(lsof -ti:$(PORT)); \
+	fi; \
+	if [ -z "$$PIDS" ]; then \
+		echo "==> 服务未运行"; \
+		exit 0; \
+	fi; \
+	echo "==> 优雅停止服务 (PID: $$(echo $$PIDS | tr '\n' ' '))..."; \
+	for pid in $$PIDS; do kill $$pid 2>/dev/null; done; \
+	for i in $$(seq 1 50); do \
+		ALIVE=0; \
+		for pid in $$PIDS; do kill -0 $$pid 2>/dev/null && ALIVE=1; done; \
+		[ $$ALIVE -eq 0 ] && { echo "==> 已停止"; exit 0; }; \
+		sleep 0.2; \
+	done; \
+	echo "==> 优雅关闭超时 (10s)，强制终止..."; \
+	for pid in $$PIDS; do kill -9 $$pid 2>/dev/null; done; \
+	echo "==> 已强制停止"
 
 ## status: 查看服务运行状态
 status:
@@ -128,10 +131,9 @@ status:
 		echo "==> 服务未运行"; \
 	fi
 
-## restart: 重启服务
+## restart: 重启服务（先优雅停止，再后台启动）
 restart: stop
-	@sleep 1
-	@$(MAKE) start
+	@$(MAKE) --no-print-directory start
 
 # ============================================================
 # 质量

@@ -25,10 +25,16 @@
 ### Changed
 
 - 前端代码骨架按业务域模块化拆分：JS 拆分为 `js/api/`（12 个接口域文件）与 `js/store/`（16 个状态域模块，共享 ctx 模式），CSS 拆分为 `css/components/` 下 27 个按域样式文件，保持原生 ES Module 无构建链直载
+- 服务启停全链路优雅化：关停时依次停止推送循环、排空 HTTP 连接、向 WebSocket 客户端发送 Close 帧、关闭 SSH 连接池与数据库；`make stop` 等待进程真正退出（10s 超时后 kill -9 兜底），`make run` / `make start` / `make restart` 复用同一优雅停止逻辑，杜绝端口占用导致的启动失败
 - 前端第三方库（Vue、xterm.js）本地 vendor 化，移除外网 CDN 依赖，内网环境零外联可用
 - 服务启停统一由 Makefile 管理，移除 start.sh / stop.sh
 - 管理模式重构为「以节点为中心」
 - 版本号与 Git 提交哈希构建时通过 `-ldflags` 注入，支持 `--version` 查看
+- 中间件链调整为 Logging 外层 / Recovery 内层，panic 请求也留访问日志；`/api/` 请求体统一 2MB 上限
+- 远程命令执行按退出码判断成功与否，修复空输出命令误触发 sudo 回退
+- 配置文件存在但解析失败时启动即报错（文件缺失仍静默使用默认值）
+- 服务器列表查询错误不再静默吞掉：API 返回 500，采集循环记录日志
+- 全链路 context.Context 改造：API → host/software → SSH 远程命令与 SQLite 存储均可超时与取消。同步请求跟随客户端断开立即中止远程命令；普通 SSH 命令默认 30s、安装/卸载等长操作 30min、SQLite 查询 10s 兜底超时（已有 deadline 不覆盖）；异步安装/卸载任务改用独立 ctx，不随请求结束被取消；后台推送循环派生独立 ctx，关停时可中断进行中的采集
 
 ### Fixed
 
@@ -40,5 +46,17 @@
 - 修复 Docker 镜像源删除与「设为默认」操作无效（误调接口函数）
 - 修复进程终止按钮无响应
 - 修复语言环境页切换软件源事件失效
+- 修复 WebSocket Hub 广播路径在读锁下修改连接表的数据竞争
+- 修复编辑自定义软件包 / 语言环境成功后提示语误报「已添加」
+- 修复移动端表单 / 信息栅格响应式规则被后加载的同名规则覆盖
+- 修复 Docker 镜像列表加载中可被重复触发加载
+
+### Security
+
+- WebSocket 升级校验 Origin 同源，防跨站 WebSocket 劫持
+- 自定义软件包 ID 增加字符集白名单校验，阻断拼接远程 shell 命令的注入路径
+- 系统设置 API 隔离 `auth_` 前缀保留键，防止覆盖认证配置
+- 网站图标上传仅接受 PNG/JPEG/GIF/ICO，拒绝 SVG 与未知格式，防存储型 XSS
+- 远程日志查询等命令参数统一引号包裹；会话 token 随机源故障时拒绝签发
 
 [Unreleased]: https://github.com/smash-hq/server-management/compare/v0.1.0...HEAD

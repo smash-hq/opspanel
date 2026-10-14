@@ -3,6 +3,9 @@
 package config
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -74,7 +77,12 @@ func Load(cfgFile string) (*Config, error) {
 		v.AddConfigPath(".")
 		v.AddConfigPath("/etc/smp/")
 	}
-	_ = v.ReadInConfig() // 缺失则忽略
+	if err := v.ReadInConfig(); err != nil {
+		// 配置文件缺失是正常情况；存在但解析失败则直接报错，避免静默回退到默认值
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok && !errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("read config file: %w", err)
+		}
+	}
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {

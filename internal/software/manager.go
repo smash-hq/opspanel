@@ -2,6 +2,7 @@
 package software
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -52,7 +53,7 @@ type SoftwareStatus struct {
 }
 
 // DetectPkgManager 检测远程服务器使用的包管理器。
-func (m *Manager) DetectPkgManager(srv *storage.Server) (string, error) {
+func (m *Manager) DetectPkgManager(ctx context.Context, srv *storage.Server) (string, error) {
 	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return "", err
@@ -60,7 +61,7 @@ func (m *Manager) DetectPkgManager(srv *storage.Server) (string, error) {
 	defer m.remote.Release(srv.ID)
 
 	for _, pm := range []string{"apt", "dnf", "yum"} {
-		out := m.remote.RunOne(client, "which "+pm)
+		out := m.remote.RunOne(ctx, client, "which "+pm)
 		if strings.TrimSpace(out) != "" {
 			return pm, nil
 		}
@@ -69,7 +70,7 @@ func (m *Manager) DetectPkgManager(srv *storage.Server) (string, error) {
 }
 
 // CheckStatus 检查单个软件包的安装状态。
-func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus {
+func (m *Manager) CheckStatus(ctx context.Context, srv *storage.Server, pkg *Package) *SoftwareStatus {
 	status := &SoftwareStatus{
 		Package: pkg,
 		Status:  "unknown",
@@ -81,10 +82,10 @@ func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus
 	}
 	defer m.remote.Release(srv.ID)
 
-	out := m.remote.RunOne(client, pkg.StatusCmd)
+	out := m.remote.RunOne(ctx, client, pkg.StatusCmd)
 	if strings.TrimSpace(out) == "" {
 		status.Installed = false
-		pm, err := m.DetectPkgManager(srv)
+		pm, err := m.DetectPkgManager(ctx, srv)
 		if err == nil {
 			_, status.Installable = pkg.InstallCmd[pm]
 		}
@@ -94,12 +95,12 @@ func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus
 	status.Installed = true
 
 	if pkg.VersionCmd != "" {
-		verOut := m.remote.RunOne(client, pkg.VersionCmd)
+		verOut := m.remote.RunOne(ctx, client, pkg.VersionCmd)
 		status.Version = strings.TrimSpace(verOut)
 	}
 
 	if pkg.StartCmd != "" {
-		activeOut := m.remote.RunOne(client, "systemctl is-active "+pkg.ID+" 2>/dev/null || true")
+		activeOut := m.remote.RunOne(ctx, client, "systemctl is-active "+pkg.ID+" 2>/dev/null || true")
 		activeOut = strings.TrimSpace(activeOut)
 		switch activeOut {
 		case "active":
@@ -117,8 +118,12 @@ func (m *Manager) CheckStatus(srv *storage.Server, pkg *Package) *SoftwareStatus
 }
 
 // Install 安装软件包。version 为空则不替换版本占位符。
-func (m *Manager) Install(srv *storage.Server, pkg *Package, version string) error {
-	pm, err := m.DetectPkgManager(srv)
+func (m *Manager) Install(ctx context.Context, srv *storage.Server, pkg *Package, version string) error {
+	// 安装是长操作，套 30 分钟超时（调用方已有更紧的 deadline 时以调用方为准）
+	ctx, cancel := context.WithTimeout(ctx, remote.LongOpTimeout)
+	defer cancel()
+
+	pm, err := m.DetectPkgManager(ctx, srv)
 	if err != nil {
 		return err
 	}
@@ -138,7 +143,7 @@ func (m *Manager) Install(srv *storage.Server, pkg *Package, version string) err
 		if version != "" {
 			cmd = strings.ReplaceAll(cmd, "{{VERSION}}", version)
 		}
-		out := m.remote.RunWithSudo(client, cmd)
+		out := m.remote.RunWithSudo(ctx, client, cmd)
 		m.log.Infow("install cmd", "pkg", pkg.ID, "cmd", cmd, "version", version, "out", out)
 	}
 
@@ -146,8 +151,12 @@ func (m *Manager) Install(srv *storage.Server, pkg *Package, version string) err
 }
 
 // Uninstall 卸载软件包。
-func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
-	pm, err := m.DetectPkgManager(srv)
+func (m *Manager) Uninstall(ctx context.Context, srv *storage.Server, pkg *Package) error {
+	// 卸载是长操作，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, remote.LongOpTimeout)
+	defer cancel()
+
+	pm, err := m.DetectPkgManager(ctx, srv)
 	if err != nil {
 		return err
 	}
@@ -164,7 +173,7 @@ func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
 	defer m.remote.Release(srv.ID)
 
 	for _, cmd := range cmds {
-		out := m.remote.RunWithSudo(client, cmd)
+		out := m.remote.RunWithSudo(ctx, client, cmd)
 		m.log.Infow("uninstall cmd", "pkg", pkg.ID, "cmd", cmd, "out", out)
 	}
 
@@ -172,7 +181,7 @@ func (m *Manager) Uninstall(srv *storage.Server, pkg *Package) error {
 }
 
 // ServiceControl 控制服务启停。
-func (m *Manager) ServiceControl(srv *storage.Server, pkg *Package, action string) error {
+func (m *Manager) ServiceControl(ctx context.Context, srv *storage.Server, pkg *Package, action string) error {
 	client, err := m.remote.Acquire(toRemoteServer(srv))
 	if err != nil {
 		return err
@@ -195,12 +204,12 @@ func (m *Manager) ServiceControl(srv *storage.Server, pkg *Package, action strin
 		return fmt.Errorf("service action %s not supported for %s", action, pkg.ID)
 	}
 
-	out := m.remote.RunWithSudo(client, cmd)
+	out := m.remote.RunWithSudo(ctx, client, cmd)
 	m.log.Infow("service control", "pkg", pkg.ID, "action", action, "out", out)
 	return nil
 }
 
 // GetLog 获取软件运行日志。
-func (m *Manager) GetLog(srv *storage.Server, service string, lines int) (string, error) {
-	return m.remote.GetLog(toRemoteServer(srv), service, lines)
+func (m *Manager) GetLog(ctx context.Context, srv *storage.Server, service string, lines int) (string, error) {
+	return m.remote.GetLog(ctx, toRemoteServer(srv), service, lines)
 }

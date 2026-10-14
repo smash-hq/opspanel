@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/smash-hq/server-management/internal/logger"
@@ -28,21 +29,21 @@ func NewCollector(log *logger.Logger, store *Store) *Collector {
 
 // Snapshot 采集指定服务器的系统快照。
 // serverID 为空或 srv_local 时采集本机。
-func (c *Collector) Snapshot(serverID string) (*system.Info, error) {
+func (c *Collector) Snapshot(ctx context.Context, serverID string) (*system.Info, error) {
 	if serverID == "" || serverID == LocalServerID {
-		return c.local.Snapshot()
+		return c.local.Snapshot(ctx)
 	}
 
-	srv, ok := c.store.Get(serverID)
+	srv, ok := c.store.Get(ctx, serverID)
 	if !ok {
 		return nil, fmt.Errorf("server not found: %s", serverID)
 	}
 
 	switch srv.Type {
 	case "remote":
-		return c.remote.Snapshot(toRemoteServer(srv))
+		return c.remote.Snapshot(ctx, toRemoteServer(srv))
 	default:
-		return c.local.Snapshot()
+		return c.local.Snapshot(ctx)
 	}
 }
 

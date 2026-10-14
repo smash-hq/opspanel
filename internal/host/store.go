@@ -2,6 +2,7 @@
 package host
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -43,10 +44,10 @@ func NewStore(dataDir string) (*Store, error) {
 
 	inner := storage.NewServerStore(db)
 
-	// 兜底：如果服务器表仍为空，写入本机条目
-	if inner.Count() == 0 {
+	// 兜底：如果服务器表仍为空，写入本机条目（启动期引导，使用 Background）
+	if inner.Count(context.Background()) == 0 {
 		srv := buildLocalServer()
-		_ = inner.Add(srv)
+		_ = inner.Add(context.Background(), srv)
 	}
 
 	return &Store{inner: inner, db: db}, nil
@@ -61,33 +62,33 @@ func (s *Store) Close() error {
 }
 
 // List 返回所有服务器配置（按创建时间排序）。
-func (s *Store) List() []*Server {
-	return s.inner.List()
+func (s *Store) List(ctx context.Context) ([]*Server, error) {
+	return s.inner.List(ctx)
 }
 
 // Get 按 ID 查找服务器。
-func (s *Store) Get(id string) (*Server, bool) {
-	return s.inner.Get(id)
+func (s *Store) Get(ctx context.Context, id string) (*Server, bool) {
+	return s.inner.Get(ctx, id)
 }
 
 // Add 新增服务器配置。
-func (s *Store) Add(srv *Server) error {
-	return s.inner.Add(srv)
+func (s *Store) Add(ctx context.Context, srv *Server) error {
+	return s.inner.Add(ctx, srv)
 }
 
 // Update 修改已有配置。
-func (s *Store) Update(srv *Server) error {
-	return s.inner.Update(srv)
+func (s *Store) Update(ctx context.Context, srv *Server) error {
+	return s.inner.Update(ctx, srv)
 }
 
 // Delete 移除配置。
-func (s *Store) Delete(id string) error {
-	return s.inner.Delete(id)
+func (s *Store) Delete(ctx context.Context, id string) error {
+	return s.inner.Delete(ctx, id)
 }
 
 // Count 返回服务器数量。
-func (s *Store) Count() int {
-	return s.inner.Count()
+func (s *Store) Count(ctx context.Context) int {
+	return s.inner.Count(ctx)
 }
 
 // DB 返回底层存储的数据库实例（供软件存储等共享使用）。

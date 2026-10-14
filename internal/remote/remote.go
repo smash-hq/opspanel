@@ -3,6 +3,7 @@
 package remote
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,24 @@ type Server struct {
 	Password  string
 	KeyPath   string
 	CreatedAt int64
+}
+
+const (
+	// DefaultCmdTimeout 单条命令的默认超时：调用方 ctx 未携带 deadline 时自动附加，
+	// 避免单条命令在异常远端上无限挂起。
+	DefaultCmdTimeout = 30 * time.Second
+
+	// LongOpTimeout 安装/卸载语言环境、拉取镜像、容器操作、文件下载等长操作的默认超时。
+	LongOpTimeout = 30 * time.Minute
+)
+
+// withDefaultTimeout 在 ctx 尚无 deadline 时附加 d 超时，否则原样返回。
+// 长操作入口先套 LongOpTimeout 后，内部命令自然沿用长 deadline，不会被 30s 默认值覆盖。
+func withDefaultTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, d)
 }
 
 // RemoteCollector 通过 SSH 在远程 Linux 服务器上采集系统信息。
@@ -93,16 +112,44 @@ func newSSHConn(srv *Server) (*sshConn, error) {
 	return &sshConn{client: client, stopKeepalive: make(chan struct{})}, nil
 }
 
+// runCombined 在独立 goroutine 中执行命令并等待其完成或 ctx 取消。
+// ctx 取消/超时时立即关闭 Session 终止远程命令；CombinedOutput 在 Session 关闭后返回，
+// 缓冲通道保证子协程不会泄漏。
+func (c *sshConn) runCombined(ctx context.Context, session *ssh.Session, cmd string) ([]byte, error) {
+	type result struct {
+		out []byte
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := session.CombinedOutput(cmd)
+		done <- result{out, err}
+	}()
+
+	select {
+	case r := <-done:
+		return r.out, r.err
+	case <-ctx.Done():
+		session.Close()
+		return nil, ctx.Err()
+	}
+}
+
 // RunOnce 执行单条命令（每次新建 Session）。
-func (c *sshConn) RunOnce(cmd string) (string, error) {
+// ctx 超时或取消会关闭 Session 终止远程命令。
+func (c *sshConn) RunOnce(ctx context.Context, cmd string) (string, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("new session: %w", err)
 	}
 	defer session.Close()
 
-	out, err := session.CombinedOutput(cmd)
+	out, err := c.runCombined(ctx, session, cmd)
 	if err != nil {
+		if ctx.Err() != nil {
+			// ctx 取消/超时是主动关闭 Session，连接本身仍可用，不标记断开
+			return string(out), ctx.Err()
+		}
 		// 命令非零退出（ExitError）是正常业务结果（如 grep 无匹配、sudo -n 免密失败），
 		// 只有连接级错误（EOF/网络断开等）才标记断开，由连接池重建
 		var exitErr *ssh.ExitError
@@ -115,15 +162,18 @@ func (c *sshConn) RunOnce(cmd string) (string, error) {
 }
 
 // RunRaw 执行单条命令并返回原始字节输出（不 TrimSpace，用于二进制传输如文件下载）。
-func (c *sshConn) RunRaw(cmd string) ([]byte, error) {
+func (c *sshConn) RunRaw(ctx context.Context, cmd string) ([]byte, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("new session: %w", err)
 	}
 	defer session.Close()
 
-	out, err := session.CombinedOutput(cmd)
+	out, err := c.runCombined(ctx, session, cmd)
 	if err != nil {
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
 		var exitErr *ssh.ExitError
 		if !errors.As(err, &exitErr) {
 			c.broken.Store(true)
@@ -146,8 +196,8 @@ const LocalServerID = "srv_local"
 
 // commandRunner 抽象命令执行通道：远程节点为池化 SSH 连接，本机节点为进程内执行器。
 type commandRunner interface {
-	RunOnce(cmd string) (string, error)
-	RunRaw(cmd string) ([]byte, error)
+	RunOnce(ctx context.Context, cmd string) (string, error)
+	RunRaw(ctx context.Context, cmd string) ([]byte, error)
 	usable() bool
 	Close() error
 }
@@ -185,14 +235,16 @@ func (rc *RemoteCollector) CloseConn(serverID string) {
 	rc.pool.CloseConn(serverID)
 }
 
-// RunOne 在目标服务器上执行单条命令并返回输出。
-// 命令执行日志为 Debug 级：周期性采集（pushLoop）会高频调用，Info 级会刷屏。
-// 排查问题时将日志级别调至 debug 即可看到每条命令及输出。
-func (rc *RemoteCollector) RunOne(client commandRunner, cmd string) string {
-	out, err := client.RunOnce(cmd)
+// runLogged 执行命令并记录调试日志，返回输出与错误（错误时输出置空）。
+// ctx 无 deadline 时附加 30s 默认超时。
+func (rc *RemoteCollector) runLogged(ctx context.Context, client commandRunner, cmd string) (string, error) {
+	ctx, cancel := withDefaultTimeout(ctx, DefaultCmdTimeout)
+	defer cancel()
+
+	out, err := client.RunOnce(ctx, cmd)
 	if err != nil {
 		rc.log.Debugw("remote cmd error", "cmd", cmd, "error", err.Error())
-		return ""
+		return "", err
 	}
 	// 截断过长的输出用于日志
 	logOut := out
@@ -200,25 +252,34 @@ func (rc *RemoteCollector) RunOne(client commandRunner, cmd string) string {
 		logOut = logOut[:200] + "..."
 	}
 	rc.log.Debugw("remote cmd", "cmd", cmd, "output", logOut)
+	return out, nil
+}
+
+// RunOne 在目标服务器上执行单条命令并返回输出。
+// 命令执行日志为 Debug 级：周期性采集（pushLoop）会高频调用，Info 级会刷屏。
+// 排查问题时将日志级别调至 debug 即可看到每条命令及输出。
+func (rc *RemoteCollector) RunOne(ctx context.Context, client commandRunner, cmd string) string {
+	out, _ := rc.runLogged(ctx, client, cmd)
 	return out
 }
 
-// RunWithSudo 先尝试直接执行命令，失败则使用 sudo -n 回退。
-func (rc *RemoteCollector) RunWithSudo(client commandRunner, cmd string) string {
+// RunWithSudo 先尝试直接执行命令，按退出码判断失败，失败则使用 sudo -n 回退。
+// 不能以输出为空判定失败：部分命令成功时输出为空。
+func (rc *RemoteCollector) RunWithSudo(ctx context.Context, client commandRunner, cmd string) string {
 	// 先尝试直接执行
-	out := rc.RunOne(client, cmd)
-	if out != "" {
+	out, err := rc.runLogged(ctx, client, cmd)
+	if err == nil {
 		return out
 	}
 	// 失败则尝试 sudo -n（免密 sudo）
 	sudoCmd := "sudo -n " + cmd
 	rc.log.Debugw("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
-	out = rc.RunOne(client, sudoCmd)
-	return out
+	sudoOut, _ := rc.runLogged(ctx, client, sudoCmd)
+	return sudoOut
 }
 
 // Snapshot 采集远程服务器的完整系统快照。
-func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
+func (rc *RemoteCollector) Snapshot(ctx context.Context, srv *Server) (*system.Info, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -230,36 +291,36 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	}
 
 	// 主机信息
-	info.Host.Hostname = rc.RunOne(conn, "hostname")
-	info.Host.OS = rc.RunOne(conn, "uname -s")
-	info.Host.Kernel = rc.RunOne(conn, "uname -r")
-	info.Host.Arch = rc.RunOne(conn, "uname -m")
-	info.Host.Platform = rc.RunOne(conn, "uname -v")
+	info.Host.Hostname = rc.RunOne(ctx, conn, "hostname")
+	info.Host.OS = rc.RunOne(ctx, conn, "uname -s")
+	info.Host.Kernel = rc.RunOne(ctx, conn, "uname -r")
+	info.Host.Arch = rc.RunOne(ctx, conn, "uname -m")
+	info.Host.Platform = rc.RunOne(ctx, conn, "uname -v")
 	// 系统语言环境：优先 LANG，回退 LC_ALL
-	if lang := rc.RunOne(conn, "echo $LANG"); lang != "" {
+	if lang := rc.RunOne(ctx, conn, "echo $LANG"); lang != "" {
 		info.Host.Locale = lang
-	} else if lc := rc.RunOne(conn, "echo $LC_ALL"); lc != "" {
+	} else if lc := rc.RunOne(ctx, conn, "echo $LC_ALL"); lc != "" {
 		info.Host.Locale = lc
 	}
 
 	// CPU 信息
-	info.CPU.Model = rc.RunOne(conn, "grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2")
+	info.CPU.Model = rc.RunOne(ctx, conn, "grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2")
 	info.CPU.Model = strings.TrimSpace(info.CPU.Model)
 	// 物理核心数
-	if cores := rc.RunOne(conn, "grep -c ^processor /proc/cpuinfo 2>/dev/null"); cores != "" {
+	if cores := rc.RunOne(ctx, conn, "grep -c ^processor /proc/cpuinfo 2>/dev/null"); cores != "" {
 		fmt.Sscanf(cores, "%d", &info.CPU.Threads)
 	}
 	// 物理核心（cores）
-	if physCores := rc.RunOne(conn, "grep 'cpu cores' /proc/cpuinfo 2>/dev/null | head -1 | awk '{print $4}'"); physCores != "" {
+	if physCores := rc.RunOne(ctx, conn, "grep 'cpu cores' /proc/cpuinfo 2>/dev/null | head -1 | awk '{print $4}'"); physCores != "" {
 		fmt.Sscanf(physCores, "%d", &info.CPU.Cores)
 	}
 	// CPU 使用率
-	if pct := rc.RunOne(conn, "top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}'"); pct != "" {
+	if pct := rc.RunOne(ctx, conn, "top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}'"); pct != "" {
 		fmt.Sscanf(pct, "%f", &info.CPU.Percent)
 	}
 
 	// 内存信息（使用 free 命令，无需 root）
-	if mem := rc.RunOne(conn, "free -b 2>/dev/null | awk '/Mem:/{print $2, $3, $7}'"); mem != "" {
+	if mem := rc.RunOne(ctx, conn, "free -b 2>/dev/null | awk '/Mem:/{print $2, $3, $7}'"); mem != "" {
 		var total, used, available uint64
 		fmt.Sscanf(mem, "%d %d %d", &total, &used, &available)
 		info.Memory.Total = total
@@ -271,12 +332,12 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	}
 
 	// 进程数（无需 root）
-	if procs := rc.RunWithSudo(conn, "ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
+	if procs := rc.RunWithSudo(ctx, conn, "ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
 		fmt.Sscanf(strings.TrimSpace(procs), "%d", &info.Processes)
 	}
 
 	// 磁盘信息（runWithSudo 自动回退到 sudo -n）
-	if disks := rc.RunWithSudo(conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
+	if disks := rc.RunWithSudo(ctx, conn, "df -B1 --output=source,size,used,target -x tmpfs -x devtmpfs -x overlay 2>/dev/null | tail -n +2"); disks != "" {
 		for _, line := range strings.Split(disks, "\n") {
 			fields := strings.Fields(line)
 			if len(fields) >= 4 {
@@ -299,21 +360,21 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 	}
 
 	// 运行时间（无需 root）
-	if uptime := rc.RunOne(conn, "cat /proc/uptime 2>/dev/null | awk '{print $1}'"); uptime != "" {
+	if uptime := rc.RunOne(ctx, conn, "cat /proc/uptime 2>/dev/null | awk '{print $1}'"); uptime != "" {
 		var secs float64
 		fmt.Sscanf(uptime, "%f", &secs)
 		info.Uptime = uint64(secs)
 	}
 
 	// 系统负载（无需 root）
-	if load := rc.RunOne(conn, "cat /proc/loadavg 2>/dev/null | awk '{print $1, $2, $3}'"); load != "" {
+	if load := rc.RunOne(ctx, conn, "cat /proc/loadavg 2>/dev/null | awk '{print $1, $2, $3}'"); load != "" {
 		fmt.Sscanf(load, "%f %f %f", &info.Load.Load1, &info.Load.Load5, &info.Load.Load15)
 	}
 
 	// 检测是否使用了 sudo（权限不足标记）
 	// 如果进程数异常低，可能是权限不足
 	if info.Processes > 0 && info.Processes < 10 {
-		if procs := rc.RunOne(conn, "sudo -n ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
+		if procs := rc.RunOne(ctx, conn, "sudo -n ps -e --no-headers 2>/dev/null | wc -l"); procs != "" {
 			var sudoProcs int
 			fmt.Sscanf(strings.TrimSpace(procs), "%d", &sudoProcs)
 			if sudoProcs > info.Processes {
@@ -328,7 +389,7 @@ func (rc *RemoteCollector) Snapshot(srv *Server) (*system.Info, error) {
 
 // GetLog 获取软件运行日志（systemd 服务或 Docker 容器）。
 // lines 指定返回最后多少行，默认 100。
-func (rc *RemoteCollector) GetLog(srv *Server, service string, lines int) (string, error) {
+func (rc *RemoteCollector) GetLog(ctx context.Context, srv *Server, service string, lines int) (string, error) {
 	if lines <= 0 {
 		lines = 100
 	}
@@ -338,23 +399,23 @@ func (rc *RemoteCollector) GetLog(srv *Server, service string, lines int) (strin
 	}
 	defer rc.Release(srv.ID)
 
-	// 优先尝试 journalctl（systemd 服务）
-	cmd := fmt.Sprintf("journalctl -u %s --no-pager -n %d 2>/dev/null", service, lines)
-	out := rc.RunOne(conn, cmd)
+	// 优先尝试 journalctl（systemd 服务）；service 名来自用户输入，须引号包裹防命令注入
+	cmd := fmt.Sprintf("journalctl -u %q --no-pager -n %d 2>/dev/null", service, lines)
+	out := rc.RunOne(ctx, conn, cmd)
 	if out != "" {
 		return out, nil
 	}
 
 	// 回退：尝试 docker logs
-	cmd = fmt.Sprintf("docker logs --tail %d %s 2>/dev/null", lines, service)
-	out = rc.RunOne(conn, cmd)
+	cmd = fmt.Sprintf("docker logs --tail %d %q 2>/dev/null", lines, service)
+	out = rc.RunOne(ctx, conn, cmd)
 	if out != "" {
 		return out, nil
 	}
 
-	// 回退：尝试从 /var/log 读取
-	cmd = fmt.Sprintf("tail -n %d /var/log/%s*.log 2>/dev/null || tail -n %d /var/log/%s/%s.log 2>/dev/null", lines, service, lines, service, service)
-	out = rc.RunOne(conn, cmd)
+	// 回退：尝试从 /var/log 读取（%q 拼接后引号外的 * 仍可 glob）
+	cmd = fmt.Sprintf("tail -n %[1]d /var/log/%[2]q*.log 2>/dev/null || tail -n %[1]d /var/log/%[2]q/%[2]q.log 2>/dev/null", lines, service)
+	out = rc.RunOne(ctx, conn, cmd)
 	if out != "" {
 		return out, nil
 	}
@@ -372,7 +433,7 @@ type ProcessInfo struct {
 }
 
 // ListProcesses 获取远程服务器进程列表（类似 top/ps）。
-func (rc *RemoteCollector) ListProcesses(srv *Server, limit int) ([]ProcessInfo, error) {
+func (rc *RemoteCollector) ListProcesses(ctx context.Context, srv *Server, limit int) ([]ProcessInfo, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -384,7 +445,7 @@ func (rc *RemoteCollector) ListProcesses(srv *Server, limit int) ([]ProcessInfo,
 
 	// 使用 ps 命令获取进程列表，按 CPU 使用率排序
 	cmd := fmt.Sprintf("ps aux --sort=-%%cpu 2>/dev/null | head -n %d", limit+1)
-	out := rc.RunOne(conn, cmd)
+	out := rc.RunOne(ctx, conn, cmd)
 	if out == "" {
 		return nil, fmt.Errorf("failed to list processes")
 	}
@@ -419,17 +480,21 @@ func (rc *RemoteCollector) ListProcesses(srv *Server, limit int) ([]ProcessInfo,
 }
 
 // DetectLanguage 检测指定编程语言的版本。返回空字符串表示未安装。
-func (rc *RemoteCollector) DetectLanguage(srv *Server, versionCmd string) string {
+func (rc *RemoteCollector) DetectLanguage(ctx context.Context, srv *Server, versionCmd string) string {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return ""
 	}
 	defer rc.Release(srv.ID)
-	return rc.RunOne(conn, versionCmd)
+	return rc.RunOne(ctx, conn, versionCmd)
 }
 
 // InstallLanguage 执行语言环境安装命令。version 为空则不替换版本占位符。
-func (rc *RemoteCollector) InstallLanguage(srv *Server, installCmd, version string) error {
+func (rc *RemoteCollector) InstallLanguage(ctx context.Context, srv *Server, installCmd, version string) error {
+	// 安装是长操作，套 30 分钟超时（调用方已有更紧的 deadline 时以调用方为准）
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -443,7 +508,7 @@ func (rc *RemoteCollector) InstallLanguage(srv *Server, installCmd, version stri
 	}
 
 	// 执行安装命令
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	rc.log.Infow("install language", "cmd", cmd, "version", version, "output", out)
 	return nil
 }
@@ -470,7 +535,7 @@ type ListFilesResult struct {
 
 // ListFiles 列出指定目录的内容（类似 ls -la）。
 // 先尝试 sudo ls，失败则回退到普通 ls，并标记 sudo 是否可用。
-func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult, error) {
+func (rc *RemoteCollector) ListFiles(ctx context.Context, srv *Server, path string) (*ListFilesResult, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -485,12 +550,12 @@ func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult
 	// TZ=UTC + 自定义 time-style：时间输出为单字段 RFC3339，保证列数固定、时区无歧义
 	lsCmd := "env TZ=UTC ls -la --time-style=+%Y-%m-%dT%H:%M:%SZ"
 	cmd := fmt.Sprintf("%s %q 2>/dev/null", lsCmd, path)
-	out := rc.RunOne(conn, "sudo -n "+cmd)
+	out := rc.RunOne(ctx, conn, "sudo -n "+cmd)
 	if out != "" {
 		sudoUsed = true
 	} else {
 		// sudo 失败，回退到普通 ls
-		out = rc.RunOne(conn, cmd)
+		out = rc.RunOne(ctx, conn, cmd)
 	}
 	if out == "" {
 		return nil, fmt.Errorf("cannot list directory: %s", path)
@@ -562,7 +627,7 @@ func (rc *RemoteCollector) ListFiles(srv *Server, path string) (*ListFilesResult
 }
 
 // GetFileInfo 获取单个文件的详细信息。
-func (rc *RemoteCollector) GetFileInfo(srv *Server, path string) (*FileInfo, error) {
+func (rc *RemoteCollector) GetFileInfo(ctx context.Context, srv *Server, path string) (*FileInfo, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -570,7 +635,7 @@ func (rc *RemoteCollector) GetFileInfo(srv *Server, path string) (*FileInfo, err
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("stat -c '%%n|%%F|%%s|%%a|%%Y|%%U|%%G' %q 2>/dev/null", path)
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	if out == "" {
 		return nil, fmt.Errorf("file not found: %s", path)
 	}
@@ -604,7 +669,7 @@ func (rc *RemoteCollector) GetFileInfo(srv *Server, path string) (*FileInfo, err
 }
 
 // ReadFileContent 读取文件内容（用于预览）。
-func (rc *RemoteCollector) ReadFileContent(srv *Server, path string, lines int) (string, error) {
+func (rc *RemoteCollector) ReadFileContent(ctx context.Context, srv *Server, path string, lines int) (string, error) {
 	if lines <= 0 {
 		lines = 100
 	}
@@ -616,7 +681,7 @@ func (rc *RemoteCollector) ReadFileContent(srv *Server, path string, lines int) 
 
 	// 先检查文件大小，避免读取过大的文件
 	cmd := fmt.Sprintf("stat -c %%s %q 2>/dev/null", path)
-	out := rc.RunOne(conn, cmd)
+	out := rc.RunOne(ctx, conn, cmd)
 	var size int64
 	fmt.Sscanf(out, "%d", &size)
 	if size > 1<<20 { // > 1MB
@@ -624,11 +689,15 @@ func (rc *RemoteCollector) ReadFileContent(srv *Server, path string, lines int) 
 	}
 
 	cmd = fmt.Sprintf("cat %q 2>/dev/null | head -n %d", path, lines)
-	return rc.RunWithSudo(conn, cmd), nil
+	return rc.RunWithSudo(ctx, conn, cmd), nil
 }
 
 // DownloadFile 读取文件内容用于下载；目录会打包为 tar.gz 返回。
-func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, string, error) {
+func (rc *RemoteCollector) DownloadFile(ctx context.Context, srv *Server, path string) ([]byte, string, error) {
+	// 下载可能传输大文件/目录打包，属于长操作，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, "", err
@@ -655,10 +724,10 @@ func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, strin
 	// 目录打包为 tar.gz，普通文件直接 cat
 	cmd := fmt.Sprintf("if [ -d %q ]; then tar -czf - -C %q %q 2>/dev/null; else cat %q 2>/dev/null; fi", clean, parent, name, clean)
 
-	data, err := conn.RunRaw(cmd)
+	data, err := conn.RunRaw(ctx, cmd)
 	if len(data) == 0 {
 		// 权限不足时 sudo 回退
-		data, _ = conn.RunRaw("sudo -n " + cmd)
+		data, _ = conn.RunRaw(ctx, "sudo -n "+cmd)
 	}
 	if len(data) == 0 {
 		return nil, "", fmt.Errorf("cannot download: %s", path)
@@ -674,7 +743,7 @@ func (rc *RemoteCollector) DownloadFile(srv *Server, path string) ([]byte, strin
 }
 
 // KillProcess 终止指定 PID 的进程。
-func (rc *RemoteCollector) KillProcess(srv *Server, pid int, force bool) error {
+func (rc *RemoteCollector) KillProcess(ctx context.Context, srv *Server, pid int, force bool) error {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -686,7 +755,7 @@ func (rc *RemoteCollector) KillProcess(srv *Server, pid int, force bool) error {
 		signal = "KILL"
 	}
 	cmd := fmt.Sprintf("kill -%s %d 2>&1", signal, pid)
-	out := rc.RunOne(conn, cmd)
+	out := rc.RunOne(ctx, conn, cmd)
 	if out != "" && strings.Contains(out, "Operation not permitted") {
 		return fmt.Errorf("permission denied: try using sudo or running as root")
 	}
@@ -694,7 +763,7 @@ func (rc *RemoteCollector) KillProcess(srv *Server, pid int, force bool) error {
 }
 
 // GetProcessLog 获取指定进程的日志（通过 journalctl 或 /proc/{pid}/fd）。
-func (rc *RemoteCollector) GetProcessLog(srv *Server, pid int, lines int) (string, error) {
+func (rc *RemoteCollector) GetProcessLog(ctx context.Context, srv *Server, pid int, lines int) (string, error) {
 	if lines <= 0 {
 		lines = 50
 	}
@@ -706,14 +775,14 @@ func (rc *RemoteCollector) GetProcessLog(srv *Server, pid int, lines int) (strin
 
 	// 尝试通过 journalctl 获取进程日志
 	cmd := fmt.Sprintf("journalctl _PID=%d --no-pager -n %d 2>/dev/null", pid, lines)
-	out := rc.RunOne(conn, cmd)
+	out := rc.RunOne(ctx, conn, cmd)
 	if out != "" {
 		return out, nil
 	}
 
 	// 回退：尝试读取 /proc/{pid}/fd/1 和 fd/2（stdout/stderr）
 	cmd = fmt.Sprintf("sudo -n tail -n %d /proc/%d/fd/1 2>/dev/null; sudo -n tail -n %d /proc/%d/fd/2 2>/dev/null", lines, pid, lines, pid)
-	out = rc.RunOne(conn, cmd)
+	out = rc.RunOne(ctx, conn, cmd)
 	if out != "" {
 		return out, nil
 	}
@@ -723,7 +792,7 @@ func (rc *RemoteCollector) GetProcessLog(srv *Server, pid int, lines int) (strin
 
 // TestConnection 测试 SSH 连接并返回远程主机基本信息。
 // 被测服务器可能尚未保存到数据库，因此使用临时连接（不入池），测试完即优雅关闭。
-func (rc *RemoteCollector) TestConnection(srv *Server) (*system.HostInfo, error) {
+func (rc *RemoteCollector) TestConnection(ctx context.Context, srv *Server) (*system.HostInfo, error) {
 	conn, err := newSSHConn(srv)
 	if err != nil {
 		return nil, err
@@ -731,10 +800,10 @@ func (rc *RemoteCollector) TestConnection(srv *Server) (*system.HostInfo, error)
 	defer conn.Close()
 
 	info := &system.HostInfo{}
-	info.Hostname = rc.RunOne(conn, "hostname")
-	info.OS = rc.RunOne(conn, "uname -s")
-	info.Kernel = rc.RunOne(conn, "uname -r")
-	info.Arch = rc.RunOne(conn, "uname -m")
+	info.Hostname = rc.RunOne(ctx, conn, "hostname")
+	info.OS = rc.RunOne(ctx, conn, "uname -s")
+	info.Kernel = rc.RunOne(ctx, conn, "uname -r")
+	info.Arch = rc.RunOne(ctx, conn, "uname -m")
 	return info, nil
 }
 
@@ -763,7 +832,7 @@ type DockerContainer struct {
 }
 
 // CheckDocker 检测服务器是否安装了 Docker。
-func (rc *RemoteCollector) CheckDocker(srv *Server) (bool, string) {
+func (rc *RemoteCollector) CheckDocker(ctx context.Context, srv *Server) (bool, string) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return false, ""
@@ -772,7 +841,7 @@ func (rc *RemoteCollector) CheckDocker(srv *Server) (bool, string) {
 
 	// bash -lc 加载登录 shell 的 PATH（兼容 snap 安装在 /snap/bin 等非标准路径），
 	// 失败再由 RunWithSudo 回退 sudo -n 尝试
-	out := rc.RunWithSudo(conn, "bash -lc 'docker --version' 2>/dev/null")
+	out := rc.RunWithSudo(ctx, conn, "bash -lc 'docker --version' 2>/dev/null")
 	if out == "" {
 		return false, ""
 	}
@@ -780,7 +849,7 @@ func (rc *RemoteCollector) CheckDocker(srv *Server) (bool, string) {
 }
 
 // ListImages 列出 Docker 镜像。
-func (rc *RemoteCollector) ListImages(srv *Server) ([]DockerImage, error) {
+func (rc *RemoteCollector) ListImages(ctx context.Context, srv *Server) ([]DockerImage, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -790,7 +859,7 @@ func (rc *RemoteCollector) ListImages(srv *Server) ([]DockerImage, error) {
 	// 使用 docker images --format 获取结构化输出（需要 sudo）
 	// 使用 @@ 作为分隔符避免 shell 解析问题
 	cmd := "docker images --format '{{.ID}}@@{{.Repository}}@@{{.Tag}}@@{{.Size}}@@{{.CreatedAt}}' 2>/dev/null"
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	if out == "" {
 		return []DockerImage{}, nil
 	}
@@ -816,7 +885,7 @@ func (rc *RemoteCollector) ListImages(srv *Server) ([]DockerImage, error) {
 }
 
 // ListContainers 列出 Docker 容器。
-func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContainer, error) {
+func (rc *RemoteCollector) ListContainers(ctx context.Context, srv *Server, all bool) ([]DockerContainer, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -829,7 +898,7 @@ func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContai
 	if all {
 		psCmd = strings.Replace(psCmd, "docker ps ", "docker ps -a ", 1)
 	}
-	out := rc.RunWithSudo(conn, psCmd)
+	out := rc.RunWithSudo(ctx, conn, psCmd)
 	if out == "" {
 		return []DockerContainer{}, nil
 	}
@@ -874,8 +943,12 @@ func (rc *RemoteCollector) ListContainers(srv *Server, all bool) ([]DockerContai
 	return containers, nil
 }
 
-// PullImage 拉取 Docker 镜像（异步）。
-func (rc *RemoteCollector) PullImage(srv *Server, image string) error {
+// PullImage 拉取 Docker 镜像。
+func (rc *RemoteCollector) PullImage(ctx context.Context, srv *Server, image string) error {
+	// 拉取镜像是长操作，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -883,13 +956,13 @@ func (rc *RemoteCollector) PullImage(srv *Server, image string) error {
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker pull %q 2>&1", image)
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	rc.log.Infow("docker pull", "image", image, "output", out)
 	return nil
 }
 
 // RemoveImage 删除 Docker 镜像。
-func (rc *RemoteCollector) RemoveImage(srv *Server, id string) error {
+func (rc *RemoteCollector) RemoveImage(ctx context.Context, srv *Server, id string) error {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -897,7 +970,7 @@ func (rc *RemoteCollector) RemoveImage(srv *Server, id string) error {
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker rmi %q 2>&1", id)
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	if strings.Contains(out, "No such image") {
 		return fmt.Errorf("image not found: %s", id)
 	}
@@ -905,7 +978,11 @@ func (rc *RemoteCollector) RemoveImage(srv *Server, id string) error {
 }
 
 // ContainerAction 执行容器操作（start/stop/restart/kill）。
-func (rc *RemoteCollector) ContainerAction(srv *Server, id, action string) error {
+func (rc *RemoteCollector) ContainerAction(ctx context.Context, srv *Server, id, action string) error {
+	// 容器启停可能耗时较长，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -918,13 +995,17 @@ func (rc *RemoteCollector) ContainerAction(srv *Server, id, action string) error
 	}
 
 	cmd := fmt.Sprintf("docker %s %q 2>&1", action, id)
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	rc.log.Infow("docker container action", "action", action, "id", id, "output", out)
 	return nil
 }
 
 // ExecInContainer 在容器内执行命令。
-func (rc *RemoteCollector) ExecInContainer(srv *Server, id, cmd string) (string, error) {
+func (rc *RemoteCollector) ExecInContainer(ctx context.Context, srv *Server, id, cmd string) (string, error) {
+	// 容器内命令可能长时间运行，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return "", err
@@ -932,12 +1013,12 @@ func (rc *RemoteCollector) ExecInContainer(srv *Server, id, cmd string) (string,
 	defer rc.Release(srv.ID)
 
 	fullCmd := fmt.Sprintf("docker exec %q sh -c %q 2>&1", id, cmd)
-	out := rc.RunWithSudo(conn, fullCmd)
+	out := rc.RunWithSudo(ctx, conn, fullCmd)
 	return out, nil
 }
 
 // ContainerLogs 获取容器日志。
-func (rc *RemoteCollector) ContainerLogs(srv *Server, id string, lines int) (string, error) {
+func (rc *RemoteCollector) ContainerLogs(ctx context.Context, srv *Server, id string, lines int) (string, error) {
 	if lines <= 0 {
 		lines = 100
 	}
@@ -948,11 +1029,11 @@ func (rc *RemoteCollector) ContainerLogs(srv *Server, id string, lines int) (str
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker logs --tail %d %q 2>&1", lines, id)
-	return rc.RunWithSudo(conn, cmd), nil
+	return rc.RunWithSudo(ctx, conn, cmd), nil
 }
 
 // RemoveContainer 删除容器。
-func (rc *RemoteCollector) RemoveContainer(srv *Server, id string) error {
+func (rc *RemoteCollector) RemoveContainer(ctx context.Context, srv *Server, id string) error {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -960,7 +1041,7 @@ func (rc *RemoteCollector) RemoveContainer(srv *Server, id string) error {
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker rm -f %q 2>&1", id)
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	rc.log.Infow("docker rm", "id", id, "output", out)
 	return nil
 }
@@ -974,7 +1055,7 @@ type MirrorSourceConfig struct {
 
 // GetMirrorSources 获取服务器当前的 Docker 镜像源配置。
 // 读取 /etc/docker/daemon.json 并解析 registry-mirrors 与 insecure-registries。
-func (rc *RemoteCollector) GetMirrorSources(srv *Server) (*MirrorSourceConfig, error) {
+func (rc *RemoteCollector) GetMirrorSources(ctx context.Context, srv *Server) (*MirrorSourceConfig, error) {
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return nil, err
@@ -982,7 +1063,7 @@ func (rc *RemoteCollector) GetMirrorSources(srv *Server) (*MirrorSourceConfig, e
 	defer rc.Release(srv.ID)
 
 	// 读取 daemon.json
-	out := rc.RunWithSudo(conn, "cat /etc/docker/daemon.json 2>/dev/null || echo '{}'")
+	out := rc.RunWithSudo(ctx, conn, "cat /etc/docker/daemon.json 2>/dev/null || echo '{}'")
 
 	config := &MirrorSourceConfig{}
 	if out == "" {
@@ -1012,7 +1093,11 @@ func (rc *RemoteCollector) GetMirrorSources(srv *Server) (*MirrorSourceConfig, e
 }
 
 // ApplyMirrorSource 应用镜像源配置到服务器。
-func (rc *RemoteCollector) ApplyMirrorSource(srv *Server, mirrorURL string) error {
+func (rc *RemoteCollector) ApplyMirrorSource(ctx context.Context, srv *Server, mirrorURL string) error {
+	// 写配置后需重启 Docker，属于长操作，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
 	conn, err := rc.Acquire(srv)
 	if err != nil {
 		return err
@@ -1030,7 +1115,7 @@ func (rc *RemoteCollector) ApplyMirrorSource(srv *Server, mirrorURL string) erro
 EOF
 sudo systemctl restart docker 2>/dev/null || sudo service docker restart 2>/dev/null`, daemonJSON)
 
-	out := rc.RunWithSudo(conn, cmd)
+	out := rc.RunWithSudo(ctx, conn, cmd)
 	rc.log.Infow("apply mirror source", "mirror", mirrorURL, "output", out)
 	return nil
 }

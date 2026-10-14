@@ -39,7 +39,12 @@ func (h *ServersHandler) Register(mux *http.ServeMux) {
 func (h *ServersHandler) handleServers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		servers := h.store.List()
+		servers, err := h.store.List(r.Context())
+		if err != nil {
+			h.log.Errorw("list servers failed", "error", err)
+			Fail(w, http.StatusInternalServerError, 500, "failed to list servers")
+			return
+		}
 		// 返回时清除敏感字段
 		for _, s := range servers {
 			s.Password = ""
@@ -56,7 +61,7 @@ func (h *ServersHandler) handleServers(w http.ResponseWriter, r *http.Request) {
 			Fail(w, http.StatusBadRequest, 400, err.Error())
 			return
 		}
-		if err := h.store.Add(&srv); err != nil {
+		if err := h.store.Add(r.Context(), &srv); err != nil {
 			h.log.Errorw("add server failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to add server")
 			return
@@ -103,7 +108,7 @@ func (h *ServersHandler) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostInfo, err := h.remote.TestConnection(&remote.Server{
+	hostInfo, err := h.remote.TestConnection(r.Context(), &remote.Server{
 		ID:       srv.ID,
 		Name:     srv.Name,
 		Type:     srv.Type,
@@ -147,7 +152,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 		}
 		srv.ID = id // URL 中的 ID 优先
 		// 编辑普通配置时，前端不会回传敏感字段；沿用已保存的凭据和创建时间。
-		if existing, ok := h.store.Get(id); ok {
+		if existing, ok := h.store.Get(r.Context(), id); ok {
 			if srv.CreatedAt == 0 {
 				srv.CreatedAt = existing.CreatedAt
 			}
@@ -162,7 +167,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 			Fail(w, http.StatusBadRequest, 400, err.Error())
 			return
 		}
-		if err := h.store.Update(&srv); err != nil {
+		if err := h.store.Update(r.Context(), &srv); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				Fail(w, http.StatusNotFound, 404, "server not found")
 			} else {
@@ -177,7 +182,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 		OK(w, srv)
 
 	case http.MethodDelete:
-		if err := h.store.Delete(id); err != nil {
+		if err := h.store.Delete(r.Context(), id); err != nil {
 			Fail(w, http.StatusNotFound, 404, "server not found")
 			return
 		}

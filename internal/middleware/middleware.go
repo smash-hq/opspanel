@@ -53,6 +53,18 @@ func Logging(log *logger.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// BodyLimit 对 /api/ 请求体施加大小上限，防止超大 payload 消耗内存。
+func BodyLimit(limit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil && strings.HasPrefix(r.URL.Path, "/api/") {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Recovery 捕获 handler panic，返回 500 并记录堆栈。
 func Recovery(log *logger.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

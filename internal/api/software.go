@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/smash-hq/server-management/internal/host"
@@ -12,6 +14,9 @@ import (
 	"github.com/smash-hq/server-management/internal/software"
 	"github.com/smash-hq/server-management/internal/storage"
 )
+
+// pkgIDPattern 限制自定义软件包 ID 字符集，防止其拼入远程 shell 命令造成注入。
+var pkgIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._+-]*$`)
 
 // SoftwareHandler 提供软件管理 API。
 type SoftwareHandler struct {
@@ -104,7 +109,7 @@ func (h *SoftwareHandler) handleCatalog(w http.ResponseWriter, r *http.Request) 
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 		return
 	}
-	OK(w, h.swStore.ListPackages())
+	OK(w, h.swStore.ListPackages(r.Context()))
 }
 
 // handleStatus: GET ?server=<id> 查询所有软件包的安装状态。
@@ -120,15 +125,15 @@ func (h *SoftwareHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
 	var statuses []*software.SoftwareStatus
-	for _, pkg := range h.swStore.ListPackages() {
-		status := h.manager.CheckStatus(srv, pkg)
+	for _, pkg := range h.swStore.ListPackages(r.Context()) {
+		status := h.manager.CheckStatus(r.Context(), srv, pkg)
 		statuses = append(statuses, status)
 	}
 
@@ -152,14 +157,16 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	srv, pkg, err := h.getServerAndPackage(req.ServerID, req.PackageID)
+	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
 		Fail(w, http.StatusBadRequest, 400, err.Error())
 		return
 	}
 
+	// 异步安装：handler 立即返回，不能用请求 ctx（会随响应结束被取消），
+	// 超时由 Manager.Install 内部的长操作超时兜底。
 	go func() {
-		if err := h.manager.Install(srv, pkg, req.Version); err != nil {
+		if err := h.manager.Install(context.Background(), srv, pkg, req.Version); err != nil {
 			h.log.Errorw("install failed", "pkg", pkg.ID, "error", err)
 		}
 	}()
@@ -183,14 +190,15 @@ func (h *SoftwareHandler) handleUninstall(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	srv, pkg, err := h.getServerAndPackage(req.ServerID, req.PackageID)
+	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
 		Fail(w, http.StatusBadRequest, 400, err.Error())
 		return
 	}
 
+	// 异步卸载：理由同 handleInstall。
 	go func() {
-		if err := h.manager.Uninstall(srv, pkg); err != nil {
+		if err := h.manager.Uninstall(context.Background(), srv, pkg); err != nil {
 			h.log.Errorw("uninstall failed", "pkg", pkg.ID, "error", err)
 		}
 	}()
@@ -220,13 +228,13 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	srv, pkg, err := h.getServerAndPackage(req.ServerID, req.PackageID)
+	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
 		Fail(w, http.StatusBadRequest, 400, err.Error())
 		return
 	}
 
-	if err := h.manager.ServiceControl(srv, pkg, req.Action); err != nil {
+	if err := h.manager.ServiceControl(r.Context(), srv, pkg, req.Action); err != nil {
 		h.log.Errorw("service control failed", "pkg", pkg.ID, "action", req.Action, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, err.Error())
 		return
@@ -241,7 +249,7 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		OK(w, h.swStore.ListPackages())
+		OK(w, h.swStore.ListPackages(r.Context()))
 
 	case http.MethodPost:
 		var pkg software.Package
@@ -253,13 +261,17 @@ func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request)
 			Fail(w, http.StatusBadRequest, 400, "id and name are required")
 			return
 		}
-		if err := h.swStore.AddPackage(&pkg); err != nil {
+		if !pkgIDPattern.MatchString(pkg.ID) {
+			Fail(w, http.StatusBadRequest, 400, "invalid package id")
+			return
+		}
+		if err := h.swStore.AddPackage(r.Context(), &pkg); err != nil {
 			h.log.Errorw("add package failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to add package")
 			return
 		}
 		// 刷新内存索引
-		software.LoadFromStore(h.swStore)
+		software.LoadFromStore(r.Context(), h.swStore)
 		OK(w, pkg)
 
 	default:
@@ -269,9 +281,13 @@ func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request)
 
 // handlePackageDetail: PUT 更新 / DELETE 删除。
 func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Request) {
-	id := trimPrefix(r.URL.Path, "/api/v1/software/packages/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/software/packages/")
 	if id == "" {
 		Fail(w, http.StatusBadRequest, 400, "package id required")
+		return
+	}
+	if !pkgIDPattern.MatchString(id) {
+		Fail(w, http.StatusBadRequest, 400, "invalid package id")
 		return
 	}
 
@@ -283,21 +299,21 @@ func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Req
 			return
 		}
 		pkg.ID = id
-		if err := h.swStore.UpdatePackage(&pkg); err != nil {
+		if err := h.swStore.UpdatePackage(r.Context(), &pkg); err != nil {
 			h.log.Errorw("update package failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to update package")
 			return
 		}
-		software.LoadFromStore(h.swStore)
+		software.LoadFromStore(r.Context(), h.swStore)
 		OK(w, pkg)
 
 	case http.MethodDelete:
-		if err := h.swStore.DeletePackage(id); err != nil {
+		if err := h.swStore.DeletePackage(r.Context(), id); err != nil {
 			h.log.Errorw("delete package failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to delete package")
 			return
 		}
-		software.LoadFromStore(h.swStore)
+		software.LoadFromStore(r.Context(), h.swStore)
 		OK(w, map[string]string{"deleted": id})
 
 	default:
@@ -311,7 +327,7 @@ func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Req
 func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		OK(w, h.swStore.ListSources())
+		OK(w, h.swStore.ListSources(r.Context()))
 
 	case http.MethodPost:
 		var src storage.SourceRecord
@@ -323,7 +339,7 @@ func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) 
 			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
 			return
 		}
-		if err := h.swStore.AddSource(&src); err != nil {
+		if err := h.swStore.AddSource(r.Context(), &src); err != nil {
 			h.log.Errorw("add source failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
 			return
@@ -337,7 +353,7 @@ func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) 
 
 // handleSourceDetail: PUT 更新 / DELETE 删除。
 func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Request) {
-	id := trimPrefix(r.URL.Path, "/api/v1/software/sources/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/software/sources/")
 	if id == "" {
 		Fail(w, http.StatusBadRequest, 400, "source id required")
 		return
@@ -351,7 +367,7 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		src.ID = id
-		if err := h.swStore.UpdateSource(&src); err != nil {
+		if err := h.swStore.UpdateSource(r.Context(), &src); err != nil {
 			h.log.Errorw("update source failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
 			return
@@ -359,7 +375,7 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 		OK(w, src)
 
 	case http.MethodDelete:
-		if err := h.swStore.DeleteSource(id); err != nil {
+		if err := h.swStore.DeleteSource(r.Context(), id); err != nil {
 			h.log.Errorw("delete source failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
 			return
@@ -391,7 +407,7 @@ func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		lines = 100
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
@@ -403,7 +419,7 @@ func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log, err := h.manager.GetLog(srv, pkg.ID, lines)
+	log, err := h.manager.GetLog(r.Context(), srv, pkg.ID, lines)
 	if err != nil {
 		h.log.Errorw("get log failed", "server", serverID, "pkg", pkgID, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to get log: "+err.Error())
@@ -426,12 +442,12 @@ func (h *SoftwareHandler) handleDockerCheck(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	serverID := r.URL.Query().Get("server")
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	available, version := h.remoteCollector.CheckDocker(toRemoteServer(srv))
+	available, version := h.remoteCollector.CheckDocker(r.Context(), toRemoteServer(srv))
 	OK(w, map[string]any{"available": available, "version": version})
 }
 
@@ -442,12 +458,12 @@ func (h *SoftwareHandler) handleDockerImages(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	serverID := r.URL.Query().Get("server")
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	images, err := h.remoteCollector.ListImages(toRemoteServer(srv))
+	images, err := h.remoteCollector.ListImages(r.Context(), toRemoteServer(srv))
 	if err != nil {
 		Fail(w, http.StatusInternalServerError, 500, "failed to list images: "+err.Error())
 		return
@@ -469,13 +485,14 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
 		return
 	}
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
+	// 异步拉取：理由同 handleInstall。
 	go func() {
-		if err := h.remoteCollector.PullImage(toRemoteServer(srv), req.Image); err != nil {
+		if err := h.remoteCollector.PullImage(context.Background(), toRemoteServer(srv), req.Image); err != nil {
 			h.log.Errorw("docker pull failed", "image", req.Image, "error", err)
 		}
 	}()
@@ -484,18 +501,18 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 
 // handleDockerImageDetail: DELETE /api/v1/docker/images/{id}?server=<id> 删除镜像。
 func (h *SoftwareHandler) handleDockerImageDetail(w http.ResponseWriter, r *http.Request) {
-	id := trimPrefix(r.URL.Path, "/api/v1/docker/images/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/docker/images/")
 	if id == "" {
 		Fail(w, http.StatusBadRequest, 400, "image id required")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	if err := h.remoteCollector.RemoveImage(toRemoteServer(srv), id); err != nil {
+	if err := h.remoteCollector.RemoveImage(r.Context(), toRemoteServer(srv), id); err != nil {
 		Fail(w, http.StatusInternalServerError, 500, "failed to remove image: "+err.Error())
 		return
 	}
@@ -510,12 +527,12 @@ func (h *SoftwareHandler) handleDockerContainers(w http.ResponseWriter, r *http.
 	}
 	serverID := r.URL.Query().Get("server")
 	all := r.URL.Query().Get("all") == "true"
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	containers, err := h.remoteCollector.ListContainers(toRemoteServer(srv), all)
+	containers, err := h.remoteCollector.ListContainers(r.Context(), toRemoteServer(srv), all)
 	if err != nil {
 		Fail(w, http.StatusInternalServerError, 500, "failed to list containers: "+err.Error())
 		return
@@ -533,7 +550,7 @@ func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.R
 	}
 	id, action := parts[0], parts[1]
 	serverID := r.URL.Query().Get("server")
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
@@ -547,14 +564,14 @@ func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.R
 			Fail(w, http.StatusBadRequest, 400, "invalid action")
 			return
 		}
-		if err := h.remoteCollector.ContainerAction(toRemoteServer(srv), id, action); err != nil {
+		if err := h.remoteCollector.ContainerAction(r.Context(), toRemoteServer(srv), id, action); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
 			return
 		}
 		OK(w, map[string]string{"status": "ok", "action": action})
 
 	case http.MethodDelete:
-		if err := h.remoteCollector.RemoveContainer(toRemoteServer(srv), id); err != nil {
+		if err := h.remoteCollector.RemoveContainer(r.Context(), toRemoteServer(srv), id); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed to remove container: "+err.Error())
 			return
 		}
@@ -580,12 +597,12 @@ func (h *SoftwareHandler) handleDockerExec(w http.ResponseWriter, r *http.Reques
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
 		return
 	}
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	output, err := h.remoteCollector.ExecInContainer(toRemoteServer(srv), req.Container, req.Command)
+	output, err := h.remoteCollector.ExecInContainer(r.Context(), toRemoteServer(srv), req.Container, req.Command)
 	if err != nil {
 		Fail(w, http.StatusInternalServerError, 500, "exec failed: "+err.Error())
 		return
@@ -605,12 +622,12 @@ func (h *SoftwareHandler) handleDockerLogs(w http.ResponseWriter, r *http.Reques
 	if l := r.URL.Query().Get("lines"); l != "" {
 		fmt.Sscanf(l, "%d", &lines)
 	}
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
-	logs, err := h.remoteCollector.ContainerLogs(toRemoteServer(srv), id, lines)
+	logs, err := h.remoteCollector.ContainerLogs(r.Context(), toRemoteServer(srv), id, lines)
 	if err != nil {
 		Fail(w, http.StatusInternalServerError, 500, "failed to get logs: "+err.Error())
 		return
@@ -633,13 +650,13 @@ func (h *SoftwareHandler) handleFiles(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	result, err := h.remoteCollector.ListFiles(toRemoteServer(srv), path)
+	result, err := h.remoteCollector.ListFiles(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("list files failed", "server", serverID, "path", path, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to list files: "+err.Error())
@@ -663,13 +680,13 @@ func (h *SoftwareHandler) handleFileInfo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	info, err := h.remoteCollector.GetFileInfo(toRemoteServer(srv), path)
+	info, err := h.remoteCollector.GetFileInfo(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("get file info failed", "server", serverID, "path", path, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to get file info: "+err.Error())
@@ -694,13 +711,13 @@ func (h *SoftwareHandler) handleFilePreview(w http.ResponseWriter, r *http.Reque
 		fmt.Sscanf(linesStr, "%d", &lines)
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	content, err := h.remoteCollector.ReadFileContent(toRemoteServer(srv), path, lines)
+	content, err := h.remoteCollector.ReadFileContent(r.Context(), toRemoteServer(srv), path, lines)
 	if err != nil {
 		h.log.Errorw("read file failed", "server", serverID, "path", path, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to read file: "+err.Error())
@@ -724,13 +741,13 @@ func (h *SoftwareHandler) handleFileDownload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	data, filename, err := h.remoteCollector.DownloadFile(toRemoteServer(srv), path)
+	data, filename, err := h.remoteCollector.DownloadFile(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("download file failed", "server", serverID, "path", path, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to download file: "+err.Error())
@@ -759,7 +776,7 @@ func (h *SoftwareHandler) handleBatchDeleteImages(w http.ResponseWriter, r *http
 		Fail(w, http.StatusBadRequest, 400, "invalid request body")
 		return
 	}
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
@@ -767,7 +784,7 @@ func (h *SoftwareHandler) handleBatchDeleteImages(w http.ResponseWriter, r *http
 	var deleted []string
 	var errors []string
 	for _, id := range req.IDs {
-		if err := h.remoteCollector.RemoveImage(toRemoteServer(srv), id); err != nil {
+		if err := h.remoteCollector.RemoveImage(r.Context(), toRemoteServer(srv), id); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %s", id, err.Error()))
 		} else {
 			deleted = append(deleted, id)
@@ -795,7 +812,7 @@ func (h *SoftwareHandler) handleBatchContainerAction(w http.ResponseWriter, r *h
 		Fail(w, http.StatusBadRequest, 400, "invalid action")
 		return
 	}
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
@@ -805,9 +822,9 @@ func (h *SoftwareHandler) handleBatchContainerAction(w http.ResponseWriter, r *h
 	for _, id := range req.IDs {
 		var err error
 		if req.Action == "rm" {
-			err = h.remoteCollector.RemoveContainer(toRemoteServer(srv), id)
+			err = h.remoteCollector.RemoveContainer(r.Context(), toRemoteServer(srv), id)
 		} else {
-			err = h.remoteCollector.ContainerAction(toRemoteServer(srv), id, req.Action)
+			err = h.remoteCollector.ContainerAction(r.Context(), toRemoteServer(srv), id, req.Action)
 		}
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %s", id, err.Error()))
@@ -825,7 +842,7 @@ func (h *SoftwareHandler) handleDockerSources(w http.ResponseWriter, r *http.Req
 	sourceStore := storage.NewDockerSourceStore(h.db)
 	switch r.Method {
 	case http.MethodGet:
-		OK(w, sourceStore.ListSources())
+		OK(w, sourceStore.ListSources(r.Context()))
 
 	case http.MethodPost:
 		var src storage.DockerSource
@@ -837,7 +854,7 @@ func (h *SoftwareHandler) handleDockerSources(w http.ResponseWriter, r *http.Req
 			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
 			return
 		}
-		if err := sourceStore.AddSource(&src); err != nil {
+		if err := sourceStore.AddSource(r.Context(), &src); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
 			return
 		}
@@ -851,7 +868,7 @@ func (h *SoftwareHandler) handleDockerSources(w http.ResponseWriter, r *http.Req
 // handleDockerSourceDetail: PUT 更新 / DELETE 删除 / POST 设为默认。
 func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *http.Request) {
 	sourceStore := storage.NewDockerSourceStore(h.db)
-	id := trimPrefix(r.URL.Path, "/api/v1/docker-sources/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/docker-sources/")
 	if id == "" {
 		Fail(w, http.StatusBadRequest, 400, "source id required")
 		return
@@ -865,14 +882,14 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 			return
 		}
 		src.ID = id
-		if err := sourceStore.UpdateSource(&src); err != nil {
+		if err := sourceStore.UpdateSource(r.Context(), &src); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
 			return
 		}
 		OK(w, src)
 
 	case http.MethodDelete:
-		if err := sourceStore.DeleteSource(id); err != nil {
+		if err := sourceStore.DeleteSource(r.Context(), id); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
 			return
 		}
@@ -880,7 +897,7 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 
 	case http.MethodPost:
 		// 设为默认
-		if err := sourceStore.SetDefaultSource(id); err != nil {
+		if err := sourceStore.SetDefaultSource(r.Context(), id); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed to set default")
 			return
 		}
@@ -901,7 +918,7 @@ func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
@@ -909,7 +926,7 @@ func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Requ
 
 	switch r.Method {
 	case http.MethodGet:
-		config, err := h.remoteCollector.GetMirrorSources(toRemoteServer(srv))
+		config, err := h.remoteCollector.GetMirrorSources(r.Context(), toRemoteServer(srv))
 		if err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
 			return
@@ -928,7 +945,7 @@ func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Requ
 			Fail(w, http.StatusBadRequest, 400, "mirror url required")
 			return
 		}
-		if err := h.remoteCollector.ApplyMirrorSource(toRemoteServer(srv), req.Mirror); err != nil {
+		if err := h.remoteCollector.ApplyMirrorSource(r.Context(), toRemoteServer(srv), req.Mirror); err != nil {
 			h.log.Errorw("apply mirror failed", "server", serverID, "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to apply mirror: "+err.Error())
 			return
@@ -956,13 +973,13 @@ func (h *SoftwareHandler) handleProcesses(w http.ResponseWriter, r *http.Request
 		fmt.Sscanf(linesStr, "%d", &lines)
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	processes, err := h.remoteCollector.ListProcesses(toRemoteServer(srv), lines)
+	processes, err := h.remoteCollector.ListProcesses(r.Context(), toRemoteServer(srv), lines)
 	if err != nil {
 		h.log.Errorw("list processes failed", "server", serverID, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to list processes: "+err.Error())
@@ -989,13 +1006,13 @@ func (h *SoftwareHandler) handleKillProcess(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	if err := h.remoteCollector.KillProcess(toRemoteServer(srv), req.PID, req.Force); err != nil {
+	if err := h.remoteCollector.KillProcess(r.Context(), toRemoteServer(srv), req.PID, req.Force); err != nil {
 		h.log.Errorw("kill process failed", "server", req.ServerID, "pid", req.PID, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to kill process: "+err.Error())
 		return
@@ -1021,13 +1038,13 @@ func (h *SoftwareHandler) handleProcessLog(w http.ResponseWriter, r *http.Reques
 		fmt.Sscanf(linesStr, "%d", &lines)
 	}
 
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
-	log, err := h.remoteCollector.GetProcessLog(toRemoteServer(srv), pid, lines)
+	log, err := h.remoteCollector.GetProcessLog(r.Context(), toRemoteServer(srv), pid, lines)
 	if err != nil {
 		h.log.Errorw("get process log failed", "server", serverID, "pid", pid, "error", err)
 		Fail(w, http.StatusInternalServerError, 500, "failed to get process log: "+err.Error())
@@ -1048,7 +1065,7 @@ func (h *SoftwareHandler) handleLanguages(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		langStore := storage.NewLanguageStore(h.db)
-		OK(w, langStore.ListLanguages())
+		OK(w, langStore.ListLanguages(r.Context()))
 
 	case http.MethodPost:
 		var lang storage.LanguageRecord
@@ -1061,7 +1078,7 @@ func (h *SoftwareHandler) handleLanguages(w http.ResponseWriter, r *http.Request
 			return
 		}
 		langStore := storage.NewLanguageStore(h.db)
-		if err := langStore.AddLanguage(&lang); err != nil {
+		if err := langStore.AddLanguage(r.Context(), &lang); err != nil {
 			h.log.Errorw("add language failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to add language")
 			return
@@ -1075,7 +1092,7 @@ func (h *SoftwareHandler) handleLanguages(w http.ResponseWriter, r *http.Request
 
 // handleLanguageDetail: PUT 更新 / DELETE 删除。
 func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Request) {
-	id := trimPrefix(r.URL.Path, "/api/v1/languages/")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/languages/")
 	if id == "" {
 		Fail(w, http.StatusBadRequest, 400, "language id required")
 		return
@@ -1090,7 +1107,7 @@ func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Re
 		}
 		lang.ID = id
 		langStore := storage.NewLanguageStore(h.db)
-		if err := langStore.UpdateLanguage(&lang); err != nil {
+		if err := langStore.UpdateLanguage(r.Context(), &lang); err != nil {
 			h.log.Errorw("update language failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to update language")
 			return
@@ -1099,7 +1116,7 @@ func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Re
 
 	case http.MethodDelete:
 		langStore := storage.NewLanguageStore(h.db)
-		if err := langStore.DeleteLanguage(id); err != nil {
+		if err := langStore.DeleteLanguage(r.Context(), id); err != nil {
 			h.log.Errorw("delete language failed", "error", err)
 			Fail(w, http.StatusInternalServerError, 500, "failed to delete language")
 			return
@@ -1119,21 +1136,21 @@ func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.R
 	}
 
 	serverID := r.URL.Query().Get("server")
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
 	langStore := storage.NewLanguageStore(h.db)
-	languages := langStore.ListLanguages()
+	languages := langStore.ListLanguages(r.Context())
 
 	var detected []map[string]any
 	for _, lang := range languages {
 		if lang.VersionCmd == "" {
 			continue
 		}
-		version := h.remoteCollector.DetectLanguage(toRemoteServer(srv), lang.VersionCmd)
+		version := h.remoteCollector.DetectLanguage(r.Context(), toRemoteServer(srv), lang.VersionCmd)
 		status := "not_installed"
 		if version != "" {
 			status = "installed"
@@ -1168,14 +1185,14 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
 	langStore := storage.NewLanguageStore(h.db)
-	lang, ok := langStore.GetLanguage(req.LanguageID)
+	lang, ok := langStore.GetLanguage(r.Context(), req.LanguageID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "language not found")
 		return
@@ -1185,9 +1202,10 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 异步执行安装
+	// 异步安装：handler 立即返回，不能用请求 ctx（会随响应结束被取消），
+	// 超时由 RemoteCollector.InstallLanguage 内部的长操作超时兜底。
 	go func() {
-		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), lang.InstallCmd, req.Version); err != nil {
+		if err := h.remoteCollector.InstallLanguage(context.Background(), toRemoteServer(srv), lang.InstallCmd, req.Version); err != nil {
 			h.log.Errorw("install language failed", "lang", lang.ID, "error", err)
 		}
 	}()
@@ -1211,14 +1229,14 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		return
 	}
 
-	srv, ok := h.store.Get(req.ServerID)
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "server not found")
 		return
 	}
 
 	langStore := storage.NewLanguageStore(h.db)
-	lang, ok := langStore.GetLanguage(req.LanguageID)
+	lang, ok := langStore.GetLanguage(r.Context(), req.LanguageID)
 	if !ok {
 		Fail(w, http.StatusNotFound, 404, "language not found")
 		return
@@ -1228,10 +1246,10 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 异步执行卸载
+	// 异步卸载：理由同 handleInstallLanguage。
 	go func() {
 		// 使用 UninstallCmd 作为卸载命令
-		if err := h.remoteCollector.InstallLanguage(toRemoteServer(srv), lang.UninstallCmd, ""); err != nil {
+		if err := h.remoteCollector.InstallLanguage(context.Background(), toRemoteServer(srv), lang.UninstallCmd, ""); err != nil {
 			h.log.Errorw("uninstall language failed", "lang", lang.ID, "error", err)
 		}
 	}()
@@ -1258,11 +1276,11 @@ func toRemoteServer(srv *host.Server) *remote.Server {
 	}
 }
 
-func (h *SoftwareHandler) getServerAndPackage(serverID, pkgID string) (*host.Server, *software.Package, error) {
+func (h *SoftwareHandler) getServerAndPackage(ctx context.Context, serverID, pkgID string) (*host.Server, *software.Package, error) {
 	if serverID == "" || serverID == host.LocalServerID {
 		return nil, nil, fmt.Errorf("software management requires a remote server")
 	}
-	srv, ok := h.store.Get(serverID)
+	srv, ok := h.store.Get(ctx, serverID)
 	if !ok {
 		return nil, nil, fmt.Errorf("server not found: %s", serverID)
 	}
@@ -1275,11 +1293,4 @@ func (h *SoftwareHandler) getServerAndPackage(serverID, pkgID string) (*host.Ser
 
 func decodeBody(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
-}
-
-func trimPrefix(s, prefix string) string {
-	if len(s) > len(prefix) && s[:len(prefix)] == prefix {
-		return s[len(prefix):]
-	}
-	return ""
 }

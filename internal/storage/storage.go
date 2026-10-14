@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -16,6 +17,17 @@ import (
 // DB 封装 SQLite 数据库连接与初始化逻辑。
 type DB struct {
 	db *sql.DB
+}
+
+// DefaultQueryTimeout 是单次数据库操作的默认超时（调用方未设 deadline 时生效）。
+const DefaultQueryTimeout = 10 * time.Second
+
+// withQueryTimeout 在调用方未设置 deadline 时套用默认超时。
+func withQueryTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, DefaultQueryTimeout)
 }
 
 // New 创建并初始化数据库。
@@ -127,7 +139,8 @@ func (d *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_languages_category ON languages(category);
 	`
 
-	_, err := d.db.Exec(schema)
+	// 启动期引导，无请求 ctx，使用 Background
+	_, err := d.db.ExecContext(context.Background(), schema)
 	if err != nil {
 		return err
 	}
@@ -141,7 +154,7 @@ func (d *DB) migrate() error {
 
 // addColumnIfNotExists 给表追加列（若列已存在则忽略错误）。
 func (d *DB) addColumnIfNotExists(table, column, definition string) error {
-	_, err := d.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	_, err := d.db.ExecContext(context.Background(), fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
 	if err != nil {
 		// SQLite 已存在该列时会返回 duplicate column error，忽略即可
 		if strings.Contains(err.Error(), "duplicate column") {
@@ -153,11 +166,13 @@ func (d *DB) addColumnIfNotExists(table, column, definition string) error {
 }
 
 // InitDefaultData 写入首次启动的默认数据（幂等）。
+// 属启动期引导，内部使用 context.Background()。
 func (d *DB) InitDefaultData() error {
+	ctx := context.Background()
 	now := time.Now().Unix()
 
 	// 本机服务器（INSERT OR IGNORE 保证幂等）
-	_, err := d.db.Exec(`
+	_, err := d.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO servers (id, name, type, host, port, username, auth_type, created_at)
 		VALUES ('srv_local', ?, 'local', '127.0.0.1', 22, ?, 'local', ?)`,
 		localHostname(), localUser(), now)
@@ -179,9 +194,9 @@ func (d *DB) InitDefaultData() error {
 		{"src_nodejs_official", "Node.js 官方源", "repo", "https://deb.nodesource.com/"},
 	}
 	// Docker 引擎仓库不属于软件源范畴（Docker 相关配置由「Docker 镜像源」管理），清理历史种子数据
-	d.db.Exec(`DELETE FROM software_sources WHERE id IN ('src_docker_official', 'src_docker_aliyun')`)
+	d.db.ExecContext(ctx, `DELETE FROM software_sources WHERE id IN ('src_docker_official', 'src_docker_aliyun')`)
 	for _, s := range sources {
-		d.db.Exec(`
+		d.db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO software_sources (id, name, type, url, enabled, priority, created_at, updated_at)
 			VALUES (?, ?, ?, ?, 1, 100, ?, ?)`,
 			s.id, s.name, s.typ, s.url, now, now)
@@ -195,7 +210,26 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-// Raw 返回底层 *sql.DB（供高级查询使用）。
+// GetMeta 读取 meta 表中指定键的值（未命中返回 sql.ErrNoRows）。
+func (d *DB) GetMeta(ctx context.Context, key string) (string, error) {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+	var val string
+	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&val)
+	return val, err
+}
+
+// SetMeta 写入 meta 表中指定键的值（upsert）。
+func (d *DB) SetMeta(ctx context.Context, key, value string) error {
+	ctx, cancel := withQueryTimeout(ctx)
+	defer cancel()
+	_, err := d.db.ExecContext(ctx, `
+		INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+// Raw 返回底层 *sql.DB（供高级查询使用，须使用 Context 变体方法）。
 func (d *DB) Raw() *sql.DB {
 	return d.db
 }

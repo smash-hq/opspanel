@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"os"
 	"runtime"
 	"time"
@@ -109,8 +110,8 @@ func NewCollector() *Collector {
 }
 
 // Snapshot 采集一次完整系统快照。
-// 任何子项采集失败时返回零值而非中断整体流程。
-func (c *Collector) Snapshot() (*Info, error) {
+// 任何子项采集失败时返回零值而非中断整体流程；ctx 取消时各子项快速返回零值。
+func (c *Collector) Snapshot(ctx context.Context) (*Info, error) {
 	info := &Info{
 		Timestamp:  time.Now().UnixMilli(),
 		GoVersion:  runtime.Version(),
@@ -118,7 +119,7 @@ func (c *Collector) Snapshot() (*Info, error) {
 	}
 
 	// 主机信息
-	if h, err := host.Info(); err == nil {
+	if h, err := host.InfoWithContext(ctx); err == nil {
 		info.Host = HostInfo{
 			Hostname: h.Hostname,
 			OS:       h.OS,
@@ -137,39 +138,39 @@ func (c *Collector) Snapshot() (*Info, error) {
 	}
 
 	// CPU
-	info.CPU = c.collectCPU()
+	info.CPU = c.collectCPU(ctx)
 
 	// 内存
-	info.Memory = c.collectMemory()
+	info.Memory = c.collectMemory(ctx)
 
 	// 磁盘
-	info.Disks = c.collectDisks()
+	info.Disks = c.collectDisks(ctx)
 
 	// 网络
-	info.Network = c.collectNetwork()
+	info.Network = c.collectNetwork(ctx)
 
 	// 进程数
-	if procs, err := process.Pids(); err == nil {
+	if procs, err := process.PidsWithContext(ctx); err == nil {
 		info.Processes = len(procs)
 	}
 
 	return info, nil
 }
 
-func (c *Collector) collectCPU() CPUInfo {
+func (c *Collector) collectCPU(ctx context.Context) CPUInfo {
 	ci := CPUInfo{}
 
 	// CPU 使用率（1 秒采样间隔，非阻塞取上次值）
-	if pct, err := cpu.Percent(0, false); err == nil && len(pct) > 0 {
+	if pct, err := cpu.PercentWithContext(ctx, 0, false); err == nil && len(pct) > 0 {
 		ci.Percent = pct[0]
 	}
-	if pct, err := cpu.Percent(0, true); err == nil {
+	if pct, err := cpu.PercentWithContext(ctx, 0, true); err == nil {
 		ci.PerCore = pct
 		ci.Threads = len(pct)
 	}
 
 	// CPU 详细信息
-	if infos, err := cpu.Info(); err == nil && len(infos) > 0 {
+	if infos, err := cpu.InfoWithContext(ctx); err == nil && len(infos) > 0 {
 		ci.Model = infos[0].ModelName
 		ci.Cores = int(infos[0].Cores)
 	}
@@ -177,17 +178,17 @@ func (c *Collector) collectCPU() CPUInfo {
 	return ci
 }
 
-func (c *Collector) collectMemory() MemoryInfo {
+func (c *Collector) collectMemory(ctx context.Context) MemoryInfo {
 	mi := MemoryInfo{}
 
-	if v, err := mem.VirtualMemory(); err == nil {
+	if v, err := mem.VirtualMemoryWithContext(ctx); err == nil {
 		mi.Total = v.Total
 		mi.Used = v.Used
 		mi.Free = v.Free
 		mi.Percent = v.UsedPercent
 	}
 
-	if s, err := mem.SwapMemory(); err == nil {
+	if s, err := mem.SwapMemoryWithContext(ctx); err == nil {
 		mi.SwapTotal = s.Total
 		mi.SwapUsed = s.Used
 	}
@@ -195,10 +196,10 @@ func (c *Collector) collectMemory() MemoryInfo {
 	return mi
 }
 
-func (c *Collector) collectDisks() []DiskInfo {
+func (c *Collector) collectDisks(ctx context.Context) []DiskInfo {
 	var disks []DiskInfo
 
-	parts, err := disk.Partitions(false)
+	parts, err := disk.PartitionsWithContext(ctx, false)
 	if err != nil {
 		return disks
 	}
@@ -208,7 +209,7 @@ func (c *Collector) collectDisks() []DiskInfo {
 		if isVirtualFS(p.Fstype) {
 			continue
 		}
-		if usage, err := disk.Usage(p.Mountpoint); err == nil {
+		if usage, err := disk.UsageWithContext(ctx, p.Mountpoint); err == nil {
 			disks = append(disks, DiskInfo{
 				Device:  p.Device,
 				Mount:   p.Mountpoint,
@@ -222,18 +223,18 @@ func (c *Collector) collectDisks() []DiskInfo {
 	return disks
 }
 
-func (c *Collector) collectNetwork() NetworkInfo {
+func (c *Collector) collectNetwork(ctx context.Context) NetworkInfo {
 	ni := NetworkInfo{}
 
 	// 网卡列表
-	if ifaces, err := net.Interfaces(); err == nil {
+	if ifaces, err := net.InterfacesWithContext(ctx); err == nil {
 		for _, iface := range ifaces {
 			ni.Interfaces = append(ni.Interfaces, iface.Name)
 		}
 	}
 
 	// IO 统计
-	if counters, err := net.IOCounters(true); err == nil {
+	if counters, err := net.IOCountersWithContext(ctx, true); err == nil {
 		for _, c := range counters {
 			ni.IOCounters = append(ni.IOCounters, NetIOCounter{
 				Name:      c.Name,
