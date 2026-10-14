@@ -23,6 +23,7 @@ import { setupMirrors } from './mirrors.js';
 import { setupSources } from './sources.js';
 import { setupProcesses } from './processes.js';
 import { setupCron } from './cron.js';
+import { setupGpu } from './gpu.js';
 import { setupTerminal } from './terminal.js';
 import { setupLifecycle } from './lifecycle.js';
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress } from '../utils.js';
@@ -46,6 +47,7 @@ export function setupStore() {
     setupSources(ctx);
     setupProcesses(ctx);
     setupCron(ctx);
+    setupGpu(ctx);
     setupTerminal(ctx);
     setupLifecycle(ctx);
 

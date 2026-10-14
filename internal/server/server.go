@@ -91,6 +91,10 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	cronHandler := api.NewCronHandler(log, store)
 	cronHandler.Register(mux)
 
+	// --- GPU/NPU 信息（实时按需拉取） ---
+	gpuHandler := api.NewGPUHandler(log, store)
+	gpuHandler.Register(mux)
+
 	// --- WebSocket ---
 	hub := ws.NewHub(log)
 	go hub.Run()
