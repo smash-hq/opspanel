@@ -22,6 +22,7 @@ import { setupDocker } from './docker.js';
 import { setupMirrors } from './mirrors.js';
 import { setupSources } from './sources.js';
 import { setupProcesses } from './processes.js';
+import { setupCron } from './cron.js';
 import { setupTerminal } from './terminal.js';
 import { setupLifecycle } from './lifecycle.js';
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress } from '../utils.js';
@@ -44,6 +45,7 @@ export function setupStore() {
     setupMirrors(ctx);
     setupSources(ctx);
     setupProcesses(ctx);
+    setupCron(ctx);
     setupTerminal(ctx);
     setupLifecycle(ctx);
 

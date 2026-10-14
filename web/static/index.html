@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/css/components/sidebar.css">
     <link rel="stylesheet" href="/css/components/permission-alert.css">
     <link rel="stylesheet" href="/css/components/processes.css">
+    <link rel="stylesheet" href="/css/components/cron.css">
     <link rel="stylesheet" href="/css/components/languages.css">
     <link rel="stylesheet" href="/css/components/files.css">
     <link rel="stylesheet" href="/css/components/docker.css">
@@ -344,9 +345,9 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="onDockerTabClick()" :title="dockerTabEnabled ? '' : '未检测到 Docker 环境，点击重新检测'">Docker</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'terminal', disabled: selectedServer === 'srv_local' || !selectedServer }" @click="openTerminalTab()" :title="selectedServer === 'srv_local' ? '本地节点暂不支持终端' : ''">终端</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'cron' }" @click="activeTab = 'cron'; loadCronJobs()">定时任务</button>
                     <button class="bc-tab disabled" title="即将推出">集群管理</button>
                     <button class="bc-tab disabled" title="即将推出">安全</button>
-                    <button class="bc-tab disabled" title="即将推出">定时任务</button>
                 </div>
 
                 <!-- 系统信息 Tab -->
@@ -943,6 +944,48 @@
                     </div>
                     <div class="terminal-wrap" ref="terminalMount"></div>
                 </div>
+
+                <!-- 定时任务 Tab -->
+                <div v-if="activeTab === 'cron'" class="node-tab-content">
+                    <!-- 任务工具栏 -->
+                    <div class="cron-toolbar">
+                        <h3>定时任务 ({{ cronJobs.length }})</h3>
+                        <span class="cron-toolbar-hint">任务保存在服务器 crontab 中，由系统 cron 执行</span>
+                        <span class="cron-toolbar-spacer"></span>
+                        <button class="toolbar-button" @click="loadCronJobs()" :disabled="cronLoading">↻ 刷新</button>
+                        <button class="primary-button" @click="openCronForm(null)">＋ 新建任务</button>
+                    </div>
+                    <div v-if="cronLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                    <div v-else-if="!cronJobs.length" class="list-empty">
+                        <span class="empty-icon">⏱</span><strong>服务器 crontab 中暂无定时任务</strong>
+                        <p>点击右上角「新建任务」向 crontab 写入定时命令</p>
+                    </div>
+                    <div v-else class="cron-list">
+                        <div v-for="job in cronJobs" :key="job.id" class="cron-card" :class="{ disabled: !job.enabled }">
+                            <div class="cron-card-main">
+                                <div class="cron-card-head">
+                                    <span class="cron-name" :title="job.name">{{ job.name || '未命名任务' }}</span>
+                                    <span class="cron-expr" :title="job.expr">{{ cronExprText(job) }}</span>
+                                    <span v-if="!job.enabled" class="cron-badge off">已停用</span>
+                                    <button class="cron-switch" :class="{ on: job.enabled }" @click="toggleCronJob(job)"
+                                            :disabled="cronBusyId === job.id"
+                                            :title="job.enabled ? '点击停用（注释该行）' : '点击启用'"><i></i></button>
+                                </div>
+                                <div class="cron-command" :title="job.command">$ {{ job.command }}</div>
+                                <div class="cron-meta">
+                                    <span class="cron-meta-item" title="下次执行">⏭ 下次 {{ cronNextText(job) }}</span>
+                                    <template v-if="job.next_runs && job.next_runs.length > 1">
+                                        <span class="cron-meta-item" title="后续执行">之后 {{ job.next_runs[1] }}</span>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="cron-card-actions">
+                                <button class="proc-btn" @click="openCronForm(job)" title="编辑">✎</button>
+                                <button class="proc-btn danger" @click="handleDeleteCronJob(job)" title="删除">✗</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
         </div>
@@ -1198,6 +1241,70 @@
     </div>
 
     <!-- 全局确认弹窗（替代原生 confirm） -->
+    <!-- 定时任务表单弹窗 -->
+    <div class="modal-overlay" v-if="cronFormVisible" @click.self="closeCronForm">
+        <div class="modal cron-form-modal">
+            <div class="modal-header"><div><span class="eyebrow">{{ cronForm.id ? 'EDIT JOB' : 'NEW JOB' }}</span><h3>{{ cronForm.id ? '编辑定时任务' : '新建定时任务' }}</h3></div><button class="icon-button" @click="closeCronForm" title="关闭">×</button></div>
+            <div class="modal-body cron-modal-body">
+                <div class="field">
+                    <span>任务名称</span>
+                    <input type="text" v-model="cronForm.name" placeholder="可选，如：每日日志清理（以注释行保存在 crontab）" />
+                </div>
+                <div class="field">
+                    <span>执行周期 <em>*</em></span>
+                    <div class="cron-kind-chips">
+                        <button v-for="k in cronKinds" :key="k.key" type="button" class="cron-kind-chip"
+                                :class="{ active: cronForm.kind === k.key }" @click="applyCronKind(k.key)">{{ k.label }}</button>
+                    </div>
+                    <div class="cron-schedule-row" v-if="cronForm.kind === 'minutes'">
+                        每隔 <input type="number" min="1" max="59" v-model.number="cronForm.interval" @input="updateCronSchedule()" /> 分钟执行一次
+                    </div>
+                    <div class="cron-schedule-row" v-else-if="cronForm.kind === 'hourly'">
+                        每小时的第 <input type="number" min="0" max="59" v-model.number="cronForm.minute" @input="updateCronSchedule()" /> 分执行
+                    </div>
+                    <div class="cron-schedule-row" v-else-if="cronForm.kind === 'daily'">
+                        每天 <input type="time" v-model="cronForm.time" @input="updateCronSchedule()" /> 执行
+                    </div>
+                    <div class="cron-schedule-row" v-else-if="cronForm.kind === 'weekly'">
+                        每周
+                        <select v-model="cronForm.week" @change="updateCronSchedule()">
+                            <option v-for="d in cronWeekdays" :key="d.value" :value="d.value">{{ d.label }}</option>
+                        </select>
+                        <input type="time" v-model="cronForm.time" @input="updateCronSchedule()" /> 执行
+                    </div>
+                    <div class="cron-schedule-row" v-else-if="cronForm.kind === 'monthly'">
+                        每月 <input type="number" min="1" max="31" v-model.number="cronForm.monthDay" @input="updateCronSchedule()" /> 日
+                        <input type="time" v-model="cronForm.time" @input="updateCronSchedule()" /> 执行
+                    </div>
+                    <div class="cron-schedule-row cron-schedule-hint" v-else-if="cronForm.kind === 'reboot'">
+                        服务器每次开机时执行一次（@reboot）
+                    </div>
+                    <input v-else type="text" v-model="cronForm.expr" @input="refreshCronPreview()"
+                           placeholder="分 时 日 月 周，支持 @daily、@hourly 等宏" spellcheck="false" />
+                    <div class="cron-expr-bar" v-if="cronForm.kind !== 'custom'">
+                        <span class="cron-expr-label">CRON</span><code>{{ cronForm.expr || '—' }}</code>
+                    </div>
+                    <div class="cron-preview" :class="{ invalid: !cronPreview.valid }">
+                        <template v-if="cronPreview.loading">解析中…</template>
+                        <template v-else-if="cronPreview.valid">
+                            <span class="cron-preview-chip" v-for="(t, i) in cronPreview.next" :key="i">{{ t }}</span>
+                            <span v-if="!cronPreview.next.length" class="cron-preview-chip">@reboot 开机时执行一次</span>
+                        </template>
+                        <template v-else>✗ {{ cronPreview.error || '表达式无效' }}</template>
+                    </div>
+                </div>
+                <div class="field">
+                    <span>执行命令 <em>*</em></span>
+                    <textarea v-model="cronForm.command" rows="3" placeholder="如：find /var/log -name '*.log' -mtime +7 -delete" spellcheck="false"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="closeCronForm">取消</button>
+                <button class="primary-button" @click="submitCronForm()" :disabled="cronFormSaving">{{ cronFormSaving ? '保存中…' : (cronForm.id ? '保存修改' : '写入 crontab') }}</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" v-if="confirmState.visible" @click.self="cancelConfirm">
         <div class="modal confirm-modal">
             <div class="modal-header">

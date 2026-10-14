@@ -1,0 +1,302 @@
+/* ─── 定时任务管理（crontab） ─── */
+.cron-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.cron-toolbar h3 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.cron-toolbar-hint {
+    font-size: 0.72rem;
+    color: var(--text-dim, #64748b);
+}
+
+.cron-toolbar-spacer {
+    flex: 1;
+}
+
+/* ─── 任务卡片列表 ─── */
+.cron-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cron-card {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+.cron-card:hover {
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
+}
+
+.cron-card.disabled .cron-name,
+.cron-card.disabled .cron-command {
+    opacity: 0.5;
+}
+
+.cron-card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cron-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cron-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--text-primary, #0f172a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+.cron-expr {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--content-bg, #f1f5f9);
+    color: var(--accent, #3b82f6);
+    white-space: nowrap;
+}
+
+.cron-command {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    color: var(--text-secondary, #475569);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cron-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    font-size: 0.72rem;
+    color: var(--text-dim, #64748b);
+}
+
+.cron-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    text-transform: uppercase;
+}
+
+.cron-badge.off {
+    color: var(--text-muted, #94a3b8);
+    background: var(--content-bg, #f1f5f9);
+}
+
+.cron-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ─── 启停开关 ─── */
+.cron-switch {
+    appearance: none;
+    width: 34px;
+    height: 19px;
+    border-radius: 999px;
+    background: var(--content-bg, #e2e8f0);
+    border: 1px solid var(--card-border, #cbd5e1);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.cron-switch:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.cron-switch i {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s;
+}
+
+.cron-switch.on {
+    background: var(--accent, #3b82f6);
+    border-color: var(--accent, #3b82f6);
+}
+
+.cron-switch.on i {
+    transform: translateX(15px);
+}
+
+/* ─── 表单弹窗（执行周期选择器） ─── */
+.cron-form-modal {
+    width: 620px;
+    max-width: 92vw;
+}
+
+.cron-modal-body .field {
+    margin-bottom: 18px;
+}
+
+.cron-modal-body .field:last-child {
+    margin-bottom: 0;
+}
+
+/* 类型选择 chips */
+.cron-kind-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cron-kind-chip {
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #475569);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.cron-kind-chip:hover {
+    border-color: var(--accent, #3b82f6);
+    color: var(--accent, #3b82f6);
+}
+
+.cron-kind-chip.active {
+    background: var(--accent, #3b82f6);
+    border-color: var(--accent, #3b82f6);
+    color: #fff;
+}
+
+/* 参数行：圆角条内的行内输入 */
+.cron-schedule-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: var(--content-bg, #f1f5f9);
+    font-size: 0.8rem;
+    color: var(--text-secondary, #475569);
+}
+
+/* 覆盖 .field input 的 width:100%，行内输入自适应宽度 */
+.cron-schedule-row input,
+.cron-schedule-row select {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 4px 8px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #cbd5e1);
+    border-radius: 6px;
+}
+
+.cron-schedule-row input[type="number"] {
+    width: 70px;
+}
+
+.cron-schedule-row input[type="time"] {
+    width: 110px;
+}
+
+.cron-schedule-row select {
+    width: 90px;
+}
+
+.cron-schedule-row input:focus,
+.cron-schedule-row select:focus {
+    outline: none;
+    border-color: var(--accent, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.cron-schedule-hint {
+    color: var(--text-dim, #64748b);
+}
+
+/* 表达式展示条 */
+.cron-expr-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px dashed var(--card-border, #cbd5e1);
+    border-radius: 8px;
+}
+
+.cron-expr-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-muted, #94a3b8);
+}
+
+.cron-expr-bar code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    color: var(--accent, #3b82f6);
+    word-break: break-all;
+}
+
+/* 后续执行时间 chips */
+.cron-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #475569);
+}
+
+.cron-preview.invalid {
+    color: #dc2626;
+}
+
+.cron-preview-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.7rem;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--content-bg, #f1f5f9);
+    color: var(--text-secondary, #475569);
+    white-space: nowrap;
+}

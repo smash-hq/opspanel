@@ -87,6 +87,10 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	settingsHandler := api.NewSettingsHandler(log, store.DB(), dataDir)
 	settingsHandler.Register(mux)
 
+	// --- 定时任务（crontab 管理） ---
+	cronHandler := api.NewCronHandler(log, store)
+	cronHandler.Register(mux)
+
 	// --- WebSocket ---
 	hub := ws.NewHub(log)
 	go hub.Run()
