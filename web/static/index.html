@@ -148,12 +148,19 @@
                     <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新数据">↻ <span>刷新</span></button>
                 </template>
                 <button class="topbar-icon-btn" @click="showDoc = true" title="使用文档">📖</button>
-                <button class="topbar-icon-btn" @click="handleLogout" title="退出登录 ({{ currentUser }})">⎋</button>
                 <select class="theme-select" v-model="themeVal" @change="setTheme(themeVal)" title="切换主题">
                     <option value="light">☀️ 白天</option>
                     <option value="dark">🌙 夜间</option>
                     <option value="system">💻 跟随</option>
                 </select>
+                <button class="logout-button" @click="handleLogout" :title="'退出登录 (' + currentUser + ')'">
+                    <svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span class="logout-name">{{ currentUser }}</span>
+                </button>
             </div>
         </header>
 
