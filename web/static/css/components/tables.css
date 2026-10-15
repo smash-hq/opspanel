@@ -52,6 +52,57 @@
     grid-template-columns: minmax(140px, 300px) 110px 92px 1fr 92px;
 }
 
+/* ─── 左右双栏布局下：已安装表格紧凑列（软件 5 列 / 语言 4 列，隐藏弹性空隙列） ─── */
+.sw-dual-layout .sw-installed-header,
+.sw-dual-layout .sw-installed-row {
+    gap: 8px;
+    padding: 10px 10px;
+}
+
+.sw-dual-layout .sw-col-spacer {
+    display: none;
+}
+
+.sw-dual-layout .sw-installed-table:not(.lang-table-4col) .sw-installed-header,
+.sw-dual-layout .sw-installed-table:not(.lang-table-4col) .sw-installed-row {
+    grid-template-columns: minmax(72px, 1fr) 64px 52px auto 58px;
+}
+
+.sw-dual-layout .sw-installed-table.lang-table-4col .sw-installed-header,
+.sw-dual-layout .sw-installed-table.lang-table-4col .sw-installed-row {
+    grid-template-columns: minmax(90px, 1fr) 76px 60px 62px;
+}
+
+.sw-dual-layout .sw-col-name {
+    gap: 8px;
+}
+
+.sw-dual-layout .sw-row-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+}
+
+.sw-dual-layout .sw-status-badge {
+    padding: 2px 7px;
+    font-size: 0.65rem;
+}
+
+/* 服务控制按钮半宽下 2×2 换行，保持可点击尺寸 */
+.sw-dual-layout .sw-svc-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+}
+
+.sw-dual-layout .sw-service-btns {
+    flex-wrap: wrap;
+    gap: 2px;
+    width: 50px;
+    justify-content: center;
+}
+
 /* 弹性空隙列：吸收剩余宽度，让操作列贴右、内容列紧凑 */
 .sw-col-spacer {
     min-width: 0;
@@ -68,6 +119,7 @@
 }
 
 .sw-col-name {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -113,13 +165,16 @@
     white-space: nowrap;
 }
 
-/* 版本悬浮气泡：鼠标悬浮即时显示完整版本信息 */
-.sw-col-version:not([data-title=""]):hover::after {
+/* 悬浮气泡（通用）：任何带 data-title 的截断文本（版本/名称/介绍）悬浮时显示完整内容。
+   气泡定位在最近的 positioned 祖先/自身上，触发元素自身的 overflow 截断不影响气泡显示。
+   可安装行：悬浮整个 info 块即同时展示名称（上方）+ 介绍（下方）双气泡 */
+.sw-col-version:not([data-title=""]):hover::after,
+.sw-col-name:not([data-title=""]):hover::after,
+.sw-install-info:hover .sw-install-name:not([data-title=""])::after {
     content: attr(data-title);
     position: absolute;
     bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
     width: max-content;
     max-width: 380px;
     padding: 6px 10px;
@@ -136,14 +191,50 @@
     z-index: 100;
 }
 
-.sw-col-version:not([data-title=""]):hover::before {
+/* 介绍气泡：显示在 info 块下方 */
+.sw-install-info:hover .sw-install-desc:not([data-title=""])::after {
+    content: attr(data-title);
+    position: absolute;
+    top: calc(100% + 8px);
+    bottom: auto;
+    left: 0;
+    width: max-content;
+    max-width: 380px;
+    padding: 6px 10px;
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    border-radius: 6px;
+    white-space: normal;
+    word-break: break-all;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.sw-col-version:not([data-title=""]):hover::before,
+.sw-col-name:not([data-title=""]):hover::before,
+.sw-install-info:hover .sw-install-name:not([data-title=""])::before {
     content: '';
     position: absolute;
     bottom: calc(100% + 3px);
-    left: 50%;
-    transform: translateX(-50%);
+    left: 16px;
     border: 5px solid transparent;
     border-top-color: #1e293b;
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* 介绍气泡箭头：位于 info 块下方，尖端朝上指向 info */
+.sw-install-info:hover .sw-install-desc:not([data-title=""])::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 16px;
+    border: 5px solid transparent;
+    border-bottom-color: #1e293b;
     pointer-events: none;
     z-index: 100;
 }

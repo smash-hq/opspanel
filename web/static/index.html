@@ -649,6 +649,7 @@
                     <div class="sw-tab-toolbar">
                         <button class="toolbar-button" @click="loadSoftwareStatus(selectedServer)" :disabled="softwareLoading">{{ softwareLoading ? '查询中...' : '↻ 刷新状态' }}</button>
                     </div>
+                    <div class="sw-dual-layout">
                     <!-- 已安装软件 -->
                     <div class="sw-section" v-if="softwareStatuses.filter(s => s.installed).length">
                         <h4>已安装软件（{{ softwareStatuses.filter(s => s.installed).length }}）</h4>
@@ -662,7 +663,7 @@
                                 <span class="sw-col-actions">操作</span>
                             </div>
                             <div v-for="sw in softwareStatuses.filter(s => s.installed)" :key="sw.package.id" class="sw-installed-row">
-                                <span class="sw-col-name">
+                                <span class="sw-col-name" :data-title="sw.package.name">
                                     <span class="sw-row-icon">{{ sw.package.icon }}</span>
                                     <strong>{{ sw.package.name }}</strong>
                                 </span>
@@ -694,31 +695,28 @@
                             <h4>可安装软件（{{ availableSoftwareFiltered.length }} / {{ availableSoftware.length }}）</h4>
                             <input class="sw-search-input" v-model="softwareSearch" placeholder="搜索名称、描述...">
                         </div>
-                        <div class="sw-card-grid">
-                            <div v-for="pkg in availableSoftwareFiltered" :key="pkg.id" class="sw-card">
-                                <div class="sw-card-icon">{{ pkg.icon }}</div>
-                                <div class="sw-card-body">
-                                    <strong class="sw-card-name">{{ pkg.name }}</strong>
-                                    <small class="sw-card-desc">{{ pkg.description }}</small>
+                        <div class="sw-install-list">
+                            <div v-for="pkg in availableSoftwareFiltered" :key="pkg.id" class="sw-install-row">
+                                <span class="sw-row-icon">{{ pkg.icon }}</span>
+                                <div class="sw-install-info">
+                                    <strong class="sw-install-name" :data-title="pkg.name">{{ pkg.name }}</strong>
+                                    <small class="sw-install-desc" :data-title="pkg.description">{{ pkg.description }}</small>
                                 </div>
-                                <div class="sw-card-version">
-                                    <div class="sw-combo">
-                                        <input class="sw-combo-input" v-model.trim="selectedVersions[pkg.id]" @focus="versionComboOpen = pkg.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
-                                        <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(pkg.id)" tabindex="-1" title="展开版本列表">▾</button>
-                                        <ul class="sw-combo-list" v-if="versionComboOpen === pkg.id">
-                                            <li v-for="v in (pkg.versions || [])" :key="v" :class="{ active: selectedVersions[pkg.id] === v }" @mousedown.prevent="pickVersion(pkg.id, v)">{{ v }}</li>
-                                            <li v-if="!(pkg.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
-                                        </ul>
-                                    </div>
+                                <div class="sw-combo sw-install-combo">
+                                    <input class="sw-combo-input" v-model.trim="selectedVersions[pkg.id]" @focus="versionComboOpen = pkg.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
+                                    <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(pkg.id)" tabindex="-1" title="展开版本列表">▾</button>
+                                    <ul class="sw-combo-list" v-if="versionComboOpen === pkg.id">
+                                        <li v-for="v in (pkg.versions || [])" :key="v" :class="{ active: selectedVersions[pkg.id] === v }" @mousedown.prevent="pickVersion(pkg.id, v)">{{ v }}</li>
+                                        <li v-if="!(pkg.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
+                                    </ul>
                                 </div>
-                                <div class="sw-card-footer">
-                                    <button class="sw-btn sw-btn-primary" @click="installPackage(pkg.id, selectedVersions[pkg.id] || '')" :disabled="softwareOperating[pkg.id] || selectedServer === 'srv_local'" title="仅远程服务器可安装">
-                                        {{ softwareOperating[pkg.id] ? '安装中...' : '安装' }}
-                                    </button>
-                                </div>
+                                <button class="sw-btn sw-btn-primary" @click="installPackage(pkg.id, selectedVersions[pkg.id] || '')" :disabled="softwareOperating[pkg.id] || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                    {{ softwareOperating[pkg.id] ? '安装中...' : '安装' }}
+                                </button>
                             </div>
                         </div>
                     </div>
+                    </div><!-- /.sw-dual-layout -->
                     <!-- 加载中 -->
                     <div v-if="softwareLoading" class="loading-state" style="padding:20px;">
                         <div class="loading-orbit small"><span></span></div><span>正在加载软件状态...</span>
@@ -740,6 +738,7 @@
                         <small>点击右上角「刷新检测」按钮开始检测服务器已安装的语言环境</small>
                     </div>
                     <template v-else>
+                        <div class="sw-dual-layout">
                         <!-- 已安装语言 -->
                         <div class="sw-section" v-if="detectedLanguages.filter(l => l.status === 'installed').length">
                             <h4>已安装语言（{{ detectedLanguages.filter(l => l.status === 'installed').length }}）</h4>
@@ -752,7 +751,7 @@
                                     <span class="sw-col-actions">操作</span>
                                 </div>
                                 <div v-for="lang in detectedLanguages.filter(l => l.status === 'installed')" :key="lang.id" class="sw-installed-row">
-                                    <span class="sw-col-name">
+                                    <span class="sw-col-name" :data-title="lang.name">
                                         <span class="sw-row-icon">{{ lang.icon || '📦' }}</span>
                                         <strong>{{ lang.name }}</strong>
                                     </span>
@@ -775,31 +774,28 @@
                                 <h4>可安装（{{ detectedLanguagesFiltered.length }} / {{ detectedLanguages.filter(l => l.status !== 'installed').length }}）</h4>
                                 <input class="sw-search-input" v-model="langSearch" placeholder="搜索名称...">
                             </div>
-                            <div class="sw-card-grid">
-                                <div v-for="lang in detectedLanguagesFiltered" :key="lang.id" class="sw-card">
-                                    <div class="sw-card-icon">{{ lang.icon || '📦' }}</div>
-                                    <div class="sw-card-body">
-                                        <strong class="sw-card-name">{{ lang.name }}</strong>
-                                        <small class="sw-card-desc">{{ lang.id }}</small>
+                            <div class="sw-install-list">
+                                <div v-for="lang in detectedLanguagesFiltered" :key="lang.id" class="sw-install-row">
+                                    <span class="sw-row-icon">{{ lang.icon || '📦' }}</span>
+                                    <div class="sw-install-info">
+                                        <strong class="sw-install-name" :data-title="lang.name">{{ lang.name }}</strong>
+                                        <small class="sw-install-desc" :data-title="lang.id">{{ lang.id }}</small>
                                     </div>
-                                    <div class="sw-card-version">
-                                        <div class="sw-combo">
-                                            <input class="sw-combo-input" v-model.trim="selectedVersions[lang.id]" @focus="versionComboOpen = lang.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
-                                            <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(lang.id)" tabindex="-1" title="展开版本列表">▾</button>
-                                            <ul class="sw-combo-list" v-if="versionComboOpen === lang.id">
-                                                <li v-for="v in (lang.versions || [])" :key="v" :class="{ active: selectedVersions[lang.id] === v }" @mousedown.prevent="pickVersion(lang.id, v)">{{ v }}</li>
-                                                <li v-if="!(lang.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
-                                            </ul>
-                                        </div>
+                                    <div class="sw-combo sw-install-combo">
+                                        <input class="sw-combo-input" v-model.trim="selectedVersions[lang.id]" @focus="versionComboOpen = lang.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
+                                        <button type="button" class="sw-combo-arrow" @click="toggleVersionCombo(lang.id)" tabindex="-1" title="展开版本列表">▾</button>
+                                        <ul class="sw-combo-list" v-if="versionComboOpen === lang.id">
+                                            <li v-for="v in (lang.versions || [])" :key="v" :class="{ active: selectedVersions[lang.id] === v }" @mousedown.prevent="pickVersion(lang.id, v)">{{ v }}</li>
+                                            <li v-if="!(lang.versions || []).length" class="sw-combo-empty">暂无预置版本，可直接输入</li>
+                                        </ul>
                                     </div>
-                                    <div class="sw-card-footer">
-                                        <button class="sw-btn sw-btn-primary" @click="installLang(lang.id, selectedVersions[lang.id] || '')" :disabled="langInstallStatus === 'installing' || selectedServer === 'srv_local'" title="仅远程服务器可安装">
-                                            安装
-                                        </button>
-                                    </div>
+                                    <button class="sw-btn sw-btn-primary" @click="installLang(lang.id, selectedVersions[lang.id] || '')" :disabled="langInstallStatus === 'installing' || selectedServer === 'srv_local'" title="仅远程服务器可安装">
+                                        安装
+                                    </button>
                                 </div>
                             </div>
                         </div>
+                        </div><!-- /.sw-dual-layout -->
                     </template>
                 </div>
 

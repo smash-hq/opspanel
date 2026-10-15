@@ -51,67 +51,113 @@
     background: var(--content-bg, #f1f5f9);
 }
 
-/* ─── 可安装软件卡片网格 ─── */
-.sw-card-grid {
+/* ─── 已安装（左） / 可安装（右） 左右双栏布局 ─── */
+.sw-dual-layout {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
 }
 
-.sw-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px 16px 16px;
-    background: var(--card-bg, #fff);
+.sw-dual-layout .sw-section {
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+/* 中窄屏：双栏塌缩为上下堆叠 */
+@media (max-width: 1280px) {
+    .sw-dual-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 双栏半宽下的紧凑适配 */
+.sw-dual-layout .sw-install-row {
+    padding: 8px 12px;
+    gap: 10px;
+}
+
+.sw-dual-layout .sw-combo.sw-install-combo {
+    width: 150px;
+}
+
+.sw-dual-layout .sw-btn {
+    min-width: 48px;
+    padding: 0 8px;
+    font-size: 0.7rem;
+}
+
+.sw-dual-layout .sw-section-toolbar {
+    margin-bottom: 12px;
+    gap: 10px;
+}
+
+/* ─── 可安装列表（紧凑行式，与已安装表格风格一致） ─── */
+.sw-install-list {
     border: 1px solid var(--card-border, #e2e8f0);
     border-radius: 10px;
-    transition: all 0.2s;
-    min-height: 160px;
+    background: var(--card-bg, #fff);
 }
 
-.sw-card:hover {
-    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(59, 130, 246, 0.08));
-    border-color: var(--color-blue, #3b82f6);
-    transform: translateY(-2px);
+.sw-install-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    transition: background 0.15s;
 }
 
-.sw-card-icon {
-    font-size: 2.4rem;
-    margin-bottom: 10px;
+/* 圆角由首末行承担，避免 hover 背景戳出容器圆角 */
+.sw-install-row:first-child {
+    border-radius: 9px 9px 0 0;
 }
 
-.sw-card-body {
+.sw-install-row:last-child {
+    border-radius: 0 0 9px 9px;
+}
+
+.sw-install-row + .sw-install-row {
+    border-top: 1px solid var(--card-border, #e2e8f0);
+}
+
+.sw-install-row:hover {
+    background: var(--content-bg, #f8fafc);
+}
+
+.sw-install-info {
     flex: 1;
+    min-width: 0;
+    position: relative; /* 名称/介绍悬浮气泡的定位基准 */
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    text-align: center;
-    width: 100%;
+    gap: 1px;
 }
 
-.sw-card-name {
-    font-size: 0.9rem;
+.sw-install-name {
+    font-size: 0.88rem;
     font-weight: 600;
     color: var(--text-primary, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.sw-card-desc {
+.sw-install-desc {
     font-size: 0.72rem;
     color: var(--text-muted, #64748b);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 100%;
 }
 
-.sw-card-version {
-    margin-top: 10px;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+/* 高优先级覆盖 .sw-combo 的 width:100%，固定版本框宽度 */
+.sw-combo.sw-install-combo {
+    width: 200px;
+    flex-shrink: 0;
+}
+
+.sw-install-row .sw-btn {
+    flex-shrink: 0;
 }
 
 /* 版本组合框：点击展开全部预置版本（来自通用配置），也可直接输入自定义版本 */
@@ -204,10 +250,20 @@
     background: none;
 }
 
-.sw-card-footer {
-    margin-top: 12px;
-    width: 100%;
-    display: flex;
-    justify-content: center;
+/* 窄屏：操作区换行到名称下方 */
+@media (max-width: 720px) {
+    .sw-install-row {
+        flex-wrap: wrap;
+        padding: 10px 16px;
+    }
+
+    .sw-install-info {
+        flex: 1 0 calc(100% - 48px);
+    }
+
+    .sw-combo.sw-install-combo {
+        flex: 1;
+        width: auto;
+    }
 }
 
