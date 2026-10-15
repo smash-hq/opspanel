@@ -166,10 +166,10 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// reservedSettingKey 认证模块内部使用的保留键前缀，禁止经通用设置 API 读写，
-// 防止管理员凭据（auth_user）被读取或篡改。
+// reservedSettingKey 内部模块使用的保留键前缀，禁止经通用设置 API 读写：
+// auth_ 为认证模块凭据，smtp_ 为邮件通知配置（含 SMTP 密码），防止被读取或篡改。
 func reservedSettingKey(key string) bool {
-	return strings.HasPrefix(key, "auth_")
+	return strings.HasPrefix(key, "auth_") || strings.HasPrefix(key, "smtp_")
 }
 
 // detectImageType 通过魔数嗅探图片 Content-Type（favicon 上传时不保存后缀，需按内容判断）。

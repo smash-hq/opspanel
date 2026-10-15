@@ -977,6 +977,135 @@ func (rc *RemoteCollector) RemoveImage(ctx context.Context, srv *Server, id stri
 	return nil
 }
 
+// DockerRunOptions 是基于已有镜像一键启动容器的配置项。
+type DockerRunOptions struct {
+	Name       string   `json:"name"`        // 容器名（可选）
+	Ports      []string `json:"ports"`       // 端口映射，格式 宿主机端口:容器端口
+	Volumes    []string `json:"volumes"`     // 卷挂载，格式 宿主机路径:容器路径
+	Envs       []string `json:"envs"`        // 环境变量，格式 KEY=VALUE
+	Network    string   `json:"network"`     // 网络模式（bridge/host/none 或自定义网络，可选）
+	Restart    string   `json:"restart"`     // 重启策略（no/always/on-failure/unless-stopped，可选）
+	Cmd        string   `json:"cmd"`         // 覆盖镜像默认启动命令（可选）
+	Privileged bool     `json:"privileged"`  // 特权模式（--privileged）
+	AutoRemove bool     `json:"auto_remove"` // 退出后自动删除（--rm）
+	Tty        bool     `json:"tty"`         // 分配 TTY（-t）
+}
+
+// isContainerID 判断输出是否为 docker run -d 成功时打印的 64 位容器 ID。
+func isContainerID(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// extractContainerID 从 docker run -d 的输出中提取容器 ID。
+// 成功时最后一行必为 64 位容器 ID，但前面可能带 WARNING 等前导行；
+// 失败时错误信息出现在 ID 之后（若创建了容器），最后一行不是 ID。
+func extractContainerID(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	last := strings.TrimSpace(lines[len(lines)-1])
+	if isContainerID(last) {
+		return last
+	}
+	return ""
+}
+
+// runSudoKeepOut 与 RunWithSudo 类似（先直接执行、失败回退 sudo -n），
+// 但失败时保留输出 —— docker run 的报错信息在合并输出中，不能因非零退出码丢弃。
+func (rc *RemoteCollector) runSudoKeepOut(ctx context.Context, client commandRunner, cmd string) string {
+	out, _ := client.RunOnce(ctx, cmd)
+	out = strings.TrimSpace(out)
+	if extractContainerID(out) != "" {
+		return out
+	}
+	// 直接执行失败（目标用户无 docker 权限等），回退 sudo -n
+	sudoOut, _ := client.RunOnce(ctx, "sudo -n "+cmd)
+	return strings.TrimSpace(sudoOut)
+}
+
+// RunContainer 基于已有镜像一键启动容器（docker run -d），返回容器 ID。
+func (rc *RemoteCollector) RunContainer(ctx context.Context, srv *Server, image string, opts DockerRunOptions) (string, error) {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return "", fmt.Errorf("image is required")
+	}
+
+	// 启动容器可能耗时较长，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
+	conn, err := rc.Acquire(srv)
+	if err != nil {
+		return "", err
+	}
+	defer rc.Release(srv.ID)
+
+	// 组装 docker run -d 命令；各参数经 %q 引用防止注入
+	var b strings.Builder
+	b.WriteString("docker run -d")
+	if v := strings.TrimSpace(opts.Name); v != "" {
+		b.WriteString(fmt.Sprintf(" --name %q", v))
+	}
+	for _, p := range opts.Ports {
+		if p = strings.TrimSpace(p); p != "" {
+			b.WriteString(fmt.Sprintf(" -p %q", p))
+		}
+	}
+	for _, v := range opts.Volumes {
+		if v = strings.TrimSpace(v); v != "" {
+			b.WriteString(fmt.Sprintf(" -v %q", v))
+		}
+	}
+	for _, e := range opts.Envs {
+		if e = strings.TrimSpace(e); e != "" {
+			b.WriteString(fmt.Sprintf(" -e %q", e))
+		}
+	}
+	if n := strings.TrimSpace(opts.Network); n != "" && n != "bridge" {
+		b.WriteString(fmt.Sprintf(" --network %q", n))
+	}
+	if r := strings.TrimSpace(opts.Restart); r != "" && r != "no" {
+		b.WriteString(fmt.Sprintf(" --restart %q", r))
+	}
+	if opts.Privileged {
+		b.WriteString(" --privileged")
+	}
+	if opts.AutoRemove {
+		b.WriteString(" --rm")
+	}
+	if opts.Tty {
+		b.WriteString(" -t")
+	}
+	b.WriteString(" " + image)
+	if c := strings.TrimSpace(opts.Cmd); c != "" {
+		b.WriteString(" " + c)
+	}
+	b.WriteString(" 2>&1")
+
+	out := rc.runSudoKeepOut(ctx, conn, b.String())
+	rc.log.Infow("docker run", "image", image, "name", opts.Name, "output", out)
+	// 成功时输出最后一行为 64 位容器 ID，否则为错误信息
+	if id := extractContainerID(out); id != "" {
+		return id, nil
+	}
+	if out == "" {
+		return "", fmt.Errorf("启动容器失败：远端无输出，请确认目标机 Docker 正常运行")
+	}
+	if len(out) > 300 {
+		out = out[:300] + "..."
+	}
+	return "", fmt.Errorf("启动容器失败：%s", out)
+}
+
 // ContainerAction 执行容器操作（start/stop/restart/kill）。
 func (rc *RemoteCollector) ContainerAction(ctx context.Context, srv *Server, id, action string) error {
 	// 容器启停可能耗时较长，套 30 分钟超时

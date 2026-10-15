@@ -13,12 +13,45 @@
 }
 
 .log-toolbar select {
-    padding: 4px 8px;
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 7px 32px 7px 14px;
     border: 1px solid var(--card-border, #e5e7eb);
-    border-radius: 4px;
-    background: var(--card-bg, #fff);
+    border-radius: 8px;
+    background-color: var(--card-bg, #fff);
+    /* 自定义下拉箭头（中性灰，明暗主题通用） */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
     color: var(--text-primary, #111827);
-    font-size: 0.85rem;
+    font-size: 12.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.log-toolbar select:hover {
+    border-color: var(--accent, #2563eb);
+}
+
+.log-toolbar select:focus {
+    outline: none;
+    border-color: var(--accent, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* 日志文件路径：过长省略，悬停 title 提示全路径 */
+.log-file-path {
+    font-size: 12px;
+    color: var(--text-dim, #888);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 55%;
+}
+
+.log-toolbar-spacer {
+    flex: 1;
 }
 
 .log-viewer {

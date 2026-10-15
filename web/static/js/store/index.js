@@ -12,6 +12,7 @@
 import { setupTheme } from './theme.js';
 import { setupAuth } from './auth.js';
 import { setupUi } from './ui.js';
+import { setupNotifications } from './notifications.js';
 import { setupServers } from './servers.js';
 import { setupServerForm } from './server-form.js';
 import { setupSoftware } from './software.js';
@@ -19,6 +20,7 @@ import { setupPackages } from './packages.js';
 import { setupLanguages } from './languages.js';
 import { setupFiles } from './files.js';
 import { setupDocker } from './docker.js';
+import { setupApps } from './apps.js';
 import { setupMirrors } from './mirrors.js';
 import { setupSources } from './sources.js';
 import { setupProcesses } from './processes.js';
@@ -36,6 +38,7 @@ export function setupStore() {
     setupTheme(ctx);
     setupAuth(ctx);
     setupUi(ctx);
+    setupNotifications(ctx);
     setupServers(ctx);
     setupServerForm(ctx);
     setupSoftware(ctx);
@@ -43,6 +46,7 @@ export function setupStore() {
     setupLanguages(ctx);
     setupFiles(ctx);
     setupDocker(ctx);
+    setupApps(ctx);
     setupMirrors(ctx);
     setupSources(ctx);
     setupProcesses(ctx);

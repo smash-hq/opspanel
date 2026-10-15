@@ -13,7 +13,7 @@ const { ref, reactive, computed } = window.Vue;
 export function setupUi(ctx) {
     // ─── 布局状态 ───
     const sidebarCollapsed = ref(false);
-    const activeMenu = ref('main');           // "main" | "settings"
+    const activeMenu = ref('main');           // "main" | "config" | "notifycenter"
     const activeTab = ref('system');          // "system" | "software" | "cluster" | ...
     const configTab = ref('sources');         // "sources" | "packages" | "startup" | "favicon"
     const showDoc = ref(false);
@@ -55,7 +55,6 @@ export function setupUi(ctx) {
     }
 
     const brandName = computed(() => settingsForm.panelName || 'Server Plane');
-    const brandMark = computed(() => settingsForm.panelName ? settingsForm.panelName.slice(0, 2).toUpperCase() : 'SP');
     const welcomeMessage = computed(() => settingsForm.welcomeMessage);
 
     async function saveSettings() {
@@ -192,7 +191,7 @@ export function setupUi(ctx) {
     Object.assign(ctx, {
         sidebarCollapsed, activeMenu, activeTab, configTab, showDoc, searchQuery, activeFilter, filters,
         settingsForm, settingsSaving, loadSettings, saveSettings,
-        brandName, brandMark, welcomeMessage,
+        brandName, welcomeMessage,
         faviconTs, hasCustomFavicon, uploadFavicon, resetFavicon,
         confirmState, confirmDialog, okConfirm, cancelConfirm,
         configDetailVisible, configDetailType, configDetailData,

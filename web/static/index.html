@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="/css/components/languages.css">
     <link rel="stylesheet" href="/css/components/files.css">
     <link rel="stylesheet" href="/css/components/docker.css">
+    <link rel="stylesheet" href="/css/components/apps.css">
+    <link rel="stylesheet" href="/css/components/notifications.css">
     <link rel="stylesheet" href="/css/components/files-table.css">
     <link rel="stylesheet" href="/css/components/perm-guide.css">
     <link rel="stylesheet" href="/css/components/system-info.css">
@@ -51,7 +53,7 @@
     <div class="auth-screen" v-if="authChecked && !authed">
         <div class="auth-card">
             <div class="brand auth-brand">
-                <span class="brand-mark">{{ brandMark }}</span>
+                <span class="brand-mark"><img :src="'/api/v1/settings/favicon?' + faviconTs" alt="站点图标"></span>
                 <div class="brand-copy">
                     <strong>{{ brandName }}</strong>
                     <span>基础设施控制台</span>
@@ -70,7 +72,7 @@
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" v-if="authed">
         <div class="sidebar-header">
             <div class="brand">
-                <span class="brand-mark">{{ brandMark }}</span>
+                <span class="brand-mark"><img :src="'/api/v1/settings/favicon?' + faviconTs" alt="站点图标"></span>
                 <div class="brand-copy" v-show="!sidebarCollapsed">
                     <strong>{{ brandName }}</strong>
                     <span>基础设施控制台</span>
@@ -119,10 +121,26 @@
             </button>
         </div>
 
-        <!-- ═══ 下半部分：通用配置 ═══ -->
+        <!-- ═══ 下半部分：通知中心 / 通用配置 ═══ -->
         <div class="sidebar-bottom">
+            <button class="sidebar-config-btn" :class="{ active: activeMenu === 'notifycenter' }" @click="openNotifyCenter">
+                <span class="config-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                </span>
+                <span class="config-label" v-show="!sidebarCollapsed">通知中心</span>
+                <span v-show="!sidebarCollapsed && unreadCount > 0" class="sidebar-nc-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+                <span class="config-arrow" v-show="!sidebarCollapsed">›</span>
+            </button>
             <button class="sidebar-config-btn" :class="{ active: activeMenu === 'config' }" @click="activeMenu = 'config'">
-                <span class="config-icon">⚙</span>
+                <span class="config-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </span>
                 <span class="config-label" v-show="!sidebarCollapsed">通用配置</span>
                 <span class="config-arrow" v-show="!sidebarCollapsed">›</span>
             </button>
@@ -136,6 +154,9 @@
                 <template v-if="activeMenu === 'config'">
                     <span>控制台</span><b>/</b><strong>通用配置</strong>
                 </template>
+                <template v-else-if="activeMenu === 'notifycenter'">
+                    <span>控制台</span><b>/</b><strong>通知中心</strong>
+                </template>
                 <template v-else-if="selectedServer">
                     <span>控制台</span><b>/</b><strong>{{ currentServerName }}</strong>
                 </template>
@@ -148,6 +169,45 @@
                     <span class="sync-time" v-if="lastUpdate">最后更新 {{ lastUpdate }}</span>
                     <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新数据">↻ <span>刷新</span></button>
                 </template>
+                <!-- 站内通知 -->
+                <div class="notify-wrap">
+                    <button class="topbar-icon-btn notify-bell" :class="{ active: notifyPanelVisible }" @click="toggleNotifyPanel()" title="通知中心">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <span v-if="unreadCount > 0" class="notify-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+                    </button>
+                    <div v-if="notifyPanelVisible" class="notify-panel">
+                        <div class="notify-panel-head">
+                            <strong>通知中心</strong>
+                            <div class="notify-panel-actions">
+                                <button v-if="unreadCount > 0" class="notify-link-btn" @click="markAllRead()">全部已读</button>
+                                <button class="notify-link-btn" @click="clearAllNotifications()">清空</button>
+                                <button class="notify-link-btn" @click="closeNotifyPanel()" title="关闭">✕</button>
+                            </div>
+                        </div>
+                        <div v-if="notifyLoading && !notifications.length" class="notify-empty">加载中...</div>
+                        <div v-else-if="!notifications.length" class="notify-empty">
+                            <span class="notify-empty-icon">🔔</span>暂无通知
+                        </div>
+                        <div v-else class="notify-list">
+                            <div v-for="n in notifications" :key="n.id" class="notify-item" :class="[n.level, { read: n.read }]" @click="openNotification(n)" title="点击查看详情">
+                                <span class="notify-dot"></span>
+                                <div class="notify-item-body">
+                                    <div class="notify-item-meta">
+                                        <span class="notify-type-tag" :class="n.level">{{ notifyTypeLabel(n.level) }}</span>
+                                        <span class="notify-module-tag">{{ notifyModuleLabel(n.module) }}</span>
+                                        <span v-if="!n.read" class="notify-unread-flag">未读</span>
+                                    </div>
+                                    <div class="notify-item-title">{{ n.title }}</div>
+                                    <div v-if="n.message" class="notify-item-msg" :title="n.message">{{ n.message }}</div>
+                                </div>
+                                <span class="notify-item-time">{{ formatNotifyTime(n.created_at) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <button class="topbar-icon-btn" @click="showDoc = true" title="使用文档">📖</button>
                 <select class="theme-select" v-model="themeVal" @change="setTheme(themeVal)" title="切换主题">
                     <option value="light">☀️ 白天</option>
@@ -333,6 +393,104 @@
                 </div>
             </section>
 
+            <!-- ═══ 通知中心页面 ═══ -->
+            <section v-else-if="activeMenu === 'notifycenter'" class="notifycenter-page">
+                <!-- 通知列表：左侧主栏 -->
+                <div class="nc-card nc-list-card">
+                    <div class="nc-toolbar">
+                        <h3>通知列表</h3>
+                        <div class="nc-filters">
+                            <select class="nc-filter" v-model="ncFilterRead" title="按已读筛选">
+                                <option value="all">全部状态</option>
+                                <option value="unread">未读</option>
+                                <option value="read">已读</option>
+                            </select>
+                            <select class="nc-filter" v-model="ncFilterLevel" title="按类型筛选">
+                                <option value="all">全部类型</option>
+                                <option value="info">信息</option>
+                                <option value="warn">警告</option>
+                                <option value="error">错误</option>
+                            </select>
+                            <select class="nc-filter" v-model="ncFilterModule" title="按模块筛选">
+                                <option value="all">全部模块</option>
+                                <option v-for="m in ncModuleOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+                            </select>
+                            <button class="toolbar-button" @click="loadNotifications()" :disabled="notifyLoading">↻ 刷新</button>
+                            <button v-if="unreadCount > 0" class="toolbar-button" @click="markAllRead()">全部已读</button>
+                            <button class="toolbar-button danger-text" @click="clearAllNotifications()">清空</button>
+                        </div>
+                    </div>
+                    <div v-if="notifyLoading && !notifications.length" class="notify-empty">加载中...</div>
+                    <div v-else-if="!ncFiltered.length" class="notify-empty">
+                        <span class="notify-empty-icon">🔔</span>{{ notifications.length ? '没有符合筛选条件的通知' : '暂无通知' }}
+                    </div>
+                    <div v-else class="nc-list">
+                        <div v-for="n in ncFiltered" :key="n.id" class="notify-item" :class="[n.level, { read: n.read }]" @click="openNotification(n)" title="点击查看详情">
+                            <span class="notify-dot"></span>
+                            <div class="notify-item-body">
+                                <div class="notify-item-meta">
+                                    <span class="notify-type-tag" :class="n.level">{{ notifyTypeLabel(n.level) }}</span>
+                                    <span class="notify-module-tag">{{ notifyModuleLabel(n.module) }}</span>
+                                    <span v-if="!n.read" class="notify-unread-flag">未读</span>
+                                </div>
+                                <div class="notify-item-title">{{ n.title }}</div>
+                                <div v-if="n.message" class="notify-item-msg" :title="n.message">{{ n.message }}</div>
+                            </div>
+                            <span class="notify-item-time">{{ formatNotifyTime(n.created_at) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 邮件通知（SMTP）设置：固定在右侧栏 -->
+                <div class="nc-card nc-mail-card">
+                    <h3>邮件通知（SMTP）</h3>
+                    <p class="settings-desc">配置 SMTP 服务器后，新产生的站内通知会同步通过邮件发送；邮件异步发送，失败不影响站内通知。</p>
+                    <label class="nc-switch-row">
+                        <input type="checkbox" v-model="emailForm.enabled">
+                        <span>启用邮件通知</span>
+                        <span v-if="emailHasPassword" class="nc-mail-saved">✓ 已保存密码</span>
+                    </label>
+                    <div class="nc-form-grid">
+                        <div class="field">
+                            <span>SMTP 服务器</span>
+                            <input type="text" v-model.trim="emailForm.host" placeholder="smtp.example.com">
+                        </div>
+                        <div class="field">
+                            <span>端口</span>
+                            <input type="number" v-model.number="emailForm.port" min="1" max="65535" placeholder="465">
+                        </div>
+                        <div class="field">
+                            <span>加密方式</span>
+                            <select v-model="emailForm.encryption">
+                                <option value="ssl">SSL/TLS（常用端口 465）</option>
+                                <option value="starttls">STARTTLS（常用端口 587）</option>
+                                <option value="none">不加密（常用端口 25）</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <span>账号</span>
+                            <input type="text" v-model.trim="emailForm.user" placeholder="user@example.com">
+                        </div>
+                        <div class="field">
+                            <span>密码 / 授权码 <small v-if="emailHasPassword" class="field-hint-inline">留空保持不变</small></span>
+                            <input type="password" v-model="emailForm.password" :placeholder="emailHasPassword ? '••••••••' : 'SMTP 授权码'" autocomplete="new-password">
+                        </div>
+                        <div class="field">
+                            <span>发件人 From</span>
+                            <input type="text" v-model.trim="emailForm.from" placeholder="panel@example.com（留空则使用账号）">
+                        </div>
+                        <div class="field full">
+                            <span>收件人 To（多个用逗号分隔）</span>
+                            <input type="text" v-model.trim="emailForm.to" placeholder="a@example.com, b@example.com">
+                        </div>
+                    </div>
+                    <div class="nc-mail-actions">
+                        <button class="primary-button small" @click="saveEmailConfig()" :disabled="emailSaving || emailTesting">{{ emailSaving ? '保存中...' : '保存配置' }}</button>
+                        <button class="toolbar-button" @click="testEmail()" :disabled="emailSaving || emailTesting">{{ emailTesting ? '发送中...' : '✉ 发送测试邮件' }}</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- ═══ 未选择节点 ═══ -->
             <section v-else-if="!selectedServer" class="empty-state-view">
                 <div class="empty-state-icon">🖥️</div>
@@ -351,6 +509,7 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; currentFilePath = '/'; loadFiles('/')">文件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'apps' }" @click="onAppsTabClick()">服务部署</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="onDockerTabClick()" :title="dockerTabEnabled ? '' : '未检测到 Docker 环境，点击重新检测'">Docker</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'terminal', disabled: selectedServer === 'srv_local' || !selectedServer }" @click="openTerminalTab()" :title="selectedServer === 'srv_local' ? '本地节点暂不支持终端' : ''">终端</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'cron' }" @click="activeTab = 'cron'; loadCronJobs()">定时任务</button>
@@ -756,6 +915,64 @@
                     </div>
                 </div>
 
+                <!-- 服务部署 Tab -->
+                <div v-if="activeTab === 'apps'" class="node-tab-content">
+                    <div class="cron-toolbar">
+                        <div class="app-stats">
+                            <span class="app-stat-chip"><b>{{ appStats.total }}</b>&nbsp;个部署</span>
+                            <span class="app-stat-chip on" title="运行中">● 运行中&nbsp;<b>{{ appStats.running }}</b></span>
+                            <span class="app-stat-chip failed" title="启动失败">⚠ 启动失败&nbsp;<b>{{ appStats.failed }}</b></span>
+                            <span class="app-stat-chip" title="未启动">○ 未启动&nbsp;<b>{{ appStats.stopped }}</b></span>
+                        </div>
+                        <span class="cron-toolbar-spacer"></span>
+                        <button class="toolbar-button" @click="loadApps(true)" :disabled="appsLoading">↻ 刷新</button>
+                        <button class="primary-button" @click="openAppForm()">＋ 新建部署</button>
+                    </div>
+                    <div v-if="appsLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                    <div v-else-if="!apps.length" class="list-empty">
+                        <span class="empty-icon">🚀</span><strong>尚未部署任何服务</strong>
+                        <p>点击右上角「新建部署」上传 jar 包 / go 文件 / python 代码并配置启动命令</p>
+                    </div>
+                    <div v-else class="cron-list">
+                        <div v-for="app in apps" :key="app.id" class="cron-card">
+                            <div class="cron-card-main">
+                                <div class="cron-card-head">
+                                    <span class="cron-name" :title="app.name">{{ app.name }}</span>
+                                    <span class="app-lang-badge" :class="app.language">{{ app.language }}</span>
+                                    <span class="app-status-badge" :class="[appStatusClass(app), { clickable: app.status === 'failed' }]"
+                                          :title="app.status === 'failed' ? '点击查看失败原因' : ''"
+                                          @click="app.status === 'failed' && showAppError(app)">
+                                        {{ appStatusText(app) }}
+                                    </span>
+                                    <span v-if="app.status === 'running' && app.pid > 0" class="cron-expr" :title="'PID ' + app.pid">PID {{ app.pid }}</span>
+                                </div>
+                                <div class="cron-command" :title="app.start_cmd">$ {{ app.start_cmd }}</div>
+                                <div class="cron-meta">
+                                    <span class="cron-meta-item" title="部署目录">📁 {{ app.deploy_dir }}</span>
+                                    <span class="cron-meta-item" title="日志文件">📄 {{ app.log_file || (app.deploy_dir.replace(/\/$/, '') + '/app.log') }}</span>
+                                    <span class="cron-meta-item" title="已上传产物">{{ appArtifacts(app).length }} 个文件</span>
+                                    <span v-if="app.remark" class="cron-meta-item" :title="app.remark">✎ {{ app.remark }}</span>
+                                </div>
+                            </div>
+                            <div class="cron-card-actions">
+                                <button class="app-row-btn primary" v-if="app.status !== 'running'" @click="appStart(app)" :disabled="appBusyId === app.id">
+                                    <span v-if="appActionBusy(app, 'start')" class="btn-spinner"></span>{{ appActionBusy(app, 'start') ? '启动中' : '启动' }}
+                                </button>
+                                <button class="app-row-btn warn" v-else @click="appStop(app)" :disabled="appBusyId === app.id">
+                                    <span v-if="appActionBusy(app, 'stop')" class="btn-spinner"></span>{{ appActionBusy(app, 'stop') ? '停止中' : '停止' }}
+                                </button>
+                                <button class="app-row-btn" @click="appRestart(app)" :disabled="appBusyId === app.id">
+                                    <span v-if="appActionBusy(app, 'restart')" class="btn-spinner"></span>{{ appActionBusy(app, 'restart') ? '重启中' : '重启' }}
+                                </button>
+                                <button class="app-row-btn" @click="appViewLogs(app)">日志</button>
+                                <button class="app-row-btn" @click="openAppUpload(app)" title="上传新产物覆盖部署">二次部署</button>
+                                <button class="app-row-btn" @click="openAppEditForm(app)">编辑</button>
+                                <button class="app-row-btn danger" @click="appDelete(app)">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Docker 管理 Tab -->
                 <div v-if="activeTab === 'docker'" class="node-tab-content">
                     <!-- Docker 信息栏 -->
@@ -800,7 +1017,8 @@
                                 <span class="docker-img-id">{{ img.id.substring(0, 12) }}</span>
                                 <span class="docker-img-size">{{ img.size }}</span>
                                 <span class="docker-img-actions">
-                                    <button class="proc-btn danger" @click="dockerRemoveImage(img.id)" title="删除">×</button>
+                                    <button class="docker-row-btn primary" @click="openRunForm(img)">部署</button>
+                                    <button class="docker-row-btn danger" @click="dockerRemoveImage(img.id)">删除</button>
                                 </span>
                             </div>
                         </div>
@@ -1380,6 +1598,32 @@
         </div>
     </div>
 
+    <!-- 通知详情弹窗 -->
+    <div class="modal-overlay" v-if="notifDetailVisible" @click.self="closeNotifDetail">
+        <div class="modal notif-detail-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">NOTIFICATION</span><h3>通知详情</h3></div>
+                <button class="icon-button" @click="closeNotifDetail" title="关闭">×</button>
+            </div>
+            <div class="modal-body" v-if="notifDetail">
+                <div class="notif-detail-title">{{ notifDetail.title }}</div>
+                <div class="notif-detail-meta">
+                    <span class="notify-type-tag" :class="notifDetail.level">{{ notifyTypeLabel(notifDetail.level) }}</span>
+                    <span class="notify-module-tag">{{ notifyModuleLabel(notifDetail.module) }}</span>
+                    <span class="notify-read-state" :class="{ unread: !notifDetail.read }">{{ notifDetail.read ? '已读' : '未读' }}</span>
+                    <span class="notif-detail-time">{{ formatNotifyTime(notifDetail.created_at) }}</span>
+                </div>
+                <div class="notif-detail-section">
+                    <div class="form-section-title">详情</div>
+                    <pre class="notif-detail-content">{{ notifDetail.message || '（无更多详情）' }}</pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="primary-button" @click="closeNotifDetail">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 语言安装日志弹窗 -->
     <div class="modal-overlay" v-if="langInstallLogVisible" @click.self="langInstallLogVisible = false">
         <div class="modal log-modal">
@@ -1466,6 +1710,201 @@
                 <div class="log-viewer">
                     <pre>{{ dockerLogsData.logs || '暂无日志' }}</pre>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker 一键启动容器弹窗 -->
+    <div class="modal-overlay" v-if="dockerRunVisible" @click.self="dockerRunVisible = false">
+        <div class="modal file-preview-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">RUN CONTAINER</span><h3>{{ dockerRunData.image }} · 启动容器</h3></div>
+                <button class="icon-button" @click="dockerRunVisible = false" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <label class="field"><span>镜像</span><input v-model="dockerRunData.image" placeholder="nginx:latest"></label>
+                    <label class="field"><span>容器名（可选）</span><input v-model="dockerRunData.name" placeholder="my-nginx"></label>
+                    <label class="field full"><span>端口映射（每行一条，格式：宿主机端口:容器端口）</span><textarea v-model="dockerRunData.ports" rows="2" placeholder="8080:80"></textarea></label>
+                    <label class="field full"><span>卷挂载（每行一条，格式：宿主机路径:容器路径）</span><textarea v-model="dockerRunData.volumes" rows="2" placeholder="/data/nginx:/usr/share/nginx/html"></textarea></label>
+                    <label class="field full"><span>环境变量（每行一条，格式：KEY=VALUE）</span><textarea v-model="dockerRunData.envs" rows="2" placeholder="TZ=Asia/Shanghai"></textarea></label>
+                    <label class="field"><span>网络模式</span><select v-model="dockerRunData.network"><option value="">默认 (bridge)</option><option value="host">host</option><option value="none">none</option></select></label>
+                    <label class="field"><span>重启策略</span><select v-model="dockerRunData.restart"><option value="no">不重启</option><option value="always">always</option><option value="on-failure">on-failure</option><option value="unless-stopped">unless-stopped</option></select></label>
+                    <label class="field full"><span>启动命令（可选，覆盖镜像默认 CMD）</span><input v-model="dockerRunData.cmd" placeholder="nginx -g 'daemon off;'"></label>
+                    <div class="field full docker-run-checks">
+                        <label class="show-all-label"><input type="checkbox" v-model="dockerRunData.privileged"> 特权模式</label>
+                        <label class="show-all-label"><input type="checkbox" v-model="dockerRunData.autoRemove"> 退出后自动删除</label>
+                        <label class="show-all-label"><input type="checkbox" v-model="dockerRunData.tty"> 分配 TTY</label>
+                    </div>
+                </div>
+                <div style="margin-top: 14px; display:flex; justify-content:flex-end; gap:10px;">
+                    <button class="toolbar-button" @click="dockerRunVisible = false">取消</button>
+                    <button class="primary-button small" @click="dockerRunContainer()" :disabled="dockerRunLoading">{{ dockerRunLoading ? '启动中...' : '▶ 一键启动' }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务启动确认弹窗（结构化部署信息） -->
+    <div class="modal-overlay" v-if="appStartVisible" @click.self="cancelAppStart">
+        <div class="modal app-start-modal">
+            <div class="modal-header">
+                <div>
+                    <span class="eyebrow">START SERVICE</span>
+                    <h3>启动「{{ appStartInfo.name }}」</h3>
+                </div>
+                <button class="icon-button" @click="cancelAppStart" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="app-start-rows">
+                    <div class="app-start-row">
+                        <span class="app-start-label">📁 部署目录</span>
+                        <code class="app-start-value">{{ appStartInfo.deployDir }}</code>
+                    </div>
+                    <div class="app-start-row">
+                        <span class="app-start-label">🚀 启动命令</span>
+                        <code class="app-start-value">{{ appStartInfo.startCmd }}</code>
+                    </div>
+                    <div class="app-start-row">
+                        <span class="app-start-label">📄 日志文件</span>
+                        <code class="app-start-value">{{ appStartInfo.logFile }}</code>
+                    </div>
+                    <div class="app-start-row">
+                        <span class="app-start-label">⚙ 实际执行命令</span>
+                        <code class="app-start-value dim">{{ appStartInfo.effCmd }}</code>
+                    </div>
+                </div>
+                <p class="app-start-hint">
+                    <b>启动命令里无需再写 nohup、重定向或 &amp;</b>，否则会影响 PID 记录与状态检测。
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-button" @click="cancelAppStart">取消</button>
+                <button class="primary-button" @click="okAppStart">▶ 启动</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务部署表单弹窗（基本信息 + 上传产物两步式） -->
+    <div class="modal-overlay" v-if="appFormVisible" @click.self="closeAppForm">
+        <div class="modal file-preview-modal">
+            <div class="modal-header">
+                <div>
+                    <span class="eyebrow">APP DEPLOY</span>
+                    <h3 v-if="appFormStep === 'form'">{{ appFormMode === 'add' ? '新建服务部署' : '编辑服务部署' }}</h3>
+                    <h3 v-else>上传部署产物 · {{ createdApp ? createdApp.name : '' }}</h3>
+                </div>
+                <button class="icon-button" @click="closeAppForm" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- 步骤一：基本信息 -->
+                <template v-if="appFormStep === 'form'">
+                    <div class="form-grid">
+                        <label class="field"><span>服务名称 *</span><input v-model="appForm.name" placeholder="my-app"></label>
+                        <label class="field"><span>部署语言 *</span>
+                            <select v-model="appForm.language" @change="checkAppLanguage()">
+                                <option value="java">Java（jar 包）</option>
+                                <option value="python">Python（代码目录）</option>
+                                <option value="go">Go（二进制 / go run）</option>
+                            </select>
+                        </label>
+                        <label class="field full"><span>部署目录（绝对路径）*</span><input v-model="appForm.deploy_dir" placeholder="/opt/my-app"></label>
+                        <label class="field full"><span>启动命令 *</span><input v-model="appForm.start_cmd" placeholder="java -jar app.jar --server.port=8080"><small class="field-hint">只填核心命令即可，无需 nohup、日志重定向或结尾的 &amp;：系统会自动以 nohup 后台运行，并将输出追加写入下方日志文件</small></label>
+                        <label class="field full"><span>日志文件（可选，默认 部署目录/app.log）</span><input v-model="appForm.log_file" placeholder="/opt/my-app/logs/stdout.log"></label>
+                        <label class="field full"><span>备注（可选）</span><input v-model="appForm.remark" placeholder="订单服务 · 8080 端口"></label>
+                    </div>
+                    <!-- 语言环境检测 -->
+                    <div class="app-lang-check" v-if="appLangChecking">⟳ 正在检测服务器 {{ appForm.language }} 运行环境...</div>
+                    <div class="app-lang-check ok" v-else-if="appLangStatus && appLangStatus.installed">✓ 已检测到 {{ appForm.language }} 环境{{ appLangStatus.version ? '（' + appLangStatus.version + '）' : '' }}，可正常启动</div>
+                    <div class="app-lang-check error" v-else-if="appLangStatus && !appLangStatus.installed">
+                        <span>⚠ 服务器缺少 {{ appForm.language }} 运行环境，请先安装后再启动服务</span>
+                        <button class="toolbar-button" style="margin-left:10px;" @click="appFormVisible = false; activeTab = 'languages'; detectServerLanguages()">去语言环境安装</button>
+                    </div>
+                    <div class="form-notice" style="margin-top:10px;">服务通过 nohup 后台拉起并记录 PID；停止时先 TERM 后 KILL。日志文件用于页面内 tail 查看。</div>
+                    <div v-if="appFormError" class="app-lang-check error">{{ appFormError }}</div>
+                    <div style="margin-top: 14px; display:flex; justify-content:flex-end; gap:10px;">
+                        <button class="toolbar-button" @click="closeAppForm">取消</button>
+                        <button class="primary-button small" @click="saveApp()" :disabled="appSaving">{{ appSaving ? '保存中...' : (appFormMode === 'add' ? '保存并上传产物 →' : '保存') }}</button>
+                    </div>
+                </template>
+                <!-- 步骤二：上传产物 -->
+                <template v-else>
+                    <div class="form-notice" v-if="createdApp">
+                        部署目录：<strong>{{ createdApp.deploy_dir }}</strong>　启动命令：<strong>{{ createdApp.start_cmd }}</strong>
+                    </div>
+                    <!-- 隐藏原生 input，自定义美化按钮触发 -->
+                    <input id="app-file-input" type="file" multiple hidden :accept="appFileAccept" @change="onAppFileInputChange">
+                    <input id="app-dir-input" type="file" webkitdirectory hidden @change="onAppFileInputChange">
+                    <div class="app-upload-picker">
+                        <label class="show-all-label"><input type="radio" value="files" v-model="uploadDirMode"> 选择文件</label>
+                        <label class="show-all-label"><input type="radio" value="dir" v-model="uploadDirMode"> 选择目录（python/go 源码）</label>
+                        <span class="cron-toolbar-spacer" style="flex:1;"></span>
+                        <button type="button" class="app-pick-btn" @click="pickAppFiles(uploadDirMode)">
+                            📁 {{ uploadDirMode === 'files' ? '选择文件' : '选择目录' }}
+                        </button>
+                        <span v-if="appFileAccept" class="app-pick-hint">仅支持 {{ appFileAccept }}</span>
+                    </div>
+                    <div v-if="pendingAppFiles.length" class="app-upload-pending">
+                        <div class="app-upload-head">
+                            <span>待上传 {{ pendingAppFiles.length }} 个文件</span>
+                            <button class="toolbar-button" @click="clearPendingAppFiles()" :disabled="appUploadState.running">清空</button>
+                        </div>
+                        <div class="app-upload-list">
+                            <div v-for="item in pendingAppFiles" :key="item.relPath" class="app-upload-item">📄 {{ item.relPath }}<span class="app-upload-size">{{ formatAppSize(item.file.size) }}</span></div>
+                        </div>
+                    </div>
+                    <!-- 上传进度条（分片 + 断点续传） -->
+                    <div v-if="appUploadState.running || appUploadFailed" class="app-upload-progress" :class="{ error: appUploadFailed && !appUploadState.running }">
+                        <div class="app-upload-progress-head">
+                            <span class="app-upload-file">{{ appUploadState.running ? '⟳ 正在上传：' : '✗ 上传中断：' }}{{ appUploadState.currentFileName }}</span>
+                            <span class="app-upload-pct">{{ appUploadPercent }}%</span>
+                        </div>
+                        <div class="app-upload-bar"><div class="app-upload-bar-fill" :style="{ width: appUploadPercent + '%' }"></div></div>
+                        <div class="app-upload-progress-meta">
+                            分片 {{ appUploadState.chunkDone }}/{{ appUploadState.chunkTotal }}
+                            · {{ formatAppSize(appUploadState.bytesDone) }} / {{ formatAppSize(appUploadState.bytesTotal) }}
+                            <template v-if="appUploadState.skipped > 0"> · 断点续传，已跳过 {{ appUploadState.skipped }} 个分片</template>
+                        </div>
+                    </div>
+                    <div v-else-if="uploadedFiles.length" class="app-upload-pending">
+                        <div class="app-upload-head"><span>已上传 {{ uploadedFiles.length }} 个文件</span></div>
+                        <div class="app-upload-list">
+                            <div v-for="f in uploadedFiles" :key="f.path" class="app-upload-item done">✓ {{ f.path }}<span class="app-upload-size">{{ formatAppSize(f.size) }}</span></div>
+                        </div>
+                    </div>
+                    <div class="form-notice" style="margin-top:10px;">文件将写入部署目录（相对路径平铺）。大文件分片上传、支持断点续传；上传完成后在列表页启动服务。</div>
+                    <div style="margin-top: 14px; display:flex; justify-content:flex-end; gap:10px;">
+                        <button class="toolbar-button" @click="closeAppForm" :disabled="appUploadState.running">完成</button>
+                        <button class="primary-button small" @click="uploadPendingAppFiles()" :disabled="!pendingAppFiles.length || appUploadState.running">
+                            {{ appUploadState.running ? '上传中 ' + appUploadPercent + '%' : (appUploadFailed ? '⇧ 继续上传（断点续传）' : '⇧ 开始上传') }}
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务日志弹窗 -->
+    <div class="modal-overlay" v-if="appLogsVisible" @click.self="closeAppLogs">
+        <div class="modal log-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">APP LOG</span><h3>{{ appLogsData.name }} · 服务日志</h3></div>
+                <button class="icon-button" @click="closeAppLogs" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-toolbar">
+                    <span class="log-file-path" :title="appLogsData.logFile">日志文件：{{ appLogsData.logFile }}</span>
+                    <span class="log-toolbar-spacer"></span>
+                    <select v-model.number="appLogsLines" @change="refreshAppLogs()" class="log-lines-select" title="日志行数">
+                        <option :value="100">末尾 100 行</option>
+                        <option :value="200">末尾 200 行</option>
+                        <option :value="500">末尾 500 行</option>
+                        <option :value="1000">末尾 1000 行</option>
+                        <option :value="5000">末尾 5000 行</option>
+                    </select>
+                    <button class="toolbar-button" @click="refreshAppLogs()">↻ 刷新</button>
+                </div>
+                <div class="log-viewer"><pre>{{ appLogsData.logs || '（暂无日志）' }}</pre></div>
             </div>
         </div>
     </div>

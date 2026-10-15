@@ -7,6 +7,7 @@
 
 import {
     checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage,
+    runDockerContainer,
     fetchDockerContainers, dockerContainerAction as apiDockerContainerAction,
     removeDockerContainer, dockerExec, fetchDockerLogs,
     batchDeleteDockerImages, batchDockerContainerAction,
@@ -35,6 +36,14 @@ export function setupDocker(ctx) {
     const selectedImages = ref([]);
     const selectedContainers = ref([]);
     const batchActionLoading = ref(false);
+    // 一键启动容器
+    const dockerRunVisible = ref(false);
+    const dockerRunLoading = ref(false);
+    const dockerRunData = reactive({
+        image: '', name: '', ports: '', volumes: '', envs: '',
+        network: '', restart: 'no', cmd: '',
+        privileged: false, autoRemove: false, tty: false,
+    });
 
     async function checkDockerEnv() {
         if (!ctx.selectedServer.value) {
@@ -114,6 +123,52 @@ export function setupDocker(ctx) {
             loadDockerImages();
         } catch (err) {
             ctx.toastNotify('删除失败: ' + err.message, true);
+        }
+    }
+
+    /** 打开一键启动容器表单（镜像管理行按钮）。 */
+    function openRunForm(img) {
+        dockerRunData.image = `${img.repository}:${img.tag}`;
+        dockerRunData.name = '';
+        dockerRunData.ports = '';
+        dockerRunData.volumes = '';
+        dockerRunData.envs = '';
+        dockerRunData.network = '';
+        dockerRunData.restart = 'no';
+        dockerRunData.cmd = '';
+        dockerRunData.privileged = false;
+        dockerRunData.autoRemove = false;
+        dockerRunData.tty = false;
+        dockerRunVisible.value = true;
+    }
+
+    /** 提交一键启动容器：多行文本按行拆分为数组。 */
+    async function dockerRunContainer() {
+        if (!ctx.selectedServer.value) return;
+        const toList = (s) => s.split('\n').map(v => v.trim()).filter(Boolean);
+        dockerRunLoading.value = true;
+        try {
+            const data = await runDockerContainer(ctx.selectedServer.value, {
+                image: dockerRunData.image,
+                name: dockerRunData.name,
+                ports: toList(dockerRunData.ports),
+                volumes: toList(dockerRunData.volumes),
+                envs: toList(dockerRunData.envs),
+                network: dockerRunData.network,
+                restart: dockerRunData.restart,
+                cmd: dockerRunData.cmd,
+                privileged: dockerRunData.privileged,
+                auto_remove: dockerRunData.autoRemove,
+                tty: dockerRunData.tty,
+            });
+            dockerRunVisible.value = false;
+            ctx.toastNotify(`容器已启动: ${(data.container_id || '').substring(0, 12)}`);
+            dockerSubTab.value = 'containers';
+            loadDockerContainers(true);
+        } catch (err) {
+            ctx.toastNotify('启动失败: ' + err.message, true);
+        } finally {
+            dockerRunLoading.value = false;
         }
     }
 
@@ -219,6 +274,8 @@ export function setupDocker(ctx) {
         dockerExecVisible, dockerExecData, dockerLogsVisible, dockerLogsData,
         dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror, mirrorSelectMode,
         selectedImages, selectedContainers, batchActionLoading,
+        dockerRunVisible, dockerRunLoading, dockerRunData,
+        openRunForm, dockerRunContainer,
         checkDockerEnv, onDockerTabClick, loadDockerImages, loadDockerContainers,
         dockerPullImage, dockerRemoveImage, dockerContainerAction,
         dockerRemoveContainer, dockerExecCommand, dockerViewLogs,

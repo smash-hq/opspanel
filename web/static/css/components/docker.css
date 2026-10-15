@@ -127,6 +127,97 @@
     gap: 8px;
 }
 
+/* 镜像行子元素较容器行少（无状态/运行时长/端口列），单独定义列宽 */
+.docker-image-row {
+    grid-template-columns: 24px minmax(0, 2fr) 110px 80px 150px;
+}
+
+.docker-image-row:first-child {
+    border-top: none;
+}
+
+.docker-image-row:hover {
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.docker-img-repo {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.docker-img-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+}
+
+.docker-img-size {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #475569);
+    text-align: right;
+}
+
+.docker-img-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* 镜像行内中文操作按钮（部署 / 删除） */
+.docker-row-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border, #cbd5e1);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #475569);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.docker-row-btn:hover {
+    border-color: var(--color-blue, #3b82f6);
+    color: var(--color-blue, #3b82f6);
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.docker-row-btn.primary {
+    border-color: var(--color-blue, #3b82f6);
+    background: var(--color-blue, #3b82f6);
+    color: #fff;
+}
+
+.docker-row-btn.primary:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.docker-row-btn.danger:hover {
+    border-color: var(--color-red, #ef4444);
+    color: var(--color-red, #ef4444);
+    background: var(--color-red-light, #fef2f2);
+}
+
+/* ─── 一键启动弹窗复选框区 ─── */
+.docker-run-checks {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 10px 12px;
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: var(--border-radius-sm, 6px);
+    background: var(--content-bg, #f8fafc);
+}
+
 .docker-container-row:first-child {
     border-top: none;
 }

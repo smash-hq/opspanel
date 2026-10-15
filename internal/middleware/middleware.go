@@ -54,11 +54,19 @@ func Logging(log *logger.Logger) func(http.Handler) http.Handler {
 }
 
 // BodyLimit 对 /api/ 请求体施加大小上限，防止超大 payload 消耗内存。
-func BodyLimit(limit int64) func(http.Handler) http.Handler {
+// overrides 为路径前缀到更大限额的映射（如应用部署文件上传）。
+func BodyLimit(limit int64, overrides map[string]int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body != nil && strings.HasPrefix(r.URL.Path, "/api/") {
-				r.Body = http.MaxBytesReader(w, r.Body, limit)
+				bodyLimit := limit
+				for prefix, l := range overrides {
+					if strings.HasPrefix(r.URL.Path, prefix) {
+						bodyLimit = l
+						break
+					}
+				}
+				r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 			}
 			next.ServeHTTP(w, r)
 		})

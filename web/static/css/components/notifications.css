@@ -1,0 +1,453 @@
+/* notifications.css — 顶栏通知中心（铃铛 + 下拉面板） */
+
+.notify-wrap {
+    position: relative;
+}
+
+.notify-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notify-bell svg {
+    width: 18px;
+    height: 18px;
+}
+
+.notify-bell.active {
+    color: var(--accent, #2563eb);
+}
+
+/* 未读数徽标 */
+.notify-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--card-bg, #fff);
+}
+
+/* 下拉面板 */
+.notify-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: -60px;
+    width: 380px;
+    max-width: calc(100vw - 32px);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    z-index: 1200;
+    overflow: hidden;
+    animation: notify-pop 0.16s ease-out;
+}
+
+@keyframes notify-pop {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.notify-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+    font-size: 0.9rem;
+}
+
+.notify-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notify-link-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: 0.78rem;
+    color: var(--text-dim, #64748b);
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.notify-link-btn:hover {
+    color: var(--accent, #2563eb);
+}
+
+/* 列表 */
+.notify-list {
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.notify-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--card-border, #f1f5f9);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.notify-item:hover {
+    background: var(--hover-bg, rgba(37, 99, 235, 0.05));
+}
+
+.notify-item:last-child {
+    border-bottom: none;
+}
+
+.notify-item.read {
+    opacity: 0.62;
+}
+
+/* 级别色点 */
+.notify-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    background: #94a3b8;
+}
+
+.notify-item.error .notify-dot {
+    background: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.notify-item.warn .notify-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.notify-item.info .notify-dot {
+    background: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.notify-item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 类型 / 模块 / 未读标记 */
+.notify-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.notify-type-tag {
+    flex-shrink: 0;
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.notify-type-tag.error {
+    color: #dc2626;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.notify-type-tag.warn {
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.notify-type-tag.info {
+    color: #2563eb;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.notify-module-tag {
+    flex-shrink: 0;
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 0.66rem;
+    line-height: 1.5;
+    color: var(--text-dim, #64748b);
+    background: var(--tag-bg, rgba(100, 116, 139, 0.12));
+}
+
+.notify-unread-flag {
+    flex-shrink: 0;
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    line-height: 1.5;
+    color: #fff;
+    background: #ef4444;
+}
+
+.notify-item-title {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    line-height: 1.45;
+}
+
+.notify-item.error .notify-item-title {
+    color: #dc2626;
+}
+
+/* 详情单行摘要，悬浮通过 title 查看全文，点击打开详情弹窗 */
+.notify-item-msg {
+    margin-top: 3px;
+    font-size: 0.76rem;
+    color: var(--text-dim, #64748b);
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notify-item-time {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+    margin-top: 2px;
+}
+
+/* ═══ 通知详情弹窗 ═══ */
+.notif-detail-modal {
+    width: 520px;
+    max-width: calc(100vw - 32px);
+}
+
+.notif-detail-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary, #111827);
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.notif-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.notif-detail-modal .notify-type-tag,
+.notif-detail-modal .notify-module-tag {
+    font-size: 0.7rem;
+}
+
+.notify-read-state {
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.notify-read-state.unread {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.notif-detail-time {
+    margin-left: auto;
+    font-size: 0.72rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.notif-detail-section {
+    margin-top: 16px;
+}
+
+.notif-detail-content {
+    margin: 8px 0 0;
+    padding: 12px;
+    border-radius: var(--border-radius-sm);
+    background: var(--code-bg, rgba(15, 23, 42, 0.04));
+    border: 1px solid var(--card-border, #e5e7eb);
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text-primary, #111827);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+/* 空态 */
+.notify-empty {
+    padding: 36px 16px;
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.notify-empty-icon {
+    display: block;
+    font-size: 1.6rem;
+    margin-bottom: 8px;
+}
+
+/* ═══ 通知中心页面：左列表 + 右配置 ═══ */
+.notifycenter-page {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+}
+
+/* 窄屏回退为上下堆叠 */
+@media (max-width: 1000px) {
+    .notifycenter-page {
+        flex-direction: column;
+    }
+
+    .nc-mail-card {
+        width: auto;
+    }
+}
+
+.nc-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 12px;
+    padding: 18px 20px;
+}
+
+/* 左侧通知列表占满剩余宽度 */
+.notifycenter-page .nc-list-card {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 右侧 SMTP 配置固定宽度，进页面即见 */
+.nc-mail-card {
+    width: 400px;
+    flex-shrink: 0;
+}
+
+.nc-card h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary, #111827);
+}
+
+.nc-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.nc-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.nc-filter {
+    padding: 5px 8px;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--card-border, #e5e7eb);
+    background: var(--card-bg, #fff);
+    color: var(--text-primary, #111827);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+/* 页面内通知列表：去掉面板式的分隔边界，复用 notify-item 样式 */
+.nc-list {
+    margin-top: 4px;
+    border-top: 1px solid var(--card-border, #f1f5f9);
+}
+
+.nc-list .notify-item {
+    padding: 12px 6px;
+}
+
+/* ── SMTP 邮件配置表单 ── */
+.nc-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 4px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    cursor: pointer;
+}
+
+.nc-switch-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.nc-mail-saved {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-green, #16a34a);
+}
+
+.nc-form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px 14px;
+    margin-top: 12px;
+}
+
+.field-hint-inline {
+    font-weight: 400;
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.nc-mail-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+/* ── 侧栏「通知中心」按钮未读徽标 ── */
+.sidebar-nc-badge {
+    margin-left: auto;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}

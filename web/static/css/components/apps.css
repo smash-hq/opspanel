@@ -1,0 +1,418 @@
+/**
+ * apps.css — 服务部署组件（语言徽章、状态徽章、环境检测提示、上传清单）
+ */
+
+/* ─── 语言徽章 ─── */
+.app-lang-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.app-lang-badge.java {
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.app-lang-badge.python {
+    color: #0e7490;
+    background: rgba(6, 182, 212, 0.14);
+}
+
+.app-lang-badge.go {
+    color: #1d4ed8;
+    background: rgba(59, 130, 246, 0.14);
+}
+
+/* ─── 运行状态徽章 ─── */
+.app-status-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.app-status-badge.on {
+    color: #15803d;
+    background: rgba(34, 197, 94, 0.14);
+}
+
+.app-status-badge.off {
+    color: var(--text-muted, #94a3b8);
+    background: var(--content-bg, #f1f5f9);
+}
+
+/* 启动失败徽标（可点击查看原因） */
+.app-status-badge.failed {
+    color: #dc2626;
+    background: rgba(239, 68, 68, 0.13);
+}
+
+.app-status-badge.clickable {
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.app-status-badge.clickable:hover {
+    filter: brightness(0.94);
+}
+
+/* 行内按钮 loading 转圈 */
+.btn-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 5px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    vertical-align: -2px;
+    animation: app-btn-spin 0.7s linear infinite;
+}
+
+@keyframes app-btn-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ─── 语言环境检测提示 ─── */
+.app-lang-check {
+    margin-top: 12px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    background: var(--content-bg, #f1f5f9);
+    color: var(--text-dim, #64748b);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.app-lang-check.ok {
+    color: #15803d;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.app-lang-check.error {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* ─── 上传清单 ─── */
+.app-upload-pending {
+    margin-top: 10px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.app-upload-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim, #64748b);
+    background: var(--content-bg, #f1f5f9);
+}
+
+.app-upload-list {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.app-upload-item {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    color: var(--text-dim, #64748b);
+    border-top: 1px solid var(--card-border, #e2e8f0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-upload-item.done {
+    color: #15803d;
+}
+
+.app-upload-size {
+    float: right;
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.7rem;
+    margin-left: 12px;
+}
+
+/* ─── 自定义文件选择按钮（替代原生 input） ─── */
+.app-upload-picker {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin: 12px 0;
+}
+
+.app-pick-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1.5px dashed var(--color-blue, #3b82f6);
+    background: var(--color-blue-bg, #f0f9ff);
+    color: var(--color-blue, #3b82f6);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.app-pick-btn:hover {
+    background: var(--color-blue, #3b82f6);
+    color: #fff;
+    border-style: solid;
+}
+
+.app-pick-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.app-pick-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+/* ─── 上传进度条 ─── */
+.app-upload-progress {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--content-bg, #f1f5f9);
+    border: 1px solid var(--card-border, #e2e8f0);
+}
+
+.app-upload-progress.error {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.app-upload-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 7px;
+}
+
+.app-upload-file {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-upload-progress.error .app-upload-file {
+    color: #b91c1c;
+}
+
+.app-upload-pct {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--color-blue, #3b82f6);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.app-upload-progress.error .app-upload-pct {
+    color: #b91c1c;
+}
+
+.app-upload-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--card-border, #e2e8f0);
+    overflow: hidden;
+}
+
+.app-upload-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-blue, #3b82f6), #60a5fa);
+    transition: width 0.2s ease;
+    min-width: 0;
+}
+
+.app-upload-progress.error .app-upload-bar-fill {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.app-upload-progress-meta {
+    margin-top: 6px;
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ─── 列表行中文操作按钮 ─── */
+.app-row-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border, #cbd5e1);
+    background: var(--card-bg, #fff);
+    color: var(--text-secondary, #475569);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.app-row-btn:hover {
+    border-color: var(--color-blue, #3b82f6);
+    color: var(--color-blue, #3b82f6);
+    background: var(--color-blue-bg, #f0f9ff);
+}
+
+.app-row-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.app-row-btn.primary {
+    border-color: var(--color-blue, #3b82f6);
+    background: var(--color-blue, #3b82f6);
+    color: #fff;
+}
+
+.app-row-btn.primary:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.app-row-btn.warn:hover {
+    border-color: #d97706;
+    color: #d97706;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.app-row-btn.danger:hover {
+    border-color: var(--color-red, #ef4444);
+    color: var(--color-red, #ef4444);
+    background: var(--color-red-light, #fef2f2);
+}
+
+/* ─── 部署统计徽标 ─── */
+.app-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.app-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    background: var(--card-bg, #fff);
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+    white-space: nowrap;
+}
+
+.app-stat-chip b {
+    color: var(--text-primary, #1e293b);
+    font-variant-numeric: tabular-nums;
+}
+
+.app-stat-chip.on {
+    border-color: color-mix(in srgb, var(--color-green, #10b981) 40%, transparent);
+    background: var(--color-green-light, #ecfdf5);
+    color: var(--color-green, #10b981);
+}
+
+.app-stat-chip.on b {
+    color: var(--color-green, #10b981);
+}
+
+.app-stat-chip.failed {
+    border-color: color-mix(in srgb, var(--color-red, #ef4444) 40%, transparent);
+    background: var(--color-red-light, #fef2f2);
+    color: var(--color-red, #ef4444);
+}
+
+.app-stat-chip.failed b {
+    color: var(--color-red, #ef4444);
+}
+
+/* ─── 服务启动确认弹窗 ─── */
+.app-start-modal {
+    width: 480px;
+    max-width: calc(100vw - 32px);
+}
+
+.app-start-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.app-start-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 14px;
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    background: var(--hover-bg, rgba(59, 130, 246, 0.04));
+    transition: border-color 0.15s;
+}
+
+.app-start-row:hover {
+    border-color: var(--color-blue, #3b82f6);
+}
+
+.app-start-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim, #64748b);
+    letter-spacing: 0.02em;
+}
+
+.app-start-value {
+    font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    font-size: 0.8rem;
+    color: var(--text-primary, #1e293b);
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.app-start-value.dim {
+    font-size: 0.72rem;
+    color: var(--text-dim, #64748b);
+}
+
+.app-start-hint {
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    font-size: 0.74rem;
+    line-height: 1.7;
+    color: var(--text-secondary, #475569);
+}
+
+.app-start-hint b {
+    color: #b45309;
+}

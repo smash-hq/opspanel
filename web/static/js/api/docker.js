@@ -35,6 +35,17 @@ export async function removeDockerImage(serverId, id) {
     if (json.code !== 0) throw new Error(json.message || '删除失败');
 }
 
+/** 一键启动容器（基于已有镜像）。 */
+export async function runDockerContainer(serverId, payload) {
+    const json = await request('/docker/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, ...payload }),
+    });
+    if (json.code !== 0) throw new Error(json.message || '启动失败');
+    return json.data;
+}
+
 /** 获取容器列表。 */
 export async function fetchDockerContainers(serverId, all) {
     const params = new URLSearchParams({ server: serverId, all: all ? 'true' : 'false' });

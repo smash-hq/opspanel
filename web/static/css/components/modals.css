@@ -102,6 +102,17 @@
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+/* 复选框保持固有尺寸，不随表单控件拉伸占满整行 */
+.field input[type="checkbox"] {
+    width: auto;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    accent-color: var(--color-blue);
+}
+
 .field textarea {
     resize: vertical;
     line-height: 1.6;

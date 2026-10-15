@@ -127,9 +127,35 @@ func (d *DB) migrate() error {
 		updated_at  INTEGER NOT NULL DEFAULT 0
 	);
 
+	CREATE TABLE IF NOT EXISTS deployed_apps (
+		id          TEXT PRIMARY KEY,
+		server_id   TEXT NOT NULL,
+		name        TEXT NOT NULL,
+		language    TEXT NOT NULL DEFAULT 'java',
+		deploy_dir  TEXT NOT NULL DEFAULT '',
+		artifacts   TEXT NOT NULL DEFAULT '[]',
+		start_cmd   TEXT NOT NULL DEFAULT '',
+		log_file    TEXT NOT NULL DEFAULT '',
+		pid         INTEGER NOT NULL DEFAULT 0,
+		status      TEXT NOT NULL DEFAULT 'stopped',
+		remark      TEXT NOT NULL DEFAULT '',
+		created_at  INTEGER NOT NULL DEFAULT 0,
+		updated_at  INTEGER NOT NULL DEFAULT 0
+	);
+
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS notifications (
+		id         TEXT PRIMARY KEY,
+		level      TEXT NOT NULL DEFAULT 'info', -- 通知类型：info / warn / error
+		module     TEXT NOT NULL DEFAULT '',     -- 来源模块：apps / software / servers / system ...
+		title      TEXT NOT NULL,
+		message    TEXT NOT NULL DEFAULT '',
+		read       INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_servers_type ON servers(type);
@@ -137,6 +163,8 @@ func (d *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_sw_packages_category ON software_packages(category);
 	CREATE INDEX IF NOT EXISTS idx_sw_sources_type ON software_sources(type);
 	CREATE INDEX IF NOT EXISTS idx_languages_category ON languages(category);
+	CREATE INDEX IF NOT EXISTS idx_apps_server ON deployed_apps(server_id);
+	CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
 	`
 
 	// 启动期引导，无请求 ctx，使用 Background
@@ -149,6 +177,8 @@ func (d *DB) migrate() error {
 	_ = d.addColumnIfNotExists("languages", "uninstall_cmd", "TEXT NOT NULL DEFAULT ''")
 	_ = d.addColumnIfNotExists("software_packages", "versions", "TEXT NOT NULL DEFAULT '[]'")
 	_ = d.addColumnIfNotExists("languages", "versions", "TEXT NOT NULL DEFAULT '[]'")
+	_ = d.addColumnIfNotExists("deployed_apps", "last_error", "TEXT NOT NULL DEFAULT ''")
+	_ = d.addColumnIfNotExists("notifications", "module", "TEXT NOT NULL DEFAULT ''")
 	return nil
 }
 

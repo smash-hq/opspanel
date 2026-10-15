@@ -84,6 +84,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/docker/images/pull", h.handleDockerPull)                // POST 拉取镜像
 	mux.HandleFunc("/api/v1/docker/images/", h.handleDockerImageDetail)             // DELETE 删除镜像
 	mux.HandleFunc("/api/v1/docker/images/batch-delete", h.handleBatchDeleteImages) // POST 批量删除镜像
+	mux.HandleFunc("/api/v1/docker/run", h.handleDockerRun)                         // POST 一键启动容器
 	mux.HandleFunc("/api/v1/docker/containers", h.handleDockerContainers)           // GET ?server=&all= 容器列表
 	mux.HandleFunc("/api/v1/docker/containers/", h.handleDockerContainer)           // POST 操作/DELETE 删除
 	mux.HandleFunc("/api/v1/docker/containers/batch", h.handleBatchContainerAction) // POST 批量容器操作
@@ -497,6 +498,38 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 	OK(w, map[string]string{"status": "pulling", "image": req.Image})
+}
+
+// handleDockerRun: POST {"server_id": "...", "image": "...", ...} 基于已有镜像一键启动容器。
+func (h *SoftwareHandler) handleDockerRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+	var req struct {
+		ServerID string `json:"server_id"`
+		Image    string `json:"image"`
+		remote.DockerRunOptions
+	}
+	if err := decodeBody(r, &req); err != nil {
+		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Image) == "" {
+		Fail(w, http.StatusBadRequest, 400, "image is required")
+		return
+	}
+	srv, ok := h.store.Get(r.Context(), req.ServerID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "server not found")
+		return
+	}
+	containerID, err := h.remoteCollector.RunContainer(r.Context(), toRemoteServer(srv), req.Image, req.DockerRunOptions)
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		return
+	}
+	OK(w, map[string]string{"status": "started", "container_id": containerID})
 }
 
 // handleDockerImageDetail: DELETE /api/v1/docker/images/{id}?server=<id> 删除镜像。

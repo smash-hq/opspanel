@@ -84,6 +84,15 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	softwareHandler := api.NewSoftwareHandler(log, store, swStore, store.DB())
 	softwareHandler.Register(mux)
 
+	// --- 应用部署管理（java/python/go 服务部署、启动/停止/重启、日志查看） ---
+	appStore := storage.NewAppStore(store.DB())
+	appsHandler := api.NewAppHandler(log, store, appStore, store.DB())
+	appsHandler.Register(mux)
+
+	// --- 站内通知（服务启动失败等异常事件） ---
+	notificationsHandler := api.NewNotificationHandler(log, store.DB())
+	notificationsHandler.Register(mux)
+
 	settingsHandler := api.NewSettingsHandler(log, store.DB(), dataDir)
 	settingsHandler.Register(mux)
 
@@ -113,7 +122,8 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	var handler http.Handler = mux
 	handler = authHandler.Middleware(handler)
 	handler = middleware.SecurityHeaders(handler)
-	handler = middleware.BodyLimit(2 << 20)(handler) // API 请求体上限 2MB
+	// 分片上传单分片接口放宽到 16MB（分片 4MB + multipart 开销），其余 API 保持 2MB
+	handler = middleware.BodyLimit(2<<20, map[string]int64{"/api/v1/apps/upload/chunk": 16 << 20})(handler)
 	handler = middleware.Recovery(log.Named("recovery"))(handler)
 	handler = middleware.Logging(log.Named("http"))(handler)
 

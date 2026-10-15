@@ -5,15 +5,19 @@
 
 /* ─── 设计令牌（CSS 自定义属性）─── */
 :root {
-    /* 侧栏 — 深蓝灰色 */
-    --sidebar-bg: #1e293b;
-    --sidebar-bg-hover: #334155;
-    --sidebar-bg-active: #1d4ed8;
-    --sidebar-text: #f1f5f9;
-    --sidebar-text-dim: #94a3b8;
-    --sidebar-text-muted: #64748b;
-    --sidebar-border: rgba(255, 255, 255, 0.08);
+    /* 侧栏 — 浅色，与内容区协调 */
+    --sidebar-bg: #f1f5f9;
+    --sidebar-bg-hover: #e2e8f0;
+    --sidebar-bg-active: #dbeafe;
+    --sidebar-text: #0f172a;
+    --sidebar-text-dim: #475569;
+    --sidebar-text-muted: #94a3b8;
+    --sidebar-border: #e2e8f0;
     --sidebar-accent: #3b82f6;
+    /* 侧栏内的次级表面：头像/徽标/悬停强化/滚动条 */
+    --sidebar-item-bg: rgba(15, 23, 42, 0.05);
+    --sidebar-hover-strong: rgba(15, 23, 42, 0.09);
+    --sidebar-scrollbar: rgba(15, 23, 42, 0.18);
 
     /* 内容区 — 浅蓝白色调 */
     --content-bg: #f8fafc;
@@ -50,9 +54,9 @@
     --sidebar-width: 280px;
     --sidebar-collapsed-width: 72px;
     --topbar-height: 60px;
-    --border-radius: 10px;
-    --border-radius-sm: 6px;
-    --border-radius-lg: 14px;
+    --border-radius: 14px;
+    --border-radius-sm: 10px;
+    --border-radius-lg: 18px;
 
     /* 动效 */
     --transition-fast: 0.15s ease;
@@ -70,6 +74,9 @@
     --sidebar-text-muted: #64748b;
     --sidebar-border: rgba(255, 255, 255, 0.08);
     --sidebar-accent: #60a5fa;
+    --sidebar-item-bg: rgba(255, 255, 255, 0.06);
+    --sidebar-hover-strong: rgba(255, 255, 255, 0.12);
+    --sidebar-scrollbar: rgba(255, 255, 255, 0.12);
 
     --content-bg: #0f172a;
     --card-bg: #1e293b;
