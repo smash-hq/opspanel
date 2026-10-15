@@ -58,27 +58,6 @@ sudo cp opspanel /opt/opspanel/ && sudo chmod +x /opt/opspanel/opspanel
 cd /opt/opspanel && ./opspanel
 ```
 
-### Docker
-
-```bash
-docker run -d --name opspanel -p 18080:18080 \
-  -v /opt/opspanel/data:/app/data --restart unless-stopped \
-  smash-hq/opspanel:latest
-```
-
-### Docker Compose
-
-```yaml
-services:
-  opspanel:
-    image: smash-hq/opspanel:latest
-    ports:
-      - "18080:18080"
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-```
-
 ### 配置
 
 默认监听 `0.0.0.0:18080`，数据存于 `./data`。可通过环境变量（`OPSPANEL_SERVER_PORT`、`OPSPANEL_SERVER_HOST`、`OPSPANEL_SERVER_DATA_DIR`、`OPSPANEL_LOG_LEVEL` 等）或配置文件调整，完整示例见 [config.example.yaml](config.example.yaml)，用 `./opspanel --config /etc/opspanel/config.yaml` 指定路径。

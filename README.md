@@ -58,27 +58,6 @@ sudo cp opspanel /opt/opspanel/ && sudo chmod +x /opt/opspanel/opspanel
 cd /opt/opspanel && ./opspanel
 ```
 
-### Docker
-
-```bash
-docker run -d --name opspanel -p 18080:18080 \
-  -v /opt/opspanel/data:/app/data --restart unless-stopped \
-  smash-hq/opspanel:latest
-```
-
-### Docker Compose
-
-```yaml
-services:
-  opspanel:
-    image: smash-hq/opspanel:latest
-    ports:
-      - "18080:18080"
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-```
-
 ### Configuration
 
 By default the server listens on `0.0.0.0:18080` and stores data in `./data`. Adjust via environment variables (`OPSPANEL_SERVER_PORT`, `OPSPANEL_SERVER_HOST`, `OPSPANEL_SERVER_DATA_DIR`, `OPSPANEL_LOG_LEVEL`, etc.) or a config file — full example in [config.example.yaml](config.example.yaml), custom path via `./opspanel --config /etc/opspanel/config.yaml`.
