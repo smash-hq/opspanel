@@ -1,117 +1,119 @@
 # Server Plane ⚡
 
-**一个二进制，管理你所有的服务器。**
+English | [简体中文](README.zh-CN.md)
+
+**One binary to manage all your servers.**
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License: Non-Commercial](https://img.shields.io/badge/license-Non--Commercial-orange.svg)](LICENSE)
-[![Zero Dependency](https://img.shields.io/badge/依赖-零外部服务-success?style=flat)](#为什么选择-server-plane)
-[![Single Binary](https://img.shields.io/badge/交付-单二进制-8A2BE2?style=flat)](#为什么选择-server-plane)
+[![Zero Dependency](https://img.shields.io/badge/dependency-zero%20external%20services-success?style=flat)](#why-server-plane)
+[![Single Binary](https://img.shields.io/badge/delivery-single%20binary-8A2BE2?style=flat)](#why-server-plane)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
 
-Go 原生服务器运维面板。单二进制 + 内嵌前端 + SQLite，**零外部依赖、零 Agent**——远程服务器只要开着 SSH，浏览器里就是完整的控制台：实时监控、软件商店、Docker、文件、进程，一屏尽览。**所有数据仅存本地，不上云、无遥测。**
+A native Go server operations panel. Single binary + embedded frontend + SQLite, **zero external dependencies, zero agents** — as long as your remote servers have SSH open, you get a full console right in the browser: real-time monitoring, software store, Docker, files, and processes, all in one screen. **All data stays local — no cloud, no telemetry.**
 
 ```bash
 git clone https://github.com/smash-hq/server-management.git
 cd server-management && make run
-# 打开 http://localhost:18080 —— 就这么简单
+# Open http://localhost:18080 — that's it
 ```
 
-## 为什么选择 Server Plane
+## Why Server Plane
 
-| | Server Plane | 传统重型面板 |
+| | Server Plane | Traditional heavy panels |
 |---|:---:|:---:|
-| 安装交付 | **单二进制，scp 过去就能跑** | 安装脚本 + 面板服务 + Agent 常驻 |
-| 外部依赖 | **无（SQLite 内置，纯 Go 免 CGO）** | MySQL / PostgreSQL |
-| 远程接管 | **只需 SSH，被管机零侵入** | 每台机器装 Agent |
-| 资源占用 | **一个进程，闲时几乎为零** | Agent + 面板双进程 |
-| 国产平台 | **开箱支持 arm64（鲲鹏/飞腾）** | 视发行版而定 |
-| 技术栈 | 原生 Go + 原生前端，无构建链 | Node/Python 混合构建 |
+| Installation | **Single binary, runs right after scp** | Install scripts + panel service + resident agent |
+| External dependencies | **None (built-in SQLite, pure Go, no CGO)** | MySQL / PostgreSQL |
+| Remote takeover | **SSH only, zero intrusion on managed hosts** | Install an agent on every machine |
+| Resource usage | **One process, near-zero when idle** | Agent + panel, two processes |
+| Domestic platforms | **arm64 out of the box (Kunpeng/Phytium)** | Depends on the distro |
+| Tech stack | Native Go + native frontend, no build chain | Mixed Node/Python builds |
 
-适合：个人开发机、小团队内网服务器、嵌入式/国产化环境的轻量运维。
+Ideal for: personal dev machines, small-team intranet servers, and lightweight ops on embedded/domestic-platform environments.
 
-> ⚠️ **内网工具，请勿暴露公网**：面板内置单管理员登录认证，但安全机制较薄（无 HTTPS、无审计日志、多因素缺失），SSH 凭证存储于本地 SQLite。详见[安全声明](#️-安全声明)。
+> ⚠️ **Intranet tool — do not expose to the public internet**: the panel ships with single-admin login, but its security mechanisms are thin (no HTTPS, no audit logs, no MFA), and SSH credentials are stored in a local SQLite database. See the [Security Disclaimer](#️-security-disclaimer).
 
-## 功能总览
+## Features
 
-| 模块 | 能力 |
-|------|------|
-| 🖥️ **实时监控** | CPU / 内存 / 磁盘 / 网络 / 运行时间，WebSocket 3 秒级推送，按需采集降低 SSH 开销 |
-| 📦 **软件商店** | MySQL、PostgreSQL、Redis、Nginx、Docker、Node.js 一键安装卸载，支持自定义软件包与服务控制命令 |
-| 🌐 **语言环境** | 自动检测已安装语言（Go/Java/Python/Node.js/Rust/PHP/Ruby/.NET），多版本安装，支持自定义扩展 |
-| 🐳 **Docker 管理** | 镜像拉取删除、容器启停/终端/日志、批量操作、镜像源切换（Docker Hub/阿里云/腾讯云/DaoCloud 等） |
-| 📁 **文件管理** | 远程目录树形浏览、文本预览、文件下载、sudo 权限检测 |
-| ⚙️ **进程管理** | 全量进程列表（CPU/内存/命令），SIGTERM/SIGKILL 终止，进程日志查看 |
-| 🎨 **界面体验** | 白天/夜间/跟随系统三态主题，标签页图标自定义，桌面与移动端响应式 |
-| 🔐 **登录认证** | 单管理员账户登录，bcrypt 密码哈希，Cookie 会话 7 天滑动续期，支持在线修改密码 |
+| Module | Capabilities |
+|--------|--------------|
+| 🖥️ **Real-time monitoring** | CPU / memory / disk / network / uptime, pushed over WebSocket every 3 seconds, on-demand collection to minimize SSH overhead |
+| 📦 **Software store** | One-click install/uninstall of MySQL, PostgreSQL, Redis, Nginx, Docker, Node.js; custom software packages and service control commands |
+| 🌐 **Language environments** | Auto-detection of installed languages (Go/Java/Python/Node.js/Rust/PHP/Ruby/.NET), multi-version installs, custom extensions |
+| 🐳 **Docker management** | Image pull/delete, container start/stop/terminal/logs, batch operations, registry switching (Docker Hub/Alibaba Cloud/Tencent Cloud/DaoCloud, etc.) |
+| 📁 **File management** | Remote directory tree browsing, text preview, file download, sudo permission detection |
+| ⚙️ **Process management** | Full process list (CPU/memory/command), SIGTERM/SIGKILL termination, process log viewer |
+| 🎨 **UI experience** | Light/dark/system-follow themes, customizable tab icons, responsive desktop and mobile layouts |
+| 🔐 **Login auth** | Single-admin login, bcrypt password hashing, cookie session with 7-day sliding renewal, online password change |
 
-**底层特性**：SSH 连接池（按需建连、空闲回收、断线自动重建、30s 保活）、SQLite WAL 并发读写、优雅启停、多平台交叉编译。
+**Under the hood**: SSH connection pool (on-demand connections, idle recycling, auto-reconnect, 30s keepalive), SQLite WAL concurrent reads/writes, graceful shutdown, cross-platform cross-compilation.
 
-**路线图**：集群管理 · 监控中心（图表/告警/日志分析）· 安全中心（防火墙/端口/IP 封禁）· 定时任务
+**Roadmap**: cluster management · monitoring center (charts/alerts/log analysis) · security center (firewall/ports/IP banning) · scheduled tasks
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
 - Go 1.26+
 - Linux / macOS / Windows
-- SSH 客户端（接管远程服务器时需要）
+- SSH client (required for taking over remote servers)
 
-### 启动
+### Run
 
 ```bash
-# 前台运行（推荐开发使用，Ctrl+C 停止）
+# Foreground (recommended for development, Ctrl+C to stop)
 make run
 
-# 后台运行
+# Background
 make start
 
-# 开发模式（无编译步骤，直接 go run，改前端刷新即生效）
+# Dev mode (no compile step, direct go run — frontend changes take effect on refresh)
 make dev
 
-# 手动编译后运行
+# Build manually and run
 make build && ./smp-server
 ```
 
-服务默认监听 `http://localhost:18080`，浏览器访问即可使用。
+The server listens on `http://localhost:18080` by default — open it in a browser and you're set.
 
-> 🔑 **默认账户**：首次启动自动创建管理员账户 **admin / admin123**，请登录后尽快在面板中修改密码。查看版本：`./smp-server --version`。
+> 🔑 **Default account**: the first launch automatically creates the admin account **admin / admin123**. Please change the password in the panel as soon as possible. Check the version with `./smp-server --version`.
 
-### 停止与重启
+### Stop & Restart
 
 ```bash
-make stop      # 停止
-make status    # 查看状态
-make restart   # 重启
+make stop      # Stop
+make status    # Check status
+make restart   # Restart
 ```
 
-## 部署指南
+## Deployment
 
-### 单机部署（Linux）
+### Single-machine deployment (Linux)
 
 ```bash
-# 1. 编译静态二进制（CGO 禁用，适合国产平台）
+# 1. Build the static binary (CGO disabled, suitable for domestic platforms)
 make build-linux
-# 或手动编译：
+# Or build manually:
 CGO_ENABLED=0 GOOS=linux go build -o smp-server ./cmd/server/
 
-# 2. 创建应用目录
+# 2. Create the app directory
 sudo mkdir -p /opt/smp/data
 sudo cp smp-server /opt/smp/
 sudo chmod +x /opt/smp/smp-server
 
-# 3. 启动
+# 3. Start
 cd /opt/smp && ./smp-server
 ```
 
-### Docker 部署
+### Docker
 
 ```bash
-# 构建镜像
+# Build the image
 make docker
-# 或：
+# Or:
 docker build -t smash-hq/server-management:latest .
 
-# 运行容器
+# Run the container
 docker run -d \
   --name smp-server \
   -p 18080:18080 \
@@ -140,7 +142,7 @@ docker compose logs -f
 docker compose down
 ```
 
-### 反向代理（Nginx）
+### Reverse proxy (Nginx)
 
 ```nginx
 server {
@@ -164,17 +166,17 @@ server {
 }
 ```
 
-### 系统服务（systemd）
+### Systemd service
 
 ```bash
-# 1. 创建专用用户
+# 1. Create a dedicated user
 sudo useradd -r -s /bin/false smp
 
-# 2. 部署二进制
+# 2. Deploy the binary
 sudo cp smp-server /opt/smp/
 sudo chown -R smp:smp /opt/smp
 
-# 3. 创建服务文件
+# 3. Create the service file
 sudo tee /etc/systemd/system/smp-server.service > /dev/null << 'EOF'
 [Unit]
 Description=Server Plane Management Panel
@@ -192,51 +194,51 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-# 4. 启动服务
+# 4. Start the service
 sudo systemctl daemon-reload
 sudo systemctl enable smp-server
 sudo systemctl start smp-server
 ```
 
-### 跨平台编译
+### Cross-compilation
 
 ```bash
 make build-linux          # Linux amd64
-make build-linux-arm64    # Linux arm64（鲲鹏、飞腾等国产平台）
+make build-linux-arm64    # Linux arm64 (Kunpeng, Phytium, and other domestic platforms)
 make build-darwin         # macOS
 make build-windows        # Windows
 ```
 
-## 数据存储
+## Data Storage
 
-> 🔒 **数据不出内网**：所有数据（服务器配置、SSH 凭证、监控快照、面板设置）仅存储在本地 `data/` 目录的 SQLite 文件中。项目**无任何遥测、数据上报或云端同步逻辑**，部署机器完全不联网也能正常使用。
+> 🔒 **Data never leaves your intranet**: all data (server configs, SSH credentials, monitoring snapshots, panel settings) is stored only in the local SQLite file under `data/`. The project has **no telemetry, data reporting, or cloud sync logic whatsoever** — the machine running it doesn't even need internet access.
 
-使用 **SQLite**（`modernc.org/sqlite`，纯 Go 实现，无需 CGO）作为本地存储引擎，数据库文件位于 `data/smp.db`。
+Uses **SQLite** (`modernc.org/sqlite`, pure Go, no CGO required) as the local storage engine; the database file lives at `data/smp.db`.
 
-**首次启动**时自动初始化数据库并写入默认数据：
+**On first launch**, the database is initialized automatically with default data:
 
-- **本机服务器**（`srv_local`）：自动检测 hostname、OS/ARCH、当前用户，不可删除
-- **软件包目录**：内置常用软件包定义
-- **Docker 镜像源**：Docker Hub / 阿里云 / 腾讯云 / DaoCloud / 中科大 / 清华 / 网易 / 华为
+- **Local server** (`srv_local`): auto-detects hostname, OS/ARCH, and current user; cannot be deleted
+- **Software catalog**: built-in definitions for common software
+- **Docker registries**: Docker Hub / Alibaba Cloud / Tencent Cloud / DaoCloud / USTC / Tsinghua / NetEase / Huawei
 
-所有配置变更实时持久化到 SQLite（WAL 模式，支持并发读取）。
+All configuration changes are persisted to SQLite in real time (WAL mode, concurrent reads supported).
 
-## 配置
+## Configuration
 
-### 环境变量
+### Environment variables
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `SMP_SERVER_PORT` | 18080 | 监听端口 |
-| `SMP_SERVER_HOST` | 0.0.0.0 | 监听地址 |
-| `SMP_SERVER_PUSH_INTERVAL` | 3 | WebSocket 推送间隔（秒） |
-| `SMP_SERVER_DATA_DIR` | ./data | 数据存储目录 |
-| `SMP_LOG_LEVEL` | info | 日志级别 |
-| `SMP_LOG_FORMAT` | console | 日志格式 |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SMP_SERVER_PORT` | 18080 | Listen port |
+| `SMP_SERVER_HOST` | 0.0.0.0 | Listen address |
+| `SMP_SERVER_PUSH_INTERVAL` | 3 | WebSocket push interval (seconds) |
+| `SMP_SERVER_DATA_DIR` | ./data | Data directory |
+| `SMP_LOG_LEVEL` | info | Log level |
+| `SMP_LOG_FORMAT` | console | Log format |
 
-### 配置文件
+### Configuration file
 
-完整示例见 [config.example.yaml](config.example.yaml)，将其复制为 `config.yaml`（或 `/etc/smp/config.yaml`）后按需修改：
+See [config.example.yaml](config.example.yaml) for a full example. Copy it to `config.yaml` (or `/etc/smp/config.yaml`) and adjust as needed:
 
 ```yaml
 server:
@@ -251,190 +253,190 @@ log:
   format: "console"
 ```
 
-通过 `--config` 指定配置文件路径：
+Specify the config file path with `--config`:
 
 ```bash
 ./smp-server --config /etc/smp/config.yaml
 ```
 
-## API 接口
+## API
 
-### 认证
+### Auth
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/auth/login` | 登录，成功后下发会话 Cookie |
-| POST | `/api/v1/auth/logout` | 登出并销毁会话 |
-| GET | `/api/v1/auth/me` | 当前登录用户信息 |
-| POST | `/api/v1/auth/change-password` | 修改管理员密码 |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/auth/login` | Log in; a session cookie is issued on success |
+| POST | `/api/v1/auth/logout` | Log out and destroy the session |
+| GET | `/api/v1/auth/me` | Current logged-in user |
+| POST | `/api/v1/auth/change-password` | Change the admin password |
 
-除登录接口与静态资源外，所有 API（含 `/api/v1/health`）与 WebSocket 均需携带有效会话 Cookie。
+Except for the login endpoint and static assets, all APIs (including `/api/v1/health`) and WebSockets require a valid session cookie.
 
-### 服务器管理
+### Server management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/servers` | 服务器列表 |
-| POST | `/api/v1/servers` | 添加服务器 |
-| POST | `/api/v1/servers/test` | 连接测试 |
-| PUT | `/api/v1/servers/{id}` | 更新配置 |
-| DELETE | `/api/v1/servers/{id}` | 删除服务器 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/servers` | List servers |
+| POST | `/api/v1/servers` | Add a server |
+| POST | `/api/v1/servers/test` | Test connection |
+| PUT | `/api/v1/servers/{id}` | Update configuration |
+| DELETE | `/api/v1/servers/{id}` | Delete a server |
 
-### 系统信息
+### System information
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/system/info?server={id}` | 系统快照 |
-| GET | `/api/v1/health` | 健康检查 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/system/info?server={id}` | System snapshot |
+| GET | `/api/v1/health` | Health check |
 
-### 软件管理
+### Software management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/software/catalog` | 软件目录（数据库） |
-| GET | `/api/v1/software/status?server={id}` | 安装状态 |
-| POST | `/api/v1/software/install` | 安装软件 |
-| POST | `/api/v1/software/uninstall` | 卸载软件 |
-| POST | `/api/v1/software/service` | 服务启停 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/software/catalog` | Software catalog (from DB) |
+| GET | `/api/v1/software/status?server={id}` | Install status |
+| POST | `/api/v1/software/install` | Install software |
+| POST | `/api/v1/software/uninstall` | Uninstall software |
+| POST | `/api/v1/software/service` | Service start/stop |
 
-### 软件包与源管理
+### Software packages & sources
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/software/packages` | 软件包列表 |
-| POST | `/api/v1/software/packages` | 新增软件包 |
-| PUT | `/api/v1/software/packages/{id}` | 更新软件包 |
-| DELETE | `/api/v1/software/packages/{id}` | 删除软件包 |
-| GET/POST/PUT/DELETE | `/api/v1/software/sources[/id]` | 软件源 CRUD |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/software/packages` | List software packages |
+| POST | `/api/v1/software/packages` | Add a software package |
+| PUT | `/api/v1/software/packages/{id}` | Update a software package |
+| DELETE | `/api/v1/software/packages/{id}` | Delete a software package |
+| GET/POST/PUT/DELETE | `/api/v1/software/sources[/id]` | Software source CRUD |
 
-### 文件管理
+### File management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/files?server=&path=` | 列出目录 |
-| GET | `/api/v1/files/info?server=&path=` | 文件详情 |
-| GET | `/api/v1/files/preview?server=&path=&lines=` | 文件预览 |
-| GET | `/api/v1/files/download?server=&path=` | 下载文件 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/files?server=&path=` | List a directory |
+| GET | `/api/v1/files/info?server=&path=` | File details |
+| GET | `/api/v1/files/preview?server=&path=&lines=` | File preview |
+| GET | `/api/v1/files/download?server=&path=` | Download a file |
 
-### Docker 管理
+### Docker management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/docker?server=` | Docker 环境检测 |
-| GET | `/api/v1/docker/images?server=` | 镜像列表 |
-| POST | `/api/v1/docker/images/pull` | 拉取镜像 |
-| DELETE | `/api/v1/docker/images/{id}` | 删除镜像 |
-| POST | `/api/v1/docker/images/batch-delete` | 批量删除镜像 |
-| GET | `/api/v1/docker/containers?server=&all=` | 容器列表 |
-| POST | `/api/v1/docker/containers/{id}/{action}` | 容器操作 |
-| POST | `/api/v1/docker/containers/batch` | 批量容器操作 |
-| GET | `/api/v1/docker/containers/{id}/logs` | 容器日志 |
-| POST | `/api/v1/docker/exec` | 容器内执行命令 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/docker?server=` | Docker environment detection |
+| GET | `/api/v1/docker/images?server=` | List images |
+| POST | `/api/v1/docker/images/pull` | Pull an image |
+| DELETE | `/api/v1/docker/images/{id}` | Delete an image |
+| POST | `/api/v1/docker/images/batch-delete` | Batch delete images |
+| GET | `/api/v1/docker/containers?server=&all=` | List containers |
+| POST | `/api/v1/docker/containers/{id}/{action}` | Container operation |
+| POST | `/api/v1/docker/containers/batch` | Batch container operations |
+| GET | `/api/v1/docker/containers/{id}/logs` | Container logs |
+| POST | `/api/v1/docker/exec` | Execute a command inside a container |
 
-### Docker 镜像源管理
+### Docker registry management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET/POST | `/api/v1/docker-sources` | 镜像源列表 / 新增 |
-| PUT/DELETE | `/api/v1/docker-sources/{id}` | 更新 / 删除镜像源 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/v1/docker-sources` | List registries / add one |
+| PUT/DELETE | `/api/v1/docker-sources/{id}` | Update / delete a registry |
 
-### 进程管理
+### Process management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/processes?server=&lines=` | 进程列表 |
-| POST | `/api/v1/processes/kill` | 终止进程 |
-| GET | `/api/v1/processes/log?server=&pid=&lines=` | 进程日志 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/processes?server=&lines=` | List processes |
+| POST | `/api/v1/processes/kill` | Kill a process |
+| GET | `/api/v1/processes/log?server=&pid=&lines=` | Process logs |
 
-### 语言环境管理
+### Language environment management
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET/POST | `/api/v1/languages` | 语言列表 / 新增 |
-| PUT/DELETE | `/api/v1/languages/{id}` | 更新 / 删除语言 |
-| GET | `/api/v1/languages/detect?server=` | 检测已安装语言 |
-| POST | `/api/v1/languages/install` | 安装语言环境 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/v1/languages` | List languages / add one |
+| PUT/DELETE | `/api/v1/languages/{id}` | Update / delete a language |
+| GET | `/api/v1/languages/detect?server=` | Detect installed languages |
+| POST | `/api/v1/languages/install` | Install a language environment |
 
 ### WebSocket
 
-| 路径 | 说明 |
-|------|------|
-| `/ws?server={id}` | 实时推送系统快照 |
+| Path | Description |
+|------|-------------|
+| `/ws?server={id}` | Real-time system snapshot push |
 
-## 项目结构
+## Project Structure
 
 ```
 server-management/
-├── cmd/server/          # 应用入口
+├── cmd/server/          # Application entry point
 ├── internal/
-│   ├── api/             # HTTP 处理器
-│   ├── config/          # 配置加载（Viper）
-│   ├── host/            # 服务器配置抽象与采集调度
-│   ├── remote/          # SSH 连接池与远程执行（独立包，避免循环依赖）
-│   ├── storage/         # SQLite 持久化（服务器/软件包/软件源/镜像源）
-│   ├── middleware/      # 中间件（日志、恢复、安全头）
-│   ├── server/          # HTTP 服务组装
-│   ├── software/        # 软件包与语言环境管理
-│   ├── system/          # 系统信息采集（gopsutil）
-│   ├── logger/          # 结构化日志（zap）
-│   └── ws/              # WebSocket 推送
-├── web/                 # 前端（go:embed 嵌入二进制）
-│   ├── static.go        # embed.FS 声明
+│   ├── api/             # HTTP handlers
+│   ├── config/          # Configuration loading (Viper)
+│   ├── host/            # Server config abstraction & collection scheduling
+│   ├── remote/          # SSH connection pool & remote execution (standalone package, avoids import cycles)
+│   ├── storage/         # SQLite persistence (servers/software packages/sources/registries)
+│   ├── middleware/      # Middleware (logging, recovery, security headers)
+│   ├── server/          # HTTP service assembly
+│   ├── software/        # Software package & language environment management
+│   ├── system/          # System info collection (gopsutil)
+│   ├── logger/          # Structured logging (zap)
+│   └── ws/              # WebSocket push
+├── web/                 # Frontend (embedded into the binary via go:embed)
+│   ├── static.go        # embed.FS declaration
 │   └── static/
-│       ├── index.html   # 单页入口
+│       ├── index.html   # Single-page entry
 │       ├── css/
 │       │   ├── base.css / layout.css / cards.css / states.css
-│       │   └── components/  # 组件样式（按域拆分，按序加载保持级联）
-│       ├── js/              # 原生 JS（ES Module，无构建链）
-│       │   ├── app.js       # 应用装配入口
-│       │   ├── api/         # API 客户端（按业务域拆分）
-│       │   ├── store/       # 响应式状态（按业务域拆分，共享 ctx 模式）
+│       │   └── components/  # Component styles (split by domain, loaded in order to preserve the cascade)
+│       ├── js/              # Native JS (ES Modules, no build chain)
+│       │   ├── app.js       # App assembly entry
+│       │   ├── api/         # API clients (split by business domain)
+│       │   ├── store/       # Reactive state (split by business domain, shared ctx pattern)
 │       │   └── utils.js / ws.js
-│       └── vendor/          # 本地第三方库（vue、xterm，内网零外联）
-├── docs/                # 文档
-├── data/                # 运行时数据（git ignored，smp.db 自动生成）
-├── config.example.yaml  # 配置文件示例
-├── Makefile             # 构建与运行管理
-├── Dockerfile           # Docker 多阶段构建
-├── CHANGELOG.md         # 变更日志
-├── SECURITY.md          # 安全策略
-├── .github/workflows/   # CI 与通知工作流
-└── go.mod               # Go 模块定义
+│       └── vendor/          # Local third-party libs (vue, xterm — zero external calls on intranets)
+├── docs/                # Documentation
+├── data/                # Runtime data (git ignored, smp.db auto-generated)
+├── config.example.yaml  # Example configuration
+├── Makefile             # Build & run management
+├── Dockerfile           # Docker multi-stage build
+├── CHANGELOG.md         # Changelog
+├── SECURITY.md          # Security policy
+├── .github/workflows/   # CI & notification workflows
+└── go.mod               # Go module definition
 ```
 
-## 参与贡献
+## Contributing
 
-欢迎提交 PR：软件包目录、语言环境定义、新功能与文档完善都是绝佳的切入点。
+PRs are welcome: the software catalog, language environment definitions, new features, and documentation are all great starting points.
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md)（开发环境、代码规范、提交规范与 PR 流程）。
+See [CONTRIBUTING.md](CONTRIBUTING.md) (dev environment, code style, commit conventions, and the PR process).
 
-## ⚠️ 安全声明
+## ⚠️ Security Disclaimer
 
-**使用本软件前，请仔细阅读以下安全声明：**
+**Please read the following security disclaimer carefully before using this software:**
 
-1. **本软件会执行远程命令**：通过 SSH 连接远程服务器并执行系统命令（包括 sudo 操作），可能导致系统配置变更、数据丢失或服务中断。
-2. **凭证存储**：服务器连接信息（密码、私钥）存储在本地 SQLite 数据库中，虽有文件权限保护，但**不应用于生产环境或高安全要求场景**。
-3. **认证机制较薄**：面板内置单管理员登录认证（bcrypt + Cookie 会话），但无多因素、无审计日志、无失败锁定；会话凭证一旦泄露即等同完全控制权限，请务必配合内网隔离与 HTTPS 使用。
-4. **责任免除**：**一切因使用本软件引起的安全问题（包括但不限于服务器被入侵、数据泄露、服务中断、配置损坏等）均与本项目无关**。使用者需自行承担所有风险。
-5. **维护边界**：开发者仅对正常功能范围内的缺陷提供自愿维护，**不构成服务承诺**；使用环境、误操作、二次开发引入的问题及数据恢复等诉求不在维护范围内，详见[协议第七条](LICENSE)。
-6. **使用建议**：仅在内网/开发环境使用，不要暴露到公网，务必配置防火墙和访问控制。
+1. **This software executes remote commands**: it connects to remote servers over SSH and runs system commands (including sudo operations), which may cause configuration changes, data loss, or service interruptions.
+2. **Credential storage**: server connection info (passwords, private keys) is stored in a local SQLite database. Although protected by file permissions, it is **not suitable for production or high-security environments**.
+3. **Thin authentication**: the panel ships with single-admin login (bcrypt + cookie sessions), but has no MFA, no audit logs, and no lockout on failures. If a session credential leaks, it is equivalent to full control — always pair it with intranet isolation and HTTPS.
+4. **Liability disclaimer**: **the authors bear no responsibility for any security issues arising from the use of this software (including but not limited to server compromise, data leaks, service interruptions, or configuration corruption)**. Users assume all risks.
+5. **Maintenance boundary**: the developer voluntarily maintains defects within normal functional scope; **this does not constitute a service commitment**. Issues arising from the usage environment, misoperation, secondary development, or data recovery are out of scope — see [Article 7 of the license](LICENSE).
+6. **Recommendations**: use only on intranets/dev environments, never expose to the public internet, and always configure firewall and access control.
 
-### 安全清单
+### Security checklist
 
-- 🚫 不要将面板暴露在公网 — 仅通过 VPN 或内网访问
-- 🔒 使用反向代理（Nginx/Caddy）启用 HTTPS
-- 🛡️ 配置防火墙，仅允许信任来源访问面板端口
-- 🔑 推荐使用 SSH 密钥认证，避免弱密码
-- 👤 创建专用用户运行面板服务，远程用户仅授予 NOPASSWD sudo 的最小命令集
-- 💾 定期备份 `data/smp.db`，不要将其提交到版本控制
-- 🔒 确保数据目录权限 `0700`、数据库文件权限 `0600`
+- 🚫 Never expose the panel to the public internet — access via VPN or intranet only
+- 🔒 Enable HTTPS via a reverse proxy (Nginx/Caddy)
+- 🛡️ Configure the firewall to allow panel access only from trusted sources
+- 🔑 Prefer SSH key authentication over weak passwords
+- 👤 Run the panel under a dedicated user, and grant the remote user only a minimal NOPASSWD sudo command set
+- 💾 Back up `data/smp.db` regularly; never commit it to version control
+- 🔒 Keep the data directory at `0700` and the database file at `0600`
 
-## 许可证
+## License
 
-[非商业使用许可协议](LICENSE)
+[Non-Commercial Use License](LICENSE)
 
-- ✅ **免费使用**：个人学习、组织内部运维（部署在自有服务器/内网管理自己的业务）
-- 💼 **需要商业授权**：销售/转售、集成到对外收费的产品、基于本项目提供 SaaS 或付费托管等直接营利行为
-- 📮 商业授权请联系项目维护者（联系方式待补充）
+- ✅ **Free to use**: personal learning and internal ops within an organization (deployed on your own servers/intranet to manage your own workloads)
+- 💼 **Commercial license required**: selling/reselling, integrating into paid products, providing SaaS or paid hosting based on this project, and other for-profit activities
+- 📮 For commercial licensing, contact the project maintainers (contact info to be added)
 
-本软件按「原样」提供，不附带任何明示或暗示的保证，详见[免责声明](LICENSE)。
+This software is provided "as is", without warranty of any kind, express or implied. See the [disclaimer](LICENSE) for details.
