@@ -20,15 +20,33 @@ cd opspanel && make run
 
 ## 界面一览
 
-| 系统信息 · 实时监控 | 语言环境 |
-|:---:|:---:|
-| ![系统信息](docs/images/system-info.png) | ![语言环境](docs/images/language.png) |
-| **Docker** | **Web 终端** |
-| ![Docker](docs/images/docker-container.png) | ![Web 终端](docs/images/terminal.png) |
-| **GPU / NPU** | **软件包管理** |
-| ![GPU](docs/images/gpu.png) | ![软件包管理](docs/images/config-software.png) |
-| **软件源管理** | |
-| ![软件源管理](docs/images/config-repo.png) | |
+**系统信息 · 实时监控** —— CPU / 内存 / 磁盘 / 网络一目了然
+
+![系统信息](docs/images/system-info.png)
+
+**语言环境** —— 自动检测已装语言，一键安装卸载
+
+![语言环境](docs/images/language.png)
+
+**Docker** —— 镜像与容器管理、容器终端
+
+![Docker](docs/images/docker-container.png)
+
+**Web 终端** —— 浏览器直连服务器 Shell
+
+![Web 终端](docs/images/terminal.png)
+
+**GPU / NPU** —— 显卡信息与利用率监控
+
+![GPU](docs/images/gpu.png)
+
+**软件包管理** —— 软件商店一键安装卸载
+
+![软件包管理](docs/images/config-software.png)
+
+**软件源管理** —— apt / yum / apk 源可视化管理
+
+![软件源管理](docs/images/config-repo.png)
 
 ## 能做什么
 

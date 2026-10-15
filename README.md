@@ -20,15 +20,33 @@ cd opspanel && make run
 
 ## Screenshots
 
-| System dashboard | Language environments |
-|:---:|:---:|
-| ![System](docs/images/system-info.png) | ![Languages](docs/images/language.png) |
-| **Docker** | **Web terminal** |
-| ![Docker](docs/images/docker-container.png) | ![Terminal](docs/images/terminal.png) |
-| **GPU / NPU** | **Software packages** |
-| ![GPU](docs/images/gpu.png) | ![Packages](docs/images/config-software.png) |
-| **Software repositories** | |
-| ![Repositories](docs/images/config-repo.png) | |
+**System dashboard** — CPU / memory / disk / network at a glance
+
+![System](docs/images/system-info.png)
+
+**Language environments** — auto-detection with one-click install / uninstall
+
+![Languages](docs/images/language.png)
+
+**Docker** — image and container management, container terminal
+
+![Docker](docs/images/docker-container.png)
+
+**Web terminal** — server shell right in the browser
+
+![Terminal](docs/images/terminal.png)
+
+**GPU / NPU** — GPU info and utilization monitoring
+
+![GPU](docs/images/gpu.png)
+
+**Software packages** — one-click install / uninstall from the store
+
+![Packages](docs/images/config-software.png)
+
+**Software repositories** — visual management for apt / yum / apk sources
+
+![Repositories](docs/images/config-repo.png)
 
 ## What it does
 
