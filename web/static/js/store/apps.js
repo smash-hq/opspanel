@@ -476,7 +476,7 @@ export function setupApps(ctx) {
         if (!appLogsData.id) return;
         try {
             const res = await fetchAppLogs(appLogsData.id, appLogsLines.value);
-            appLogsData.logs = (res && res.logs) || '';
+            appLogsData.logs = (res && res.log) || '';
             if (res && res.log_file) appLogsData.logFile = res.log_file;
         } catch (err) {
             ctx.toastNotify(err.message || '获取日志失败', true);

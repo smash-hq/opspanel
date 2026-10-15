@@ -165,10 +165,6 @@
                 </template>
             </div>
             <div class="topbar-actions">
-                <template v-if="activeTab === 'system' && selectedServer">
-                    <span class="sync-time" v-if="lastUpdate">最后更新 {{ lastUpdate }}</span>
-                    <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新数据">↻ <span>刷新</span></button>
-                </template>
                 <!-- 站内通知 -->
                 <div class="notify-wrap">
                     <button class="topbar-icon-btn notify-bell" :class="{ active: notifyPanelVisible }" @click="toggleNotifyPanel()" title="通知中心">
@@ -523,6 +519,11 @@
 
                 <!-- 系统信息 Tab -->
                 <div v-if="activeTab === 'system'" class="node-tab-content">
+                    <!-- 工具栏：刷新按钮与其他功能页统一固定在内容区右上角 -->
+                    <div class="sw-tab-toolbar">
+                        <span class="sync-time" v-if="lastUpdate">最后更新 {{ lastUpdate }}</span>
+                        <button class="toolbar-button" @click="refreshCurrent" :disabled="loading" title="刷新数据">↻ <span>刷新</span></button>
+                    </div>
                     <!-- 系统指标卡片 -->
                     <div class="metric-grid" v-if="hasInfo">
                         <div class="metric-card">
@@ -1428,24 +1429,15 @@
                     <label class="field full"><span>描述</span><input v-model.trim="langForm.description" placeholder="语言环境简介"></label>
                     <label class="field full"><span>版本检测命令 <em>*</em></span><input v-model.trim="langForm.version_cmd" placeholder="例如：go version 2>/dev/null"></label>
                 </div>
-                <div class="form-section-title">安装配置</div>
-                <div class="form-grid">
-                    <label class="field full"><span>安装源 / 镜像</span>
-                        <select v-model="langForm.install_source" @change="onLangSourceChange">
-                            <option value="official">官方源 (apt/yum/dnf)</option>
-                            <option value="mirror_aliyun">阿里云镜像</option>
-                            <option value="mirror_tsinghua">清华大学镜像</option>
-                            <option value="mirror_ustc">中科大镜像</option>
-                            <option value="sdkman">SDKMAN (JVM 系)</option>
-                            <option value="custom">自定义</option>
-                        </select>
-                    </label>
-                    <label class="field full"><span>安装脚本</span><textarea v-model.trim="langForm.install_cmd" rows="6" placeholder="输入安装命令..." spellcheck="false"></textarea></label>
-                    <div class="form-tip">
-                        <span class="tip-icon">💡</span>
-                        <span>支持多包管理器回退：使用 <code>||</code> 分隔多个命令，如 <code>apt-get install -x.go || yum install -y go</code></span>
+                <details class="form-advanced">
+                    <summary>高级选项（安装 / 卸载脚本）<small>通常无需修改，面板自动适配服务器的包管理器</small></summary>
+                    <div class="form-grid">
+                        <label class="field full"><span>安装脚本</span><textarea v-model.trim="langForm.install_cmd" rows="4" spellcheck="false"></textarea>
+                            <small class="field-hint">安装时自动探测 apt-get / dnf / yum / apk / zypper / brew 并执行首个可用分支，支持 <code v-pre>{{VERSION}}</code> 版本占位符，非 root 自动免密 sudo 重试</small></label>
+                        <label class="field full"><span>卸载脚本</span><textarea v-model.trim="langForm.uninstall_cmd" rows="4" spellcheck="false"></textarea>
+                            <small class="field-hint">内置语言的脚本随面板更新自动同步，此处修改重启后会覆盖为最新内置版本</small></label>
                     </div>
-                </div>
+                </details>
                 <div class="form-error" v-if="langFormError">{{ langFormError }}</div>
             </div>
             <div class="modal-footer">
@@ -1505,13 +1497,9 @@
                     </div>
                 </template>
                 <template v-else>
-                    <div class="cd-section" v-if="configDetailData.install_cmd">
-                        <div class="form-section-title">安装脚本</div>
-                        <pre class="cd-pre">{{ configDetailData.install_cmd }}</pre>
-                    </div>
-                    <div class="cd-section" v-if="configDetailData.uninstall_cmd">
-                        <div class="form-section-title">卸载命令</div>
-                        <pre class="cd-pre">{{ configDetailData.uninstall_cmd }}</pre>
+                    <div class="cd-section">
+                        <div class="form-section-title">安装 / 卸载</div>
+                        <p class="cd-note">由面板自动处理：安装时自动适配服务器的包管理器（apt-get / yum / dnf / brew），卸载时同步清理依赖与残留文件。</p>
                     </div>
                 </template>
                 <div class="cd-empty" v-if="configDetailEmpty">该配置暂无详细信息</div>

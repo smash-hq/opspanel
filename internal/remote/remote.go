@@ -336,7 +336,8 @@ func (rc *RemoteCollector) RunWithSudo(ctx context.Context, client commandRunner
 }
 
 // pmCandidates 常见包管理器（探测与分支匹配共用），按优先级排列。
-var pmCandidates = []string{"apt-get", "dnf", "yum", "apk", "zypper"}
+// brew 兼顾 macOS（及 Linux 上的 Homebrew）目标机：安装/卸载命令可包含 brew 分支。
+var pmCandidates = []string{"apt-get", "dnf", "yum", "apk", "zypper", "brew"}
 
 // shQuote 用单引号包裹字符串，便于安全嵌入 sh -c '...'。
 func shQuote(s string) string {
@@ -374,7 +375,11 @@ func referencedPMs(seg string) []string {
 }
 
 // selectInstallBranch 对 "A || B || C" 形式的多分支安装命令，按服务器实际可用的
-// 包管理器挑选首个可行分支，避免在无关分支上空跑报错；无匹配分支时原样返回。
+// 包管理器挑选首个可行分支，避免在无关分支上空跑报错：
+//   - 从左到右扫描，分支引用的包管理器全部可用 → 选中该分支单独执行；
+//   - 遇到不依赖包管理器的分支（如官方 tarball / 安装脚本）→ 返回整条命令，
+//     交由 shell 的 || 语义自然回退到后续分支；
+//   - 无可行分支时原样返回。
 func selectInstallBranch(cmd string, avail map[string]bool) (string, bool) {
 	if !strings.Contains(cmd, " || ") {
 		return cmd, false
@@ -382,7 +387,7 @@ func selectInstallBranch(cmd string, avail map[string]bool) (string, bool) {
 	for _, seg := range strings.Split(cmd, " || ") {
 		pms := referencedPMs(seg)
 		if len(pms) == 0 {
-			return seg, true // 不依赖包管理器的分支（如 curl | sh）直接可用
+			return cmd, false // shell 的 || 语义可自然回退到后续分支
 		}
 		ok := true
 		for _, pm := range pms {
@@ -622,8 +627,17 @@ func (rc *RemoteCollector) InstallLanguageStream(ctx context.Context, srv *Serve
 	defer rc.Release(srv.ID)
 
 	cmd := installCmd
-	if version != "" {
+	if version == "" {
+		if strings.Contains(cmd, "{{VERSION}}") {
+			// 字面占位符传给 shell 必然执行失败，提前终止并说明原因
+			sink("==> 安装命令包含 {{VERSION}} 版本占位符，但未选择版本：请在版本框选择或输入版本后重试\n")
+			return errors.New("install command contains {{VERSION}} placeholder but no version was provided")
+		}
+	} else if strings.Contains(installCmd, "{{VERSION}}") {
 		cmd = strings.ReplaceAll(cmd, "{{VERSION}}", version)
+	} else {
+		// 命令不感知版本：透明告知，避免"选了版本却装了默认版本"的困惑
+		sink("==> 注意：安装命令未使用 {{VERSION}} 占位符，选择的版本 " + version + " 不会生效，将安装默认版本\n")
 	}
 
 	// 适时选择包管理器：多分支安装命令按服务器实际可用的包管理器挑选首个可行分支

@@ -84,6 +84,11 @@
     margin-bottom: 12px;
 }
 
+/* 刷新按钮固定在工具栏最右侧，与其他功能页保持一致 */
+.docker-toolbar > .toolbar-button:last-child {
+    margin-left: auto;
+}
+
 .docker-toolbar input[type="text"],
 .docker-toolbar input:not([type="checkbox"]) {
     flex: 1;

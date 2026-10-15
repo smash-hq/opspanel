@@ -16,7 +16,7 @@ export function setupLanguages(ctx) {
     // ─── 编程语言环境 ───
     const languages = ref([]);
     const langFormMode = ref(null);
-    const langForm = reactive({ id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '', install_source: 'official' });
+    const langForm = reactive({ id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '', uninstall_cmd: '' });
     const langSaving = ref(false);
     const langFormError = ref('');
     const detectedLanguages = ref([]);
@@ -123,46 +123,15 @@ export function setupLanguages(ctx) {
                 versions: (lang.versions || []).join(', '),
                 version_cmd: lang.versionCmd || lang.version_cmd || '',
                 install_cmd: lang.installCmd || lang.install_cmd || '',
+                uninstall_cmd: lang.uninstallCmd || lang.uninstall_cmd || '',
             });
         } else {
-            Object.assign(langForm, { id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '' });
+            Object.assign(langForm, { id: '', name: '', category: 'runtime', description: '', icon: '', versions: '', version_cmd: '', install_cmd: '', uninstall_cmd: '' });
         }
     }
 
     function closeLangForm() {
         if (!langSaving.value) langFormMode.value = null;
-    }
-
-    // 根据选择的安装源自动生成安装脚本
-    function onLangSourceChange() {
-        const id = langForm.id.toLowerCase()
-        const sources = {
-            mirror_aliyun: {
-                go: 'curl -fsSL https://mirrors.aliyun.com/golang/install.sh | bash',
-                java: 'curl -fsSL https://mirrors.aliyun.com/opensource/JDK/install.sh | bash',
-                python3: 'curl -fsSL https://mirrors.aliyun.com/pypi/get-pip.py | python3',
-                nodejs: 'curl -fsSL https://mirrors.aliyun.com/nvm/install.sh | bash',
-            },
-            mirror_tsinghua: {
-                go: 'curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/golang/install.sh | bash',
-                python3: 'pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple --upgrade pip',
-                nodejs: 'curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/nvm/install.sh | bash',
-            },
-            mirror_ustc: {
-                go: 'curl -fsSL https://mirrors.ustc.edu.cn/golang/install.sh | bash',
-                python3: 'pip3 install -i https://pypi.mirrors.ustc.edu.cn/simple --upgrade pip',
-                nodejs: 'curl -fsSL https://mirrors.ustc.edu.cn/nvm/install.sh | bash',
-            },
-            sdkman: {
-                java: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install java 17.0.9-tem',
-                kotlin: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install kotlin',
-                scala: 'curl -s "https://get.sdkman.io" | bash && source "$HOME/.sdkman/bin/sdkman-init.sh" && sdk install scala',
-            }
-        }
-        const src = sources[langForm.install_source]
-        if (src && src[id]) {
-            langForm.install_cmd = src[id]
-        }
     }
 
     async function saveLanguage() {
@@ -175,6 +144,7 @@ export function setupLanguages(ctx) {
             description: langForm.description, icon: langForm.icon,
             versions: parseVersions(langForm.versions),
             version_cmd: langForm.version_cmd, install_cmd: langForm.install_cmd,
+            uninstall_cmd: langForm.uninstall_cmd,
         };
         try {
             const isEdit = langFormMode.value === 'edit';
@@ -272,7 +242,7 @@ export function setupLanguages(ctx) {
         detectedLanguages, langDetectLoading, langSearch, detectedLanguagesFiltered,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
         langInstallAction, langStatusText, langLogViewer,
-        loadLanguages, openLangForm, closeLangForm, onLangSourceChange, saveLanguage,
+        loadLanguages, openLangForm, closeLangForm, saveLanguage,
         deleteLanguage: handleDeleteLanguage,
         detectServerLanguages, installLang, uninstallLang,
         refreshInstallLog,

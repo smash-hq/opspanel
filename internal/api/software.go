@@ -1232,7 +1232,7 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 		return
 	}
 	if lang.InstallCmd == "" {
-		Fail(w, http.StatusBadRequest, 400, "no install command defined")
+		Fail(w, http.StatusBadRequest, 400, "该语言未定义安装命令，请在编辑语言的高级选项中配置安装脚本")
 		return
 	}
 
@@ -1284,7 +1284,7 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		return
 	}
 	if lang.UninstallCmd == "" {
-		Fail(w, http.StatusBadRequest, 400, "no uninstall command defined")
+		Fail(w, http.StatusBadRequest, 400, "该语言未定义卸载命令，请在语言环境编辑中配置「卸载脚本」后重试")
 		return
 	}
 

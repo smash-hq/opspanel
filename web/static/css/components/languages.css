@@ -3,6 +3,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 10px;
     margin-bottom: 16px;
 }
 
@@ -121,27 +122,30 @@
     max-width: 600px;
 }
 
-.form-tip {
+/* 高级选项折叠区：安装/卸载脚本默认收起，避免暴露内部实现细节 */
+.form-advanced {
+    margin-top: 16px;
     padding: 10px 14px;
-    background: var(--color-blue-light, #eff6ff);
+    border: 1px dashed var(--card-border, #e5e7eb);
     border-radius: 8px;
-    font-size: 0.8rem;
+}
+
+.form-advanced summary {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: var(--text-secondary, #475569);
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-top: 8px;
 }
 
-.form-tip .tip-icon {
-    flex-shrink: 0;
+.form-advanced summary small {
+    margin-left: 8px;
+    font-weight: 400;
+    color: var(--text-muted, #94a3b8);
 }
 
-.form-tip code {
-    background: rgba(59, 130, 246, 0.1);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 0.75rem;
+.form-advanced[open] summary {
+    margin-bottom: 12px;
 }
 
 /* ─── 安装日志 ─── */

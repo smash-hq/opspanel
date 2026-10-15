@@ -117,6 +117,13 @@
     word-break: break-all;
 }
 
+.cd-note {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-secondary, #475569);
+}
+
 .cd-empty {
     text-align: center;
     color: var(--text-dim, #64748b);

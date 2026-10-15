@@ -266,6 +266,29 @@ func (rc *RemoteCollector) AppStatus(ctx context.Context, srv *Server, pid int) 
 	return "stopped"
 }
 
+// AdoptApp 认领面板外已在运行的服务进程（用户手动启动，或历史版本启动时状态未落库）：
+// 按启动命令匹配进程 cmdline，返回 PID 最大的进程（最晚派生的叶子进程，即真正的服务进程）。
+// grep -vw $$ 排除执行本次探测的 shell 自身（其 cmdline 含匹配串）；未找到返回 0。
+func (rc *RemoteCollector) AdoptApp(ctx context.Context, srv *Server, startCmd string) int {
+	startCmd = strings.TrimSpace(startCmd)
+	if startCmd == "" {
+		return 0
+	}
+	conn, err := rc.Acquire(srv)
+	if err != nil {
+		return 0
+	}
+	defer rc.Release(srv.ID)
+
+	cmd := fmt.Sprintf("pgrep -f -- %q 2>/dev/null | grep -vw $$ | sort -n | tail -n 1", startCmd)
+	out := rc.RunOne(ctx, conn, cmd)
+	pid, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
+}
+
 // StartApp 在远端部署目录内启动服务：nohup 后台执行启动命令，返回记录到的 PID。
 // 启动命令经 sh -c 执行，支持管道、重定向等 shell 语法；stdout/stderr 追加到日志文件。
 func (rc *RemoteCollector) StartApp(ctx context.Context, srv *Server, deployDir, startCmd, logFile string) (int, error) {
@@ -292,8 +315,11 @@ func (rc *RemoteCollector) StartApp(ctx context.Context, srv *Server, deployDir,
 	}
 	defer rc.Release(srv.ID)
 
-	// nohup 脱离会话；</dev/null 防止读 stdin 挂起；echo $! 输出新进程 PID
-	cmd := fmt.Sprintf("cd %q && nohup sh -c %q >> %q 2>&1 < /dev/null & echo $!", deployDir, startCmd, logFile)
+	// nohup 脱离会话；</dev/null 防止读 stdin 挂起；echo $! 输出新进程 PID。
+	// exec 至关重要：& 先 fork 后台子 shell 执行 cd && nohup...，子 shell 会一直等待 java 退出并
+	// 持有 SSH 会话的 stdout 管道，导致 sshd 永远不发 EOF、CombinedOutput 挂起（页面永久转圈）；
+	// exec 让子 shell 立即被 nohup 进程替换，管道无持有者、命令立刻返回，且 $! 的 PID 就是服务进程本身。
+	cmd := fmt.Sprintf("cd %q && exec nohup sh -c %q >> %q 2>&1 < /dev/null & echo $!", deployDir, startCmd, logFile)
 	out := rc.RunOne(ctx, conn, cmd)
 	pidStr := strings.TrimSpace(out)
 	// 输出可能带告警行，取最后一行

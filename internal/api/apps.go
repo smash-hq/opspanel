@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/smash-hq/opspanel/internal/host"
 	"github.com/smash-hq/opspanel/internal/logger"
@@ -82,6 +83,15 @@ func (h *AppHandler) handleApps(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// appOpTimeout 是服务启动/停止/重启的独立超时：操作与 HTTP 请求上下文解耦后需要自带上限，
+// 避免客户端断开（r.Context() 取消）中断远程操作导致状态与服务器实际不一致。
+const appOpTimeout = 3 * time.Minute
+
+// appOpCtx 返回与 HTTP 请求解耦的操作上下文（客户端断开不影响启动/停止继续执行与状态落库）。
+func appOpCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), appOpTimeout)
+}
+
 // listApps 返回部署应用列表；refresh=1 时逐个核实进程存活状态并回写。
 func (h *AppHandler) listApps(w http.ResponseWriter, r *http.Request) {
 	serverID := r.URL.Query().Get("server")
@@ -90,9 +100,6 @@ func (h *AppHandler) listApps(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("refresh") == "1" && len(apps) > 0 {
 		srvCache := map[string]*remote.Server{}
 		for _, app := range apps {
-			if app.Status == "failed" && app.PID <= 0 {
-				continue // 保留上次启动失败标记，待下次启动/停止操作后清除
-			}
 			srv, cached := srvCache[app.ServerID]
 			if !cached {
 				hs, found := h.store.Get(r.Context(), app.ServerID)
@@ -101,6 +108,16 @@ func (h *AppHandler) listApps(w http.ResponseWriter, r *http.Request) {
 				}
 				srv = toRemoteServer(hs)
 				srvCache[app.ServerID] = srv
+			}
+			if app.PID <= 0 {
+				// 无 PID：尝试认领面板外已在运行的服务进程（手动启动 / 历史启动状态未落库），
+				// 认领失败时保留原状态（失败徽标不被覆盖）
+				if pid := h.remoteCollector.AdoptApp(r.Context(), srv, app.StartCmd); pid > 0 {
+					app.PID = pid
+					app.Status = "running"
+					_ = h.apps.UpdateApp(r.Context(), app)
+				}
+				continue
 			}
 			if status := h.remoteCollector.AppStatus(r.Context(), srv, app.PID); status != app.Status {
 				app.Status = status
@@ -484,23 +501,25 @@ func (h *AppHandler) startApp(w http.ResponseWriter, r *http.Request, app *stora
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 		return
 	}
-	if msg := h.checkLanguage(r.Context(), app, rs); msg != "" {
-		h.markStartFailed(r.Context(), app, "缺少语言环境："+msg)
+	opCtx, cancel := appOpCtx()
+	defer cancel()
+	if msg := h.checkLanguage(opCtx, app, rs); msg != "" {
+		h.markStartFailed(opCtx, app, "缺少语言环境："+msg)
 		Fail(w, http.StatusBadRequest, 400, msg)
 		return
 	}
 
-	pid, err := h.remoteCollector.StartApp(r.Context(), rs, app.DeployDir, app.StartCmd, app.LogFile)
+	pid, err := h.remoteCollector.StartApp(opCtx, rs, app.DeployDir, app.StartCmd, app.LogFile)
 	if err != nil {
 		h.log.Errorw("start app failed", "app", app.ID, "error", err)
-		h.markStartFailed(r.Context(), app, err.Error())
+		h.markStartFailed(opCtx, app, err.Error())
 		Fail(w, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
 	app.PID = pid
 	app.Status = "running"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(r.Context(), app)
+	_ = h.apps.UpdateApp(opCtx, app)
 	h.log.Infow("app started", "app", app.ID, "pid", pid)
 	OK(w, map[string]any{"status": "running", "pid": pid})
 }
@@ -511,8 +530,10 @@ func (h *AppHandler) stopApp(w http.ResponseWriter, r *http.Request, app *storag
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 		return
 	}
+	opCtx, cancel := appOpCtx()
+	defer cancel()
 	if app.PID > 0 {
-		if err := h.remoteCollector.StopApp(r.Context(), rs, app.PID); err != nil {
+		if err := h.remoteCollector.StopApp(opCtx, rs, app.PID); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, err.Error())
 			return
 		}
@@ -520,7 +541,7 @@ func (h *AppHandler) stopApp(w http.ResponseWriter, r *http.Request, app *storag
 	app.PID = 0
 	app.Status = "stopped"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(r.Context(), app)
+	_ = h.apps.UpdateApp(opCtx, app)
 	h.log.Infow("app stopped", "app", app.ID)
 	OK(w, map[string]string{"status": "stopped"})
 }
@@ -531,29 +552,31 @@ func (h *AppHandler) restartApp(w http.ResponseWriter, r *http.Request, app *sto
 		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
 		return
 	}
+	opCtx, cancel := appOpCtx()
+	defer cancel()
 	if app.PID > 0 {
-		if err := h.remoteCollector.StopApp(r.Context(), rs, app.PID); err != nil {
+		if err := h.remoteCollector.StopApp(opCtx, rs, app.PID); err != nil {
 			Fail(w, http.StatusInternalServerError, 500, "停止旧进程失败: "+err.Error())
 			return
 		}
 	}
-	if msg := h.checkLanguage(r.Context(), app, rs); msg != "" {
-		h.markStartFailed(r.Context(), app, "缺少语言环境："+msg)
+	if msg := h.checkLanguage(opCtx, app, rs); msg != "" {
+		h.markStartFailed(opCtx, app, "缺少语言环境："+msg)
 		Fail(w, http.StatusBadRequest, 400, msg)
 		return
 	}
 
-	pid, err := h.remoteCollector.StartApp(r.Context(), rs, app.DeployDir, app.StartCmd, app.LogFile)
+	pid, err := h.remoteCollector.StartApp(opCtx, rs, app.DeployDir, app.StartCmd, app.LogFile)
 	if err != nil {
 		h.log.Errorw("restart app failed", "app", app.ID, "error", err)
-		h.markStartFailed(r.Context(), app, err.Error())
+		h.markStartFailed(opCtx, app, err.Error())
 		Fail(w, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
 	app.PID = pid
 	app.Status = "running"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(r.Context(), app)
+	_ = h.apps.UpdateApp(opCtx, app)
 	h.log.Infow("app restarted", "app", app.ID, "pid", pid)
 	OK(w, map[string]any{"status": "running", "pid": pid})
 }
