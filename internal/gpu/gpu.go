@@ -4,6 +4,7 @@ package gpu
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -88,12 +89,15 @@ func detectPath(out, prefix string) string {
 	return ""
 }
 
-// toolPath 组装工具查询命令：优先用探测到的完整路径（兜底非 PATH 安装位置），退回裸命令名。
-func toolPath(out, prefix, fallback string) string {
+// toolPath 组装工具查询命令：经 bash 登录 shell 执行。
+// SSH 非交互 shell 不加载 /etc/profile.d，缺少驱动库环境
+// （昇腾 npu-smi 报 dcmi initialize failed ret -8005 即此因），login shell 与用户手动登录一致。
+// 优先裸命令名（与用户交互环境命中一致），无探测路径时直接裸命令。
+func toolPath(out, prefix, name string) string {
 	if p := detectPath(out, prefix); p != "" {
-		return p + " info"
+		return fmt.Sprintf("bash -lc '%s info 2>/dev/null || %s info'", name, p)
 	}
-	return fallback + " info"
+	return fmt.Sprintf("bash -lc '%s info'", name)
 }
 
 // Collect 探测厂商并拉取全量卡信息；解析宽容：个别字段缺失置空，不影响整体结果。
@@ -129,9 +133,18 @@ func Collect(ctx context.Context, r Runner) (*Snapshot, error) {
 		snap.Devices = parseCambricon(out)
 	}
 	if len(snap.Devices) == 0 {
-		snap.Error = tool + " 输出未能解析出设备信息"
+		snap.Error = tool + " 输出未能解析出设备信息：" + snippet(out)
 	}
 	return snap, nil
+}
+
+// snippet 压缩空白并截断，把原始输出片段附在错误信息里辅助排查格式问题。
+func snippet(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 300 {
+		s = s[:300] + "..."
+	}
+	return s
 }
 
 // normHealth 归一化健康状态：健康/正常/OK/Healthy → OK，其余原样返回。

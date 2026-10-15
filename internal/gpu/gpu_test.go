@@ -43,8 +43,8 @@ func TestDetect(t *testing.T) {
 
 func TestCollectAscend(t *testing.T) {
 	r := &fakeRunner{outputs: map[string]string{
-		detectCmd:                        "npu:/usr/local/Ascend/npu-smi\n",
-		"/usr/local/Ascend/npu-smi info": ascendSample,
+		detectCmd: "npu:/usr/local/Ascend/npu-smi\n",
+		"bash -lc 'npu-smi info 2>/dev/null || /usr/local/Ascend/npu-smi info'": ascendSample,
 	}}
 	snap, err := Collect(context.Background(), r)
 	if err != nil {
@@ -60,8 +60,8 @@ func TestCollectAscend(t *testing.T) {
 
 func TestCollectCambricon(t *testing.T) {
 	r := &fakeRunner{outputs: map[string]string{
-		detectCmd:             "cmon:/usr/bin/cnmon\n",
-		"/usr/bin/cnmon info": cambriconSampleEN,
+		detectCmd: "cmon:/usr/bin/cnmon\n",
+		"bash -lc 'cnmon info 2>/dev/null || /usr/bin/cnmon info'": cambriconSampleEN,
 	}}
 	snap, err := Collect(context.Background(), r)
 	if err != nil {
