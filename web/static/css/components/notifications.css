@@ -309,9 +309,20 @@
 }
 
 .notify-empty-icon {
-    display: block;
-    font-size: 1.6rem;
-    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 10px;
+    border-radius: 50%;
+    background: var(--sidebar-item-bg, rgba(15, 23, 42, 0.05));
+    color: var(--text-muted, #94a3b8);
+}
+
+.notify-empty-icon svg {
+    width: 22px;
+    height: 22px;
 }
 
 /* ═══ 通知中心页面：左列表 + 右配置 ═══ */

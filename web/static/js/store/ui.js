@@ -54,7 +54,7 @@ export function setupUi(ctx) {
         if (link) link.href = '/api/v1/settings/favicon?' + Date.now();
     }
 
-    const brandName = computed(() => settingsForm.panelName || 'Server Plane');
+    const brandName = computed(() => settingsForm.panelName || 'OpsPanel');
     const welcomeMessage = computed(() => settingsForm.welcomeMessage);
 
     async function saveSettings() {

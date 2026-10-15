@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/logger"
+	"github.com/smash-hq/opspanel/internal/logger"
 )
 
 // 连接池默认参数。

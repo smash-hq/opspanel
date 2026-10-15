@@ -13,11 +13,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/notify"
-	"github.com/smash-hq/server-management/internal/remote"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/notify"
+	"github.com/smash-hq/opspanel/internal/remote"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // uploadKeyPattern 校验上传会话 key：仅允许小写 hex，防路径穿越。

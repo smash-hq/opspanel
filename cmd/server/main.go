@@ -1,4 +1,4 @@
-// Server Plane 服务器管理面板 - 入口
+// OpsPanel 服务器管理面板 - 入口
 //
 // 启动后访问 http://<host>:18080 查看控制台，
 // REST API: /api/v1/health, /api/v1/system/info
@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/config"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/server"
-	"github.com/smash-hq/server-management/web"
+	"github.com/smash-hq/opspanel/internal/config"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/server"
+	"github.com/smash-hq/opspanel/web"
 	"github.com/spf13/cobra"
 )
 
@@ -33,8 +33,8 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:     "smp-server",
-		Short:   "Server Plane — 服务器管理面板",
+		Use:     "opspanel",
+		Short:   "OpsPanel — 服务器管理面板",
 		Long:    "单机优先的 Go 原生服务器运维平台，提供浏览器控制台与 REST/WebSocket API。",
 		Version: version + " (commit: " + gitCommit + ")",
 		RunE:    runServer,

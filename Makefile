@@ -6,12 +6,12 @@
 # ============================================================
 # 变量
 # ============================================================
-BINARY_NAME   := smp-server
+BINARY_NAME   := opspanel
 MAIN_PATH     := ./cmd/server
 VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GIT_COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 PORT          ?= 18080
-DOCKER_IMAGE  ?= smash-hq/server-management:latest
+DOCKER_IMAGE  ?= smash-hq/opspanel:latest
 LDFLAGS       := -w -s -X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT)
 PID_FILE      := /tmp/$(BINARY_NAME).pid
 
@@ -20,7 +20,7 @@ PID_FILE      := /tmp/$(BINARY_NAME).pid
 # ============================================================
 ## help: 显示所有可用目标（默认）
 help:
-	@echo "Server Plane $(VERSION) - 服务器管理面板"
+	@echo "OpsPanel $(VERSION) - 服务器管理面板"
 	@echo ""
 	@echo "用法: make <目标>"
 	@echo ""

@@ -13,7 +13,7 @@
 
 **请勿通过公开 Issue 报告安全漏洞。**
 
-请使用 GitHub 的 [Security Advisories（私下报告）](https://github.com/smash-hq/server-management/security/advisories/new)私下报告，或通过项目主页提供的维护者联系方式联系。
+请使用 GitHub 的 [Security Advisories（私下报告）](https://github.com/smash-hq/opspanel/security/advisories/new)私下报告，或通过项目主页提供的维护者联系方式联系。
 
 报告时请尽量包含：
 
@@ -25,10 +25,10 @@
 
 ## 安全模型与已知限制
 
-Server Plane 定位为**内网运维工具**，安全设计以内网可信环境为前提：
+OpsPanel 定位为**内网运维工具**，安全设计以内网可信环境为前提：
 
 1. **执行远程命令**：面板通过 SSH 在被管服务器上执行系统命令（含 sudo），本质等同于把服务器操作权交给面板使用者。
-2. **凭证本地存储**：被管服务器的 SSH 密码 / 私钥存储在本地 SQLite（`data/smp.db`）中，请确保数据目录权限收紧（目录 `0700`、文件 `0600`）。
+2. **凭证本地存储**：被管服务器的 SSH 密码 / 私钥存储在本地 SQLite（`data/opspanel.db`）中，请确保数据目录权限收紧（目录 `0700`、文件 `0600`）。
 3. **认证机制较薄**：内置单管理员登录认证（bcrypt + Cookie 会话），但无多因素、无审计日志、无失败锁定；首次启动的默认账户为 `admin` / `admin123`，请立即修改。
 4. **传输不加密**：面板自身默认 HTTP，不含 HTTPS；请置于反向代理（Nginx / Caddy）之后启用 TLS。
 

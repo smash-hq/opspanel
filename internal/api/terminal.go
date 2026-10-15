@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/smash-hq/server-management/internal/ws"
+	"github.com/smash-hq/opspanel/internal/ws"
 )
 
 // wsUpgrader 终端 WebSocket 升级器：与监控 WS 一致，校验 Origin 同源。

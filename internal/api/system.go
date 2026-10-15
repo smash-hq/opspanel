@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
 )
 
 // SystemHandler 提供系统信息采集 API。

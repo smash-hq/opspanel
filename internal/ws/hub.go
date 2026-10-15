@@ -10,9 +10,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/system"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/system"
 )
 
 // websocket 协议升级器：拒绝与当前 Host 不同源的浏览器请求，防跨站 WebSocket 劫持

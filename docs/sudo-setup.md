@@ -1,6 +1,6 @@
 # SSH 用户 Sudo 权限配置指南
 
-当使用非 root 用户连接远程服务器时，部分系统信息采集可能需要 root 权限。Server Plane 会自动尝试使用 `sudo -n`（非交互式 sudo）作为回退。如果 sudo 不可用，页面会显示权限警告。
+当使用非 root 用户连接远程服务器时，部分系统信息采集可能需要 root 权限。OpsPanel 会自动尝试使用 `sudo -n`（非交互式 sudo）作为回退。如果 sudo 不可用，页面会显示权限警告。
 
 ## 目录
 
@@ -45,10 +45,10 @@
 
 ## 仅授权必要命令（更安全）
 
-为最小化安全风险，仅授权 Server Plane 采集所需的命令：
+为最小化安全风险，仅授权 OpsPanel 采集所需的命令：
 
 ```bash
-sudo visudo -f /etc/sudoers.d/server-plane
+sudo visudo -f /etc/sudoers.d/opspanel
 ```
 
 添加以下内容（将 `your_username` 替换为实际用户名）：
@@ -71,7 +71,7 @@ sudo -n whoami
 # 应输出: root（无需输入密码）
 ```
 
-### 方法二：在 Server Plane 中测试
+### 方法二：在 OpsPanel 中测试
 
 1. 添加服务器时填写凭据
 2. 点击 **「⚡ 测试连接」** 按钮

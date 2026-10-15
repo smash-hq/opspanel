@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // PushController 控制推送循环的接口。

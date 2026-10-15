@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
-	"github.com/smash-hq/server-management/internal/system"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
+	"github.com/smash-hq/opspanel/internal/system"
 )
 
 // Collector 根据服务器类型调度本地或远程采集。

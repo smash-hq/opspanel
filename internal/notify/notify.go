@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // metaPrefix SMTP 配置在 meta 表中的键前缀（api 层将其列为保留键，禁止通用设置 API 读写）。

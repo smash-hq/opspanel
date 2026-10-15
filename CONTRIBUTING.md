@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你关注 Server Plane！欢迎通过 Issue 和 Pull Request 参与共建。
+感谢你关注 OpsPanel！欢迎通过 Issue 和 Pull Request 参与共建。
 
 ## 目录
 
@@ -24,8 +24,8 @@
 
 ```bash
 # 1. Fork 并克隆
-git clone https://github.com/<你的用户名>/server-management.git
-cd server-management
+git clone https://github.com/<你的用户名>/opspanel.git
+cd opspanel
 
 # 2. 下载依赖
 go mod download
@@ -125,6 +125,6 @@ refactor: 抽离 Docker 检测逻辑
 
 ## 安全问题报告
 
-Server Plane 定位为**内网工具**：内置单管理员登录认证，但安全机制较薄（无 HTTPS、无多因素、无审计日志），请勿在公网暴露使用（详见 [SECURITY.md](SECURITY.md) 与 [README 安全声明](README.md#️-安全声明)）。
+OpsPanel 定位为**内网工具**：内置单管理员登录认证，但安全机制较薄（无 HTTPS、无多因素、无审计日志），请勿在公网暴露使用（详见 [SECURITY.md](SECURITY.md) 与 [README 风险提示](README.zh-CN.md#风险提示)）。
 
-如发现代码层面的安全缺陷（命令注入、路径穿越、凭证处理不当等），请勿公开 Issue，通过 [GitHub Security Advisories](https://github.com/smash-hq/server-management/security/advisories/new) 私下报告，我们会在修复后致谢。
+如发现代码层面的安全缺陷（命令注入、路径穿越、凭证处理不当等），请勿公开 Issue，通过 [GitHub Security Advisories](https://github.com/smash-hq/opspanel/security/advisories/new) 私下报告，我们会在修复后致谢。

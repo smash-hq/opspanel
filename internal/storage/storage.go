@@ -31,13 +31,13 @@ func withQueryTimeout(ctx context.Context) (context.Context, context.CancelFunc)
 }
 
 // New 创建并初始化数据库。
-// dataDir 是存放数据库文件的目录，文件名为 smp.db。
+// dataDir 是存放数据库文件的目录，文件名为 opspanel.db。
 func New(dataDir string) (*DB, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	dbPath := filepath.Join(dataDir, "smp.db")
+	dbPath := filepath.Join(dataDir, "opspanel.db")
 	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
 
 	sqlDB, err := sql.Open("sqlite", dsn)

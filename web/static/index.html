@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Plane · 服务器管理</title>
+    <title>OpsPanel · 服务器管理</title>
     <link rel="icon" href="/api/v1/settings/favicon">
     <!-- 样式表：按 base → layout → components（按域拆分）→ states → cards 顺序加载，同名规则后者覆盖 -->
     <link rel="stylesheet" href="/css/base.css">
@@ -189,7 +189,7 @@
                         </div>
                         <div v-if="notifyLoading && !notifications.length" class="notify-empty">加载中...</div>
                         <div v-else-if="!notifications.length" class="notify-empty">
-                            <span class="notify-empty-icon">🔔</span>暂无通知
+                            <span class="notify-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>暂无通知
                         </div>
                         <div v-else class="notify-list">
                             <div v-for="n in notifications" :key="n.id" class="notify-item" :class="[n.level, { read: n.read }]" @click="openNotification(n)" title="点击查看详情">
@@ -363,11 +363,11 @@
                         <h3>启动信息</h3>
                         <p class="settings-desc">配置面板启动时加载的全局信息</p>
                         <div class="form-grid">
-                            <label class="field full"><span>面板名称</span><input v-model="settingsForm.panelName" placeholder="Server Plane"></label>
+                            <label class="field full"><span>面板名称</span><input v-model="settingsForm.panelName" placeholder="OpsPanel"></label>
                             <label class="field full"><span>管理员邮箱</span><input v-model="settingsForm.adminEmail" placeholder="admin@example.com"></label>
                             <label class="field"><span>推送间隔（秒）</span><input v-model.number="settingsForm.pushInterval" type="number" min="3" max="60"></label>
                             <label class="field"><span>默认 SSH 端口</span><input v-model.number="settingsForm.defaultSSHPort" type="number" min="1" max="65535"></label>
-                            <label class="field full"><span>欢迎语</span><textarea v-model="settingsForm.welcomeMessage" rows="2" placeholder="欢迎使用 Server Plane 服务器管理面板"></textarea></label>
+                            <label class="field full"><span>欢迎语</span><textarea v-model="settingsForm.welcomeMessage" rows="2" placeholder="欢迎使用 OpsPanel 服务器管理面板"></textarea></label>
                         </div>
                         <div class="settings-actions">
                             <button class="primary-button" @click="saveSettings" :disabled="settingsSaving">{{ settingsSaving ? '保存中...' : '保存设置' }}</button>
@@ -422,7 +422,7 @@
                     </div>
                     <div v-if="notifyLoading && !notifications.length" class="notify-empty">加载中...</div>
                     <div v-else-if="!ncFiltered.length" class="notify-empty">
-                        <span class="notify-empty-icon">🔔</span>{{ notifications.length ? '没有符合筛选条件的通知' : '暂无通知' }}
+                        <span class="notify-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>{{ notifications.length ? '没有符合筛选条件的通知' : '暂无通知' }}
                     </div>
                     <div v-else class="nc-list">
                         <div v-for="n in ncFiltered" :key="n.id" class="notify-item" :class="[n.level, { read: n.read }]" @click="openNotification(n)" title="点击查看详情">
@@ -1929,7 +1929,7 @@
     <div class="modal-overlay" v-if="showDoc" @click.self="showDoc = false">
         <div class="modal doc-modal">
             <div class="modal-header">
-                <div><span class="eyebrow">DOCUMENTATION</span><h3>Server Plane 使用文档</h3></div>
+                <div><span class="eyebrow">DOCUMENTATION</span><h3>OpsPanel 使用文档</h3></div>
                 <button class="icon-button" @click="showDoc = false" title="关闭">×</button>
             </div>
             <div class="doc-content">
@@ -2025,14 +2025,14 @@
                         <li>管理 Docker 容器（运行用户不在 docker 组时）</li>
                     </ul>
                     <p><strong>方式一：配置免密 sudo（推荐）</strong>——服务执行失败时会自动尝试 <code>sudo -n</code> 免密提权：</p>
-                    <pre><code>sudo visudo -f /etc/sudoers.d/server-plane
-# 写入以下内容（smpuser 替换为服务运行用户）：
-smpuser ALL=(ALL) NOPASSWD: ALL
+                    <pre><code>sudo visudo -f /etc/sudoers.d/opspanel
+# 写入以下内容（opspaneluser 替换为服务运行用户）：
+opspaneluser ALL=(ALL) NOPASSWD: ALL
 # 保存后设置安全权限：
-sudo chmod 0440 /etc/sudoers.d/server-plane</code></pre>
+sudo chmod 0440 /etc/sudoers.d/opspanel</code></pre>
                     <p><strong>方式二：以 root 运行服务</strong>——修改 systemd unit 中 <code>User=root</code> 后 <code>systemctl daemon-reload &amp;&amp; systemctl restart</code>。简单直接，但权限过大，不建议在生产环境使用。</p>
                     <p><strong>Docker 管理：</strong>将运行用户加入 docker 组（重新登录后生效）：</p>
-                    <pre><code>sudo usermod -aG docker smpuser</code></pre>
+                    <pre><code>sudo usermod -aG docker opspaneluser</code></pre>
                 </div>
 
                 <div class="perm-section">

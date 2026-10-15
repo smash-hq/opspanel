@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
 )
 
 // ServersHandler 提供服务器配置的 CRUD API 与连接测试。

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/gpu"
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
+	"github.com/smash-hq/opspanel/internal/gpu"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
 )
 
 // GPUHandler 服务器 GPU/NPU 信息接口：无 agent，经 SSH 实时按需拉取厂商工具输出。

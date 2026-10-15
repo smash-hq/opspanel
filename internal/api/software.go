@@ -8,11 +8,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
-	"github.com/smash-hq/server-management/internal/software"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
+	"github.com/smash-hq/opspanel/internal/software"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // pkgIDPattern 限制自定义软件包 ID 字符集，防止其拼入远程 shell 命令造成注入。

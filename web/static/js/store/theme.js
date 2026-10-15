@@ -9,7 +9,7 @@ const { ref } = window.Vue;
 import { updateSettings } from '../api/settings.js';
 
 export function setupTheme(ctx) {
-    const theme = ref(localStorage.getItem('smp_theme') || 'system');
+    const theme = ref(localStorage.getItem('opspanel_theme') || 'system');
     applyTheme(theme.value);
 
     function applyTheme(t) {
@@ -28,7 +28,7 @@ export function setupTheme(ctx) {
     function setTheme(t) {
         theme.value = t;
         ctx.themeVal.value = t;
-        localStorage.setItem('smp_theme', t);
+        localStorage.setItem('opspanel_theme', t);
         applyTheme(t);
         // 持久化到后端（尽力而为：本地已生效，失败不打断交互）
         updateSettings({ theme: t }).catch(() => {});

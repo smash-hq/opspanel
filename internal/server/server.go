@@ -11,15 +11,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/api"
-	"github.com/smash-hq/server-management/internal/config"
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/middleware"
-	"github.com/smash-hq/server-management/internal/remote"
-	"github.com/smash-hq/server-management/internal/software"
-	"github.com/smash-hq/server-management/internal/storage"
-	"github.com/smash-hq/server-management/internal/ws"
+	"github.com/smash-hq/opspanel/internal/api"
+	"github.com/smash-hq/opspanel/internal/config"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/middleware"
+	"github.com/smash-hq/opspanel/internal/remote"
+	"github.com/smash-hq/opspanel/internal/software"
+	"github.com/smash-hq/opspanel/internal/storage"
+	"github.com/smash-hq/opspanel/internal/ws"
 )
 
 // Server 封装 HTTP 服务生命周期。

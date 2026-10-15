@@ -1,7 +1,7 @@
-# Server Plane 配置示例
+# OpsPanel 配置示例
 #
-# 使用方式：复制为 config.yaml 后按需修改，启动时通过 `./smp-server --config config.yaml` 指定。
-# 不提供配置文件时使用下述默认值；同名配置也可用环境变量覆盖（前缀 SMP_，如 SMP_SERVER_PORT）。
+# 使用方式：复制为 config.yaml 后按需修改，启动时通过 `./opspanel --config config.yaml` 指定。
+# 不提供配置文件时使用下述默认值；同名配置也可用环境变量覆盖（前缀 OPSPANEL_，如 OPSPANEL_SERVER_PORT）。
 # 注意：config.yaml 可能含敏感信息，已在 .gitignore 中排除，请勿提交。
 
 server:

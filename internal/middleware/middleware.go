@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/logger"
+	"github.com/smash-hq/opspanel/internal/logger"
 )
 
 // Logging 记录请求日志：错误和慢请求记录 INFO，其余记录 DEBUG。

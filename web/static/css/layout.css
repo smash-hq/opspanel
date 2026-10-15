@@ -557,7 +557,7 @@
     width: 100%;
     padding: 8px 12px;
     border-radius: var(--border-radius-sm);
-    background: transparent;
+    background: var(--sidebar-item-bg, rgba(15, 23, 42, 0.05));
     border: 1px dashed var(--sidebar-border, rgba(255,255,255,0.15));
     color: var(--sidebar-text-dim, #94a3b8);
     font-size: 12px;
@@ -566,12 +566,10 @@
 }
 
 .add-button:hover {
-    background: var(--color-blue, #3b82f6);
-    border-color: var(--color-blue, #3b82f6);
+    background: rgba(59, 130, 246, 0.12);
+    border-color: var(--sidebar-accent, #3b82f6);
     border-style: solid;
-    color: #fff;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    color: var(--sidebar-accent, #3b82f6);
 }
 
 .add-button .add-icon {
@@ -590,16 +588,15 @@
     height: 36px;
     padding: 0;
     border-radius: 50%;
-    border: 2px solid var(--sidebar-border, rgba(255,255,255,0.2));
-    background: var(--sidebar-bg-hover, #334155);
+    border: 1px dashed var(--sidebar-border, rgba(255,255,255,0.2));
+    background: var(--sidebar-item-bg, rgba(15, 23, 42, 0.05));
     margin: 0 auto;
 }
 
 .add-button.compact-add:hover {
-    background: var(--color-blue, #3b82f6);
-    border-color: var(--color-blue, #3b82f6);
-    transform: scale(1.1);
-    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.12);
+    border-color: var(--sidebar-accent, #3b82f6);
+    color: var(--sidebar-accent, #3b82f6);
 }
 
 .add-button.compact-add .add-icon {

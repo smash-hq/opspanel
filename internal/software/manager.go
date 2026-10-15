@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // toRemoteServer 将 storage.Server 转换为 remote.Server。

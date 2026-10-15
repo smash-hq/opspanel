@@ -1,4 +1,4 @@
-module github.com/smash-hq/server-management
+module github.com/smash-hq/opspanel
 
 go 1.26.0
 

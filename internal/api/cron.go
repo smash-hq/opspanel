@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/smash-hq/server-management/internal/cron"
-	"github.com/smash-hq/server-management/internal/host"
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/remote"
+	"github.com/smash-hq/opspanel/internal/cron"
+	"github.com/smash-hq/opspanel/internal/host"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/remote"
 )
 
 // CronHandler 管理目标服务器上的用户 crontab：

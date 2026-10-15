@@ -63,8 +63,8 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("log.level", def.Log.Level)
 	v.SetDefault("log.format", def.Log.Format)
 
-	// 环境变量：SMP_LOG_LEVEL、SMP_SERVER_PORT 等
-	v.SetEnvPrefix("SMP")
+	// 环境变量：OPSPANEL_LOG_LEVEL、OPSPANEL_SERVER_PORT 等
+	v.SetEnvPrefix("OPSPANEL")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -75,7 +75,7 @@ func Load(cfgFile string) (*Config, error) {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
-		v.AddConfigPath("/etc/smp/")
+		v.AddConfigPath("/etc/opspanel/")
 	}
 	if err := v.ReadInConfig(); err != nil {
 		// 配置文件缺失是正常情况；存在但解析失败则直接报错，避免静默回退到默认值

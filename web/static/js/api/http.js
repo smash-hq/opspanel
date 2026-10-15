@@ -8,7 +8,7 @@ export const API_PREFIX = '/api/v1';
 
 /** 广播会话失效事件（store 监听后回到登录页）。 */
 export function notifyUnauthorized() {
-    window.dispatchEvent(new CustomEvent('smp:unauthorized'));
+    window.dispatchEvent(new CustomEvent('opspanel:unauthorized'));
 }
 
 /**

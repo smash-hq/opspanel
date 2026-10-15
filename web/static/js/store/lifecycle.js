@@ -16,7 +16,7 @@ export function setupLifecycle(ctx) {
         ctx.initAuth();
         window.addEventListener('keydown', handleKeydown);
         window.addEventListener('resize', ctx.handleWindowResize);
-        window.addEventListener('smp:unauthorized', ctx.handleUnauthorized);
+        window.addEventListener('opspanel:unauthorized', ctx.handleUnauthorized);
     });
 
     // 根据活跃 Tab 暂停/恢复系统快照推送（减少不必要的 SSH 连接；尽力而为）
@@ -30,7 +30,7 @@ export function setupLifecycle(ctx) {
         ctx.disconnectTerminal();
         window.removeEventListener('keydown', handleKeydown);
         window.removeEventListener('resize', ctx.handleWindowResize);
-        window.removeEventListener('smp:unauthorized', ctx.handleUnauthorized);
+        window.removeEventListener('opspanel:unauthorized', ctx.handleUnauthorized);
         document.removeEventListener('click', ctx.handleDocClickForCombo);
     });
 

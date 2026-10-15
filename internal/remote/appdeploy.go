@@ -18,7 +18,7 @@ import (
 const uploadTimeout = LongOpTimeout
 
 // appChunkDirName 是部署目录下分片上传的暂存目录名（上传完成后自动清理）。
-const appChunkDirName = ".smp-upload"
+const appChunkDirName = ".opspanel-upload"
 
 // appSnippet 压缩空白并截断过长输出，用于错误信息展示。
 func appSnippet(s string) string {
@@ -90,7 +90,7 @@ func (rc *RemoteCollector) runAppCmd(ctx context.Context, srv *Server, cmd strin
 	return out, nil
 }
 
-// AppUploadInit 创建分片上传会话的暂存目录 <部署目录>/.smp-upload/<key>/。
+// AppUploadInit 创建分片上传会话的暂存目录 <部署目录>/.opspanel-upload/<key>/。
 func (rc *RemoteCollector) AppUploadInit(ctx context.Context, srv *Server, deployDir, key string) error {
 	dir := path.Join(deployDir, appChunkDirName, key)
 	if isLocal(srv) {

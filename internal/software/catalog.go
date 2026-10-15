@@ -4,7 +4,7 @@ package software
 import (
 	"context"
 
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // Package 是 storage.SoftwarePackage 的类型别名。

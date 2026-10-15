@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/notify"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/notify"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 // NotificationHandler 提供站内通知与邮件通知 API。

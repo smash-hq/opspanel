@@ -20,16 +20,16 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/smash-hq/server-management/internal/logger"
-	"github.com/smash-hq/server-management/internal/storage"
+	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/storage"
 )
 
 const (
 	defaultUsername = "admin"
 	defaultPassword = "admin123"
 
-	authMetaKey    = "auth_user"   // meta 表中账户信息的键
-	sessionCookie  = "smp_session" // 会话 Cookie 名
+	authMetaKey    = "auth_user"        // meta 表中账户信息的键
+	sessionCookie  = "opspanel_session" // 会话 Cookie 名
 	sessionTTL     = 7 * 24 * time.Hour
 	minPasswordLen = 8  // 新密码最小长度
 	maxPasswordLen = 72 // bcrypt 输入上限
