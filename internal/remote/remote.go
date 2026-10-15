@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -182,6 +183,59 @@ func (c *sshConn) RunRaw(ctx context.Context, cmd string) ([]byte, error) {
 	return out, err
 }
 
+// RunStream 执行单条命令并通过 sink 增量回调合并输出（stdout+stderr）。
+// io.Pipe 为同步管道：sink 的消费速度会反压远端写入，避免输出堆积；
+// ctx 取消/超时时关闭 Session 终止远程命令。
+func (c *sshConn) RunStream(ctx context.Context, cmd string, sink func(chunk string)) error {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	pr, pw := io.Pipe()
+	session.Stdout = pw
+	session.Stderr = pw
+
+	// 读取协程：持续把远端输出回给 sink，管道关闭（EOF/ErrClosedPipe）后退出
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := pr.Read(buf)
+			if n > 0 {
+				sink(string(buf[:n]))
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	if err := session.Start(cmd); err != nil {
+		pw.Close()
+		return fmt.Errorf("start: %w", err)
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- session.Wait() }()
+
+	select {
+	case err := <-waitDone:
+		pw.Close()
+		if err != nil {
+			var exitErr *ssh.ExitError
+			if !errors.As(err, &exitErr) {
+				c.broken.Store(true)
+			}
+		}
+		return err
+	case <-ctx.Done():
+		session.Close()
+		pw.Close()
+		return ctx.Err()
+	}
+}
+
 // usable 返回连接是否仍可使用（未被标记断开）。
 func (c *sshConn) usable() bool { return !c.broken.Load() }
 
@@ -198,6 +252,8 @@ const LocalServerID = "srv_local"
 type commandRunner interface {
 	RunOnce(ctx context.Context, cmd string) (string, error)
 	RunRaw(ctx context.Context, cmd string) ([]byte, error)
+	// RunStream 执行单条命令并增量回调合并输出（stdout+stderr），用于安装等长操作的进度展示。
+	RunStream(ctx context.Context, cmd string, sink func(chunk string)) error
 	usable() bool
 	Close() error
 }
@@ -271,11 +327,75 @@ func (rc *RemoteCollector) RunWithSudo(ctx context.Context, client commandRunner
 	if err == nil {
 		return out
 	}
-	// 失败则尝试 sudo -n（免密 sudo）
-	sudoCmd := "sudo -n " + cmd
+	// 失败则尝试 sudo -n（免密 sudo）。用 sh -c 包裹整条命令，
+	// 保证含 || / && 的命令链整体提权，而不是仅链首命令。
+	sudoCmd := sudoWrap(cmd)
 	rc.log.Debugw("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
 	sudoOut, _ := rc.runLogged(ctx, client, sudoCmd)
 	return sudoOut
+}
+
+// pmCandidates 常见包管理器（探测与分支匹配共用），按优先级排列。
+var pmCandidates = []string{"apt-get", "dnf", "yum", "apk", "zypper"}
+
+// shQuote 用单引号包裹字符串，便于安全嵌入 sh -c '...'。
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// sudoWrap 给命令加 sudo -n 前缀，并以 sh -c 包裹整条命令链整体提权。
+func sudoWrap(cmd string) string {
+	return "sudo -n sh -c " + shQuote(cmd)
+}
+
+// detectPackageManagers 单次往返探测服务器上可用的包管理器；探测失败返回空集合。
+func (rc *RemoteCollector) detectPackageManagers(ctx context.Context, client commandRunner) map[string]bool {
+	avail := make(map[string]bool)
+	detectCmd := "for c in " + strings.Join(pmCandidates, " ") + "; do command -v $c >/dev/null 2>&1 && echo $c; done"
+	out, err := rc.runLogged(ctx, client, detectCmd)
+	if err != nil {
+		return avail
+	}
+	for _, name := range strings.Fields(out) {
+		avail[name] = true
+	}
+	return avail
+}
+
+// referencedPMs 提取命令片段中引用的包管理器名。
+func referencedPMs(seg string) []string {
+	var found []string
+	for _, pm := range pmCandidates {
+		if strings.Contains(seg, pm) {
+			found = append(found, pm)
+		}
+	}
+	return found
+}
+
+// selectInstallBranch 对 "A || B || C" 形式的多分支安装命令，按服务器实际可用的
+// 包管理器挑选首个可行分支，避免在无关分支上空跑报错；无匹配分支时原样返回。
+func selectInstallBranch(cmd string, avail map[string]bool) (string, bool) {
+	if !strings.Contains(cmd, " || ") {
+		return cmd, false
+	}
+	for _, seg := range strings.Split(cmd, " || ") {
+		pms := referencedPMs(seg)
+		if len(pms) == 0 {
+			return seg, true // 不依赖包管理器的分支（如 curl | sh）直接可用
+		}
+		ok := true
+		for _, pm := range pms {
+			if !avail[pm] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return seg, true
+		}
+	}
+	return cmd, false
 }
 
 // Snapshot 采集远程服务器的完整系统快照。
@@ -489,9 +609,9 @@ func (rc *RemoteCollector) DetectLanguage(ctx context.Context, srv *Server, vers
 	return rc.RunOne(ctx, conn, versionCmd)
 }
 
-// InstallLanguage 执行语言环境安装命令。version 为空则不替换版本占位符。
-func (rc *RemoteCollector) InstallLanguage(ctx context.Context, srv *Server, installCmd, version string) error {
-	// 安装是长操作，套 30 分钟超时（调用方已有更紧的 deadline 时以调用方为准）
+// InstallLanguageStream 执行语言环境安装命令并通过 sink 增量回调输出（含 sudo 回退），
+// 供前端实时展示安装进度。version 为空则不替换版本占位符。
+func (rc *RemoteCollector) InstallLanguageStream(ctx context.Context, srv *Server, installCmd, version string, sink func(chunk string)) error {
 	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
 	defer cancel()
 
@@ -501,16 +621,33 @@ func (rc *RemoteCollector) InstallLanguage(ctx context.Context, srv *Server, ins
 	}
 	defer rc.Release(srv.ID)
 
-	// 替换版本占位符
 	cmd := installCmd
 	if version != "" {
 		cmd = strings.ReplaceAll(cmd, "{{VERSION}}", version)
 	}
 
-	// 执行安装命令
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	rc.log.Infow("install language", "cmd", cmd, "version", version, "output", out)
-	return nil
+	// 适时选择包管理器：多分支安装命令按服务器实际可用的包管理器挑选首个可行分支
+	if avail := rc.detectPackageManagers(ctx, conn); len(avail) > 0 {
+		if sel, ok := selectInstallBranch(cmd, avail); ok && sel != cmd {
+			rc.log.Infow("install language branch selected", "selected", sel)
+			sink("==> 检测到服务器包管理器，已选择分支: " + sel + "\n")
+			cmd = sel
+		}
+	}
+
+	rc.log.Infow("install language", "cmd", cmd, "version", version)
+
+	err = conn.RunStream(ctx, cmd, sink)
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	// 与 RunWithSudo 语义一致：失败回退 sudo -n 重试（sh -c 包裹整条命令链整体提权）
+	rc.log.Debugw("install stream sudo fallback", "cmd", cmd, "error", err.Error())
+	sink("\n==> 直接执行失败，尝试 sudo -n 重试...\n")
+	return conn.RunStream(ctx, sudoWrap(cmd), sink)
 }
 
 // --- 文件管理 ---

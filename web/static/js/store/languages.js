@@ -6,11 +6,11 @@
 
 import {
     fetchLanguages, createLanguage, updateLanguage, deleteLanguage as apiDeleteLanguage,
-    detectLanguages, installLanguage, uninstallLanguage,
+    detectLanguages, installLanguage, uninstallLanguage, fetchLanguageJob,
 } from '../api/languages.js';
 import { parseVersions } from '../utils.js';
 
-const { ref, reactive, computed } = window.Vue;
+const { ref, reactive, computed, nextTick } = window.Vue;
 
 export function setupLanguages(ctx) {
     // ─── 编程语言环境 ───
@@ -26,6 +26,73 @@ export function setupLanguages(ctx) {
     const langInstallLog = ref('');
     const langInstallName = ref('');
     const langInstallStatus = ref('');
+    const langInstallAction = ref('install'); // install | uninstall
+    const langLogViewer = ref(null);          // 弹窗日志容器，用于自动滚动
+
+    // ─── 任务进度轮询：安装/卸载在服务端异步执行，这里实时拉取日志 ───
+    let langJobTimer = null;
+    let langJobOffset = 0;
+    let langJobTarget = null; // { serverId, languageId, action }
+
+    /** 状态栏文案：区分安装与卸载。 */
+    const langStatusText = computed(() => {
+        const verb = langInstallAction.value === 'uninstall' ? '卸载' : '安装';
+        if (langInstallStatus.value === 'installing') return `${verb}中...`;
+        if (langInstallStatus.value === 'ok') return `${verb}完成`;
+        if (langInstallStatus.value === 'error') return `${verb}失败`;
+        return '';
+    });
+
+    function appendLangLog(text) {
+        langInstallLog.value += text;
+        nextTick(() => {
+            const el = langLogViewer.value;
+            if (el) el.scrollTop = el.scrollHeight;
+        });
+    }
+
+    function stopLangJobPoll() {
+        if (langJobTimer) { clearInterval(langJobTimer); langJobTimer = null; }
+    }
+
+    function startLangJobPoll(serverId, languageId, action) {
+        stopLangJobPoll();
+        langJobOffset = 0;
+        langJobTarget = { serverId, languageId, action };
+        pollLangJob();
+        langJobTimer = setInterval(pollLangJob, 1500);
+    }
+
+    async function pollLangJob() {
+        if (!langJobTarget) return;
+        const { serverId, languageId, action } = langJobTarget;
+        try {
+            const data = await fetchLanguageJob(serverId, languageId, action);
+            // 增量追加新产生的日志
+            if (typeof data.log === 'string' && data.log.length > langJobOffset) {
+                appendLangLog(data.log.slice(langJobOffset));
+                langJobOffset = data.log.length;
+            }
+            if (data.status === 'success') {
+                langInstallStatus.value = 'ok';
+                stopLangJobPoll();
+                ctx.toastNotify(langInstallAction.value === 'uninstall' ? '卸载完成' : '安装完成');
+                detectServerLanguages(); // 完成后重新检测已安装语言
+            } else if (data.status === 'error') {
+                langInstallStatus.value = 'error';
+                stopLangJobPoll();
+                ctx.toastNotify((langInstallAction.value === 'uninstall' ? '卸载' : '安装') + '失败，详见日志', true);
+                detectServerLanguages();
+            } else if (data.status === 'none') {
+                // 服务端无此任务（如面板重启），标记失败并停止
+                appendLangLog('\n==> 任务不存在（面板可能已重启），请重试\n');
+                langInstallStatus.value = 'error';
+                stopLangJobPoll();
+            }
+        } catch (err) {
+            // 单次查询失败不打断轮询，等待下一次
+        }
+    }
 
     /** 模糊匹配后的未安装语言。 */
     const detectedLanguagesFiltered = computed(() => {
@@ -154,29 +221,27 @@ export function setupLanguages(ctx) {
         // 查找语言名称
         const lang = languages.value.find(l => l.id === languageId);
         const langName = lang ? lang.name : languageId;
+        const serverId = ctx.selectedServer.value;
         if (!await ctx.confirmDialog(`确定要安装「${langName}」吗？安装脚本将在服务器上执行，可能修改系统环境。`, { title: '安装语言环境', confirmText: '安装', danger: false })) return;
         langInstallName.value = langName;
-        langInstallLogVisible.value = true;
-        langInstallLog.value = '正在连接服务器...\n';
+        langInstallAction.value = 'install';
         langInstallStatus.value = 'installing';
+        langInstallLog.value = '正在提交安装任务...\n';
+        langInstallLogVisible.value = true;
         try {
-            await installLanguage(ctx.selectedServer.value, languageId, version);
-            langInstallLog.value += '\n==> 安装命令已发送到服务器\n==> 请在服务器上查看实际安装进度\n';
-            langInstallStatus.value = 'ok';
-            ctx.toastNotify('安装命令已发送，请查看日志');
+            await installLanguage(serverId, languageId, version);
+            // 提交成功后轮询任务进度，实时展示安装输出
+            startLangJobPoll(serverId, languageId, 'install');
         } catch (err) {
-            langInstallLog.value += '\n==> 错误: ' + err.message + '\n';
+            langInstallLog.value += '\n==> 提交失败: ' + err.message + '\n';
             langInstallStatus.value = 'error';
             ctx.toastNotify('安装失败: ' + err.message, true);
         }
     }
 
-    function viewInstallLog() {
-        langInstallLogVisible.value = true;
-    }
-
     function refreshInstallLog() {
-        // 重新检测已安装的语言
+        // 立即拉取一次进度，并重新检测已安装的语言
+        pollLangJob();
         detectServerLanguages();
     }
 
@@ -184,18 +249,19 @@ export function setupLanguages(ctx) {
         if (!ctx.selectedServer.value) return;
         const lang = languages.value.find(l => l.id === languageId);
         const langName = lang ? lang.name : languageId;
+        const serverId = ctx.selectedServer.value;
         if (!await ctx.confirmDialog(`确定要卸载「${langName}」吗？此操作不可恢复。`, { title: '卸载语言环境', confirmText: '卸载' })) return;
         langInstallName.value = langName;
-        langInstallLogVisible.value = true;
-        langInstallLog.value = '正在连接服务器...\n';
+        langInstallAction.value = 'uninstall';
         langInstallStatus.value = 'installing';
+        langInstallLog.value = '正在提交卸载任务...\n';
+        langInstallLogVisible.value = true;
         try {
-            await uninstallLanguage(ctx.selectedServer.value, languageId);
-            langInstallLog.value += '\n==> 卸载命令已发送到服务器\n==> 请在服务器上查看实际卸载进度\n';
-            langInstallStatus.value = 'ok';
-            ctx.toastNotify('卸载命令已发送，请查看日志');
+            await uninstallLanguage(serverId, languageId);
+            // 提交成功后轮询任务进度，实时展示卸载输出
+            startLangJobPoll(serverId, languageId, 'uninstall');
         } catch (err) {
-            langInstallLog.value += '\n==> 错误: ' + err.message + '\n';
+            langInstallLog.value += '\n==> 提交失败: ' + err.message + '\n';
             langInstallStatus.value = 'error';
             ctx.toastNotify('卸载失败: ' + err.message, true);
         }
@@ -205,9 +271,10 @@ export function setupLanguages(ctx) {
         languages, langFormMode, langForm, langSaving, langFormError,
         detectedLanguages, langDetectLoading, langSearch, detectedLanguagesFiltered,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
+        langInstallAction, langStatusText, langLogViewer,
         loadLanguages, openLangForm, closeLangForm, onLangSourceChange, saveLanguage,
         deleteLanguage: handleDeleteLanguage,
         detectServerLanguages, installLang, uninstallLang,
-        viewInstallLog, refreshInstallLog,
+        refreshInstallLog,
     });
 }

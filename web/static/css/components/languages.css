@@ -176,3 +176,14 @@
     color: var(--color-red, #ef4444);
 }
 
+/* 任务运行中的提示：说明日志会自动刷新 */
+.log-hint {
+    flex: 1;
+    margin-left: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #6b7280);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+

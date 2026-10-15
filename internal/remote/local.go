@@ -28,6 +28,33 @@ func (l *localShell) RunRaw(ctx context.Context, cmd string) ([]byte, error) {
 	return exec.CommandContext(ctx, "/bin/sh", "-c", cmd).CombinedOutput()
 }
 
+// RunStream 执行单条命令并通过 sink 增量回调合并输出（stdout+stderr），
+// 语义与 sshConn.RunStream 一致；ctx 取消/超时会 kill 进程。
+func (l *localShell) RunStream(ctx context.Context, cmd string, sink func(chunk string)) error {
+	command := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	command.Stderr = command.Stdout // 合并 stderr 到同一管道
+
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			sink(string(buf[:n]))
+		}
+		if err != nil {
+			break
+		}
+	}
+	return command.Wait()
+}
+
 // usable 本机执行器始终可用（无连接概念）。
 func (l *localShell) usable() bool { return true }
 

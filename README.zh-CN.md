@@ -18,22 +18,34 @@ cd opspanel && make run
 # 打开 http://localhost:18080 （默认账号 admin / admin123，请尽快修改密码）
 ```
 
+## 界面一览
+
+| 系统信息 · 实时监控 | 语言环境 |
+|:---:|:---:|
+| ![系统信息](docs/images/system-info.png) | ![语言环境](docs/images/language.png) |
+| **Docker** | **Web 终端** |
+| ![Docker](docs/images/docker-container.png) | ![Web 终端](docs/images/terminal.png) |
+| **GPU / NPU** | **软件包管理** |
+| ![GPU](docs/images/gpu.png) | ![软件包管理](docs/images/config-software.png) |
+| **软件源管理** | |
+| ![软件源管理](docs/images/config-repo.png) | |
+
 ## 能做什么
 
 | 模块 | 功能 |
 |------|------|
-| 🖥️ 实时监控 | CPU / 内存 / 磁盘 / 网络，WebSocket 每 3 秒推送 |
-| 📦 软件商店 | MySQL / PostgreSQL / Redis / Nginx / Docker / Node.js 一键安装卸载、服务启停，支持自定义软件包与软件源 |
-| 🌐 语言环境 | Go / Java / Python / Node.js / Rust / PHP / Ruby / .NET 自动检测、多版本管理 |
-| 🐳 Docker | 镜像与容器管理、容器终端与日志、批量操作、镜像源切换 |
-| 📁 文件管理 | 远程目录浏览、文本预览、文件下载 |
-| ⚙️ 进程管理 | 全量进程列表、终止进程、查看进程日志 |
-| 🚀 应用部署 | Java / Python / Go 服务分片上传部署、远程启停重启、日志查看 |
-| ⏰ 定时任务 | 节点 crontab 可视化管理、表达式校验与执行时间预览 |
-| 🔔 通知中心 | 站内通知 + 可选 SMTP 邮件通知，应用异常自动告警 |
-| 🎮 GPU/NPU | 华为昇腾 / 寒武纪设备信息按需拉取（功耗 / 温度 / 利用率 / 显存） |
+| 🖥️ 实时监控 | CPU / 内存 / 磁盘 / 网络，WebSocket 3 秒推送 |
+| 📦 软件商店 | MySQL / Redis / Nginx 等一键安装卸载、服务启停、自定义包与源 |
+| 🌐 语言环境 | Go / Java / Python 等 8 种语言自动检测、多版本管理 |
+| 🐳 Docker | 镜像 / 容器管理、容器终端与日志、批量操作 |
+| 📁 文件管理 | 目录浏览、文本预览、下载 |
+| ⚙️ 进程管理 | 进程列表、终止进程、日志查看 |
+| 🚀 应用部署 | 分片上传部署、远程启停重启、日志查看 |
+| ⏰ 定时任务 | crontab 可视化、表达式校验与执行预览 |
+| 🔔 通知中心 | 站内通知 + SMTP 邮件、应用异常自动告警 |
+| 🎮 GPU/NPU | 昇腾 / 寒武纪设备信息（功耗 / 温度 / 利用率 / 显存） |
 | ⌨️ Web 终端 | 浏览器交互式 SSH 终端 |
-| 🔐 登录认证 | 单管理员、bcrypt 密码哈希、Cookie 会话 |
+| 🔐 登录认证 | 单管理员、bcrypt、Cookie 会话 |
 
 适合个人开发机、小团队内网服务器的轻量运维，Linux arm64 开箱即用（鲲鹏 / 飞腾等国产平台）。
 

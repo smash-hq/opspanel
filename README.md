@@ -18,22 +18,34 @@ cd opspanel && make run
 # Open http://localhost:18080 (default account admin / admin123 — change it soon)
 ```
 
+## Screenshots
+
+| System dashboard | Language environments |
+|:---:|:---:|
+| ![System](docs/images/system-info.png) | ![Languages](docs/images/language.png) |
+| **Docker** | **Web terminal** |
+| ![Docker](docs/images/docker-container.png) | ![Terminal](docs/images/terminal.png) |
+| **GPU / NPU** | **Software packages** |
+| ![GPU](docs/images/gpu.png) | ![Packages](docs/images/config-software.png) |
+| **Software repositories** | |
+| ![Repositories](docs/images/config-repo.png) | |
+
 ## What it does
 
 | Module | Capabilities |
 |--------|--------------|
-| 🖥️ Real-time monitoring | CPU / memory / disk / network, pushed over WebSocket every 3 seconds |
-| 📦 Software store | One-click install/uninstall of MySQL / PostgreSQL / Redis / Nginx / Docker / Node.js, service control, custom packages and sources |
-| 🌐 Language environments | Auto-detection and multi-version management of Go / Java / Python / Node.js / Rust / PHP / Ruby / .NET |
-| 🐳 Docker | Image and container management, container terminal and logs, batch operations, registry switching |
-| 📁 File management | Remote directory browsing, text preview, file download |
-| ⚙️ Process management | Full process list, kill processes, view process logs |
-| 🚀 App deployment | Chunked-upload deployment for Java / Python / Go services, remote start/stop/restart, log viewer |
-| ⏰ Scheduled tasks | Visual crontab management per node, expression validation with next-run preview |
-| 🔔 Notification center | In-app notifications + optional SMTP email, automatic alerts on app failures |
-| 🎮 GPU/NPU | On-demand device info for Huawei Ascend / Cambricon (power, temperature, utilization, memory) |
+| 🖥️ Real-time monitoring | CPU / memory / disk / network, WebSocket push every 3s |
+| 📦 Software store | One-click install/uninstall (MySQL / Redis / Nginx etc.), service control, custom packages and sources |
+| 🌐 Language environments | Auto-detection and multi-version management for 8 languages (Go / Java / Python etc.) |
+| 🐳 Docker | Image / container management, container terminal and logs, batch operations |
+| 📁 File management | Directory browsing, text preview, download |
+| ⚙️ Process management | Process list, kill, logs |
+| 🚀 App deployment | Chunked-upload deploy, remote start/stop/restart, log viewer |
+| ⏰ Scheduled tasks | Visual crontab, expression validation with next-run preview |
+| 🔔 Notification center | In-app + SMTP email, automatic app-failure alerts |
+| 🎮 GPU/NPU | Ascend / Cambricon device info (power / temp / utilization / memory) |
 | ⌨️ Web terminal | Interactive SSH terminal in the browser |
-| 🔐 Login auth | Single admin, bcrypt password hashing, cookie sessions |
+| 🔐 Login auth | Single admin, bcrypt, cookie sessions |
 
 Ideal for lightweight ops on personal dev machines and small-team intranet servers; Linux arm64 works out of the box (Kunpeng, Phytium, and other domestic platforms).
 

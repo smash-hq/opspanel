@@ -1627,20 +1627,21 @@
         </div>
     </div>
 
-    <!-- 语言安装日志弹窗 -->
+    <!-- 语言安装/卸载任务日志弹窗：实时展示服务端任务输出 -->
     <div class="modal-overlay" v-if="langInstallLogVisible" @click.self="langInstallLogVisible = false">
         <div class="modal log-modal">
             <div class="modal-header">
-                <div><span class="eyebrow">INSTALL LOG</span><h3>{{ langInstallName }} · 安装日志</h3></div>
+                <div><span class="eyebrow">TASK LOG</span><h3>{{ langInstallName }} · {{ langInstallAction === 'uninstall' ? '卸载日志' : '安装日志' }}</h3></div>
                 <button class="icon-button" @click="langInstallLogVisible = false" title="关闭">×</button>
             </div>
             <div class="modal-body">
                 <div class="log-toolbar">
-                    <span class="log-status" :class="langInstallStatus">{{ langInstallStatus === 'installing' ? '安装中...' : langInstallStatus === 'ok' ? '安装完成' : '安装失败' }}</span>
-                    <button class="toolbar-button small" @click="refreshInstallLog()" :disabled="langInstallStatus === 'installing'">↻ 刷新</button>
+                    <span class="log-status" :class="langInstallStatus">{{ langStatusText || '等待任务开始...' }}</span>
+                    <span class="log-hint" v-if="langInstallStatus === 'installing'">日志每 1.5 秒自动刷新，可直接关闭弹窗，任务在后台继续</span>
+                    <button class="toolbar-button small" @click="refreshInstallLog()">↻ 立即刷新</button>
                 </div>
-                <div class="log-viewer">
-                    <pre>{{ langInstallLog || '等待安装开始...' }}</pre>
+                <div class="log-viewer" ref="langLogViewer">
+                    <pre>{{ langInstallLog || '等待任务开始...' }}</pre>
                 </div>
             </div>
         </div>

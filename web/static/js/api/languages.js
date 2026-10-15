@@ -67,3 +67,11 @@ export async function uninstallLanguage(serverId, languageId) {
     if (json.code !== 0) throw new Error(json.message || '卸载失败');
     return json.data;
 }
+
+/** 查询语言安装/卸载任务进度。action: install | uninstall。 */
+export async function fetchLanguageJob(serverId, languageId, action) {
+    const qs = `server_id=${encodeURIComponent(serverId)}&language_id=${encodeURIComponent(languageId)}&action=${action}`;
+    const json = await request(`/languages/job?${qs}`);
+    if (json.code !== 0) throw new Error(json.message || '查询任务进度失败');
+    return json.data || {};
+}

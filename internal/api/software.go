@@ -67,6 +67,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/languages/detect", h.handleDetectLanguages)      // GET ?server= 检测已安装
 	mux.HandleFunc("/api/v1/languages/install", h.handleInstallLanguage)     // POST 安装语言
 	mux.HandleFunc("/api/v1/languages/uninstall", h.handleUninstallLanguage) // POST 卸载语言
+	mux.HandleFunc("/api/v1/languages/job", h.handleLanguageJob)             // GET ?server_id=&language_id=&action= 任务进度
 
 	// 镜像源管理
 	mux.HandleFunc("/api/v1/software/sources", h.handleSources)       // GET 列表 / POST 新增
@@ -1236,9 +1237,17 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 	}
 
 	// 异步安装：handler 立即返回，不能用请求 ctx（会随响应结束被取消），
-	// 超时由 RemoteCollector.InstallLanguage 内部的长操作超时兜底。
+	// 超时由 RemoteCollector.InstallLanguageStream 内部的长操作超时兜底。
+	// 输出实时写入任务日志，前端轮询 /languages/job 展示进度。
+	displayCmd := lang.InstallCmd
+	if req.Version != "" {
+		displayCmd = strings.ReplaceAll(displayCmd, "{{VERSION}}", req.Version)
+	}
+	job := langJobs.start(req.ServerID, lang.ID, "install", displayCmd)
 	go func() {
-		if err := h.remoteCollector.InstallLanguage(context.Background(), toRemoteServer(srv), lang.InstallCmd, req.Version); err != nil {
+		err := h.remoteCollector.InstallLanguageStream(context.Background(), toRemoteServer(srv), lang.InstallCmd, req.Version, job.append)
+		job.finish(err)
+		if err != nil {
 			h.log.Errorw("install language failed", "lang", lang.ID, "error", err)
 		}
 	}()
@@ -1279,15 +1288,42 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 异步卸载：理由同 handleInstallLanguage。
+	// 异步卸载：理由同 handleInstallLanguage，输出实时写入任务日志。
+	job := langJobs.start(req.ServerID, lang.ID, "uninstall", lang.UninstallCmd)
 	go func() {
 		// 使用 UninstallCmd 作为卸载命令
-		if err := h.remoteCollector.InstallLanguage(context.Background(), toRemoteServer(srv), lang.UninstallCmd, ""); err != nil {
+		err := h.remoteCollector.InstallLanguageStream(context.Background(), toRemoteServer(srv), lang.UninstallCmd, "", job.append)
+		job.finish(err)
+		if err != nil {
 			h.log.Errorw("uninstall language failed", "lang", lang.ID, "error", err)
 		}
 	}()
 
 	OK(w, map[string]string{"status": "uninstalling", "language": lang.ID})
+}
+
+// handleLanguageJob: GET ?server_id=&language_id=&action=install|uninstall 查询任务状态与输出。
+func (h *SoftwareHandler) handleLanguageJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		return
+	}
+
+	serverID := r.URL.Query().Get("server_id")
+	langID := r.URL.Query().Get("language_id")
+	action := r.URL.Query().Get("action")
+	if serverID == "" || langID == "" || (action != "install" && action != "uninstall") {
+		Fail(w, http.StatusBadRequest, 400, "invalid query params")
+		return
+	}
+
+	job, err := langJobs.get(serverID, langID, action)
+	if err != nil {
+		// 任务不存在：服务重启或尚未开始，前端据此提示
+		OK(w, map[string]any{"status": "none", "action": action, "log": "", "error": ""})
+		return
+	}
+	OK(w, job.snapshot())
 }
 
 // --- 内部方法 ---
