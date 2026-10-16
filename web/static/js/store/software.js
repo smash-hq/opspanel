@@ -25,9 +25,7 @@ export function setupSoftware(ctx) {
     const logLoading = ref(false);
     const logLines = ref(100);
 
-    // ─── 搜索与版本下拉 ───
-    const softwareSearch = ref('');
-
+    // ─── 版本下拉 ───
     /** 每个软件/语言选择的安装版本 { id: version }。 */
     const selectedVersions = reactive({});
 
@@ -59,17 +57,6 @@ export function setupSoftware(ctx) {
             softwareStatuses.value.filter(s => s.installed).map(s => s.package.id)
         );
         return softwareCatalog.value.filter(p => !installedIds.has(p.id));
-    });
-
-    /** 模糊匹配后的可安装软件。 */
-    const availableSoftwareFiltered = computed(() => {
-        const q = softwareSearch.value.trim().toLowerCase();
-        if (!q) return availableSoftware.value;
-        return availableSoftware.value.filter(p =>
-            p.name.toLowerCase().includes(q) ||
-            (p.description || '').toLowerCase().includes(q) ||
-            p.id.toLowerCase().includes(q)
-        );
     });
 
     /** 加载软件目录。 */
@@ -172,9 +159,9 @@ export function setupSoftware(ctx) {
 
     Object.assign(ctx, {
         softwareCatalog, softwareStatuses, softwareLoading, softwareOperating,
-        softwareSearch, selectedVersions,
+        selectedVersions,
         versionComboOpen, toggleVersionCombo, pickVersion, handleDocClickForCombo,
-        availableSoftware, availableSoftwareFiltered,
+        availableSoftware,
         logModalVisible, logData, logLoading, logLines, viewLog, closeLogModal,
         loadSoftwareCatalog, loadSoftwareStatus,
         installPackage, uninstallPackage, controlPackageService, getPackageStatus,

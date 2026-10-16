@@ -734,5 +734,5 @@
     .topbar { padding: 0 16px; }
     .topbar-actions .toolbar-button span,
     .topbar-actions .primary-button span,
-    .logout-button .logout-name { display: none; }
+    .user-menu-name { display: none; }
 }

@@ -6,7 +6,7 @@
 
 import { fetchProcesses, killProcess, fetchProcessLog } from '../api/processes.js';
 
-const { ref } = window.Vue;
+const { ref, computed } = window.Vue;
 
 export function setupProcesses(ctx) {
     // ─── 进程管理状态 ───
@@ -15,6 +15,29 @@ export function setupProcesses(ctx) {
     const processLogVisible = ref(false);
     const processLogData = ref({ pid: 0, content: '' });
     const processLogLoading = ref(false);
+    // 列排序：procSortKey 为 '' 表示按后端默认顺序
+    const procSortKey = ref('');
+    const procSortDesc = ref(true);
+
+    /** 按 CPU/MEM 排序后的进程列表。 */
+    const sortedProcesses = computed(() => {
+        if (!procSortKey.value) return processes.value;
+        const key = procSortKey.value;
+        const dir = procSortDesc.value ? -1 : 1;
+        return [...processes.value].sort((a, b) =>
+            ((parseFloat(a[key]) || 0) - (parseFloat(b[key]) || 0)) * dir
+        );
+    });
+
+    /** 点击表头切换排序：首次点击降序（占用最高在前），再次点击切换正/倒序。 */
+    function toggleProcSort(key) {
+        if (procSortKey.value === key) {
+            procSortDesc.value = !procSortDesc.value;
+        } else {
+            procSortKey.value = key;
+            procSortDesc.value = true;
+        }
+    }
 
     async function loadProcesses(lines) {
         if (!ctx.selectedServer.value) return; // 本机与远程节点均支持
@@ -61,6 +84,7 @@ export function setupProcesses(ctx) {
 
     Object.assign(ctx, {
         processes, processLoading, processLogVisible, processLogData, processLogLoading,
+        procSortKey, procSortDesc, sortedProcesses, toggleProcSort,
         loadProcesses, killProcess: handleKillProcess, handleKillProcess,
         viewProcessLog, closeProcessLog,
     });

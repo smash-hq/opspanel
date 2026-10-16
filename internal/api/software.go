@@ -1190,12 +1190,13 @@ func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.R
 			status = "installed"
 		}
 		detected = append(detected, map[string]any{
-			"id":       lang.ID,
-			"name":     lang.Name,
-			"icon":     lang.Icon,
-			"version":  version,
-			"status":   status,
-			"versions": lang.Versions,
+			"id":          lang.ID,
+			"name":        lang.Name,
+			"icon":        lang.Icon,
+			"description": lang.Description,
+			"version":     version,
+			"status":      status,
+			"versions":    lang.Versions,
 		})
 	}
 

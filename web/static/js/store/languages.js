@@ -21,7 +21,6 @@ export function setupLanguages(ctx) {
     const langFormError = ref('');
     const detectedLanguages = ref([]);
     const langDetectLoading = ref(false);
-    const langSearch = ref('');
     const langInstallLogVisible = ref(false);
     const langInstallLog = ref('');
     const langInstallName = ref('');
@@ -94,16 +93,10 @@ export function setupLanguages(ctx) {
         }
     }
 
-    /** 模糊匹配后的未安装语言。 */
-    const detectedLanguagesFiltered = computed(() => {
-        const uninstalled = detectedLanguages.value.filter(l => l.status !== 'installed');
-        const q = langSearch.value.trim().toLowerCase();
-        if (!q) return uninstalled;
-        return uninstalled.filter(l =>
-            l.name.toLowerCase().includes(q) ||
-            (l.id || '').toLowerCase().includes(q)
-        );
-    });
+    /** 未安装的语言（可安装列表）。 */
+    const uninstalledLanguages = computed(() =>
+        detectedLanguages.value.filter(l => l.status !== 'installed')
+    );
 
     async function loadLanguages() {
         try {
@@ -239,7 +232,7 @@ export function setupLanguages(ctx) {
 
     Object.assign(ctx, {
         languages, langFormMode, langForm, langSaving, langFormError,
-        detectedLanguages, langDetectLoading, langSearch, detectedLanguagesFiltered,
+        detectedLanguages, langDetectLoading, uninstalledLanguages,
         langInstallLogVisible, langInstallLog, langInstallName, langInstallStatus,
         langInstallAction, langStatusText, langLogViewer,
         loadLanguages, openLangForm, closeLangForm, saveLanguage,

@@ -213,14 +213,49 @@
                     <option value="dark">🌙 夜间</option>
                     <option value="system">💻 跟随</option>
                 </select>
-                <button class="logout-button" @click="handleLogout" :title="'退出登录 (' + currentUser + ')'">
-                    <svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
-                    <span class="logout-name">{{ currentUser }}</span>
-                </button>
+                <div class="user-menu">
+                    <button class="user-menu-trigger" :class="{ open: userMenuOpen }" @click="toggleUserMenu()" :title="currentUser">
+                        <span class="user-avatar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </span>
+                        <span class="user-menu-name">{{ currentUser }}</span>
+                        <svg class="user-menu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <transition name="user-menu-fade">
+                        <div v-if="userMenuOpen" class="user-menu-dropdown">
+                            <div class="user-menu-head">
+                                <span class="user-avatar sm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                        <circle cx="12" cy="7" r="4"/>
+                                    </svg>
+                                </span>
+                                <div class="user-menu-head-info">
+                                    <strong>{{ currentUser }}</strong>
+                                    <small>已登录</small>
+                                </div>
+                            </div>
+                            <button class="user-menu-item" @click="openPwModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                                <span>修改密码</span>
+                            </button>
+                            <button class="user-menu-item danger" @click="handleLogout()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                    <polyline points="16 17 21 12 16 7"/>
+                                    <line x1="21" y1="12" x2="9" y2="12"/>
+                                </svg>
+                                <span>退出登录</span>
+                            </button>
+                        </div>
+                    </transition>
+                </div>
             </div>
         </header>
 
@@ -691,12 +726,9 @@
                     </div>
                     <!-- 可安装软件（仅展示未安装的） -->
                     <div class="sw-section" v-if="availableSoftware.length">
-                        <div class="sw-section-toolbar">
-                            <h4>可安装软件（{{ availableSoftwareFiltered.length }} / {{ availableSoftware.length }}）</h4>
-                            <input class="sw-search-input" v-model="softwareSearch" placeholder="搜索名称、描述...">
-                        </div>
+                        <h4>可安装软件（{{ availableSoftware.length }}）</h4>
                         <div class="sw-install-list">
-                            <div v-for="pkg in availableSoftwareFiltered" :key="pkg.id" class="sw-install-row">
+                            <div v-for="pkg in availableSoftware" :key="pkg.id" class="sw-install-row">
                                 <span class="sw-row-icon">{{ pkg.icon }}</span>
                                 <div class="sw-install-info">
                                     <strong class="sw-install-name" :data-title="pkg.name">{{ pkg.name }}</strong>
@@ -769,17 +801,14 @@
                             </div>
                         </div>
                         <!-- 未安装语言 -->
-                        <div class="sw-section" v-if="detectedLanguages.filter(l => l.status !== 'installed').length">
-                            <div class="sw-section-toolbar">
-                                <h4>可安装（{{ detectedLanguagesFiltered.length }} / {{ detectedLanguages.filter(l => l.status !== 'installed').length }}）</h4>
-                                <input class="sw-search-input" v-model="langSearch" placeholder="搜索名称...">
-                            </div>
+                        <div class="sw-section" v-if="uninstalledLanguages.length">
+                            <h4>可安装语言（{{ uninstalledLanguages.length }}）</h4>
                             <div class="sw-install-list">
-                                <div v-for="lang in detectedLanguagesFiltered" :key="lang.id" class="sw-install-row">
+                                <div v-for="lang in uninstalledLanguages" :key="lang.id" class="sw-install-row">
                                     <span class="sw-row-icon">{{ lang.icon || '📦' }}</span>
                                     <div class="sw-install-info">
                                         <strong class="sw-install-name" :data-title="lang.name">{{ lang.name }}</strong>
-                                        <small class="sw-install-desc" :data-title="lang.id">{{ lang.id }}</small>
+                                        <small class="sw-install-desc" :data-title="lang.description || ''">{{ lang.description || lang.id }}</small>
                                     </div>
                                     <div class="sw-combo sw-install-combo">
                                         <input class="sw-combo-input" v-model.trim="selectedVersions[lang.id]" @focus="versionComboOpen = lang.id" placeholder="请选择版本" title="从下拉选择通用配置中的预置版本，也可直接输入">
@@ -832,12 +861,16 @@
                         <div class="process-header">
                             <span class="col-pid">PID</span>
                             <span class="col-user">用户</span>
-                            <span class="col-cpu">CPU</span>
-                            <span class="col-mem">MEM</span>
+                            <span class="col-cpu sortable" :class="{ active: procSortKey === 'cpu' }" @click="toggleProcSort('cpu')" title="点击按 CPU 排序">
+                                CPU<span class="sort-arrows" :class="{ asc: procSortKey === 'cpu' && !procSortDesc, desc: procSortKey === 'cpu' && procSortDesc }"><i>▲</i><i>▼</i></span>
+                            </span>
+                            <span class="col-mem sortable" :class="{ active: procSortKey === 'mem' }" @click="toggleProcSort('mem')" title="点击按内存排序">
+                                MEM<span class="sort-arrows" :class="{ asc: procSortKey === 'mem' && !procSortDesc, desc: procSortKey === 'mem' && procSortDesc }"><i>▲</i><i>▼</i></span>
+                            </span>
                             <span class="col-cmd">命令</span>
                             <span class="col-actions">操作</span>
                         </div>
-                        <div v-for="p in processes" :key="p.pid" class="process-row">
+                        <div v-for="p in sortedProcesses" :key="p.pid" class="process-row">
                             <span class="col-pid">{{ p.pid }}</span>
                             <span class="col-user">{{ p.user }}</span>
                             <span class="col-cpu" :class="{ warn: parseFloat(p.cpu) > 50 }">{{ p.cpu }}%</span>
@@ -1973,14 +2006,15 @@
         </div>
     </div>
 
-    <!-- 首次登录强制修改密码（不可关闭） -->
-    <div class="modal-overlay" v-if="authed && mustChangePassword">
+    <!-- 修改密码弹窗（首次登录强制时不可关闭） -->
+    <div class="modal-overlay" v-if="authed && (mustChangePassword || pwModalVisible)" @click.self="!mustChangePassword && closePwModal()">
         <div class="modal auth-pw-modal">
             <div class="modal-header">
-                <div><span class="eyebrow">SECURITY</span><h3>修改默认密码</h3></div>
+                <div><span class="eyebrow">SECURITY</span><h3>{{ mustChangePassword ? '修改默认密码' : '修改密码' }}</h3></div>
+                <button v-if="!mustChangePassword" class="icon-button" @click="closePwModal()" title="关闭">×</button>
             </div>
             <div class="modal-body">
-                <p class="settings-desc">检测到仍在使用默认密码，为保障安全请先设置新密码。修改后持续生效，重新部署后恢复默认。</p>
+                <p class="settings-desc" v-if="mustChangePassword">检测到仍在使用默认密码，为保障安全请先设置新密码。修改后持续生效，重新部署后恢复默认。</p>
                 <form class="form-grid" @submit.prevent="handleChangePassword">
                     <label class="field full"><span>当前密码</span><input type="password" v-model="pwForm.oldPassword" autocomplete="current-password"></label>
                     <label class="field full"><span>新密码（至少 8 位）</span><input type="password" v-model="pwForm.newPassword" autocomplete="new-password"></label>

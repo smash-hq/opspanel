@@ -186,29 +186,61 @@ a.topbar-icon-btn {
     display: block;
 }
 
-/* ─── 退出登录按钮 ─── */
-.logout-button {
+/* ─── 右上角用户菜单（默认头像 + 下拉） ─── */
+.user-menu {
+    position: relative;
+}
+
+.user-menu-trigger {
     height: 36px;
-    padding: 0 12px;
+    padding: 0 8px;
     border-radius: var(--border-radius-sm);
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
     color: var(--text-secondary, #4b5563);
     font-size: 0.85rem;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     transition: all 0.15s;
 }
 
-.logout-button .logout-icon {
-    width: 16px;
-    height: 16px;
+.user-menu-trigger:hover,
+.user-menu-trigger.open {
+    background: var(--content-bg, #f9fafb);
+    border-color: var(--card-border, #e2e8f0);
+}
+
+/* 默认头像 */
+.user-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-blue-light, #eff6ff);
+    color: var(--color-blue, #3b82f6);
     flex-shrink: 0;
 }
 
-.logout-button .logout-name {
+.user-avatar svg {
+    width: 16px;
+    height: 16px;
+}
+
+.user-avatar.sm {
+    width: 24px;
+    height: 24px;
+}
+
+.user-avatar.sm svg {
+    width: 14px;
+    height: 14px;
+}
+
+.user-menu-name {
     font-weight: 500;
     max-width: 120px;
     overflow: hidden;
@@ -216,9 +248,102 @@ a.topbar-icon-btn {
     white-space: nowrap;
 }
 
-.logout-button:hover {
+.user-menu-caret {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+
+.user-menu-trigger.open .user-menu-caret {
+    transform: rotate(180deg);
+}
+
+/* 下拉菜单 */
+.user-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--card-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.08));
+    padding: 6px;
+    z-index: 100;
+}
+
+.user-menu-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 12px;
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+    margin-bottom: 6px;
+}
+
+.user-menu-head-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.user-menu-head-info strong {
+    font-size: 0.875rem;
+    color: var(--text-primary, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-menu-head-info small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.user-menu-item {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary, #4b5563);
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    text-align: left;
+    transition: all 0.15s;
+}
+
+.user-menu-item svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.user-menu-item:hover {
+    background: var(--color-blue-light, #eff6ff);
+    color: var(--color-blue, #3b82f6);
+}
+
+.user-menu-item.danger:hover {
     background: rgba(239, 68, 68, 0.08);
-    color: #ef4444;
+    color: var(--color-red, #ef4444);
+}
+
+/* 下拉展开动画 */
+.user-menu-fade-enter-active,
+.user-menu-fade-leave-active {
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.user-menu-fade-enter-from,
+.user-menu-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
 }
 
 /* ─── 文档弹窗 ─── */

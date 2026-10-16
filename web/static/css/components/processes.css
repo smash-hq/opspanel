@@ -140,6 +140,54 @@
     font-weight: 600;
 }
 
+/* 可排序列头（CPU/MEM）：右对齐保持与列内容一致，点击切换正/倒序 */
+.process-header .sortable {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+.process-header .sortable:hover {
+    color: var(--color-blue, #3b82f6);
+}
+
+.process-header .sortable.active {
+    color: var(--color-blue, #3b82f6);
+}
+
+/* 常驻堆叠箭头：灰色提示可点击，蓝色标示当前排序列与方向 */
+.sort-arrows {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+
+.sort-arrows i {
+    font-style: normal;
+    font-size: 0.5rem;
+    line-height: 0.8;
+    color: var(--text-tertiary, #9ca3af);
+    opacity: 0.45;
+    transition: color 0.15s, opacity 0.15s;
+}
+
+.process-header .sortable:hover .sort-arrows i {
+    opacity: 0.8;
+}
+
+.sort-arrows.asc i:first-child,
+.sort-arrows.desc i:last-child {
+    color: var(--color-blue, #3b82f6);
+    opacity: 1;
+}
+
 /* 交替行背景 */
 .process-row:nth-child(even) {
     background: rgba(248, 250, 252, 0.5);

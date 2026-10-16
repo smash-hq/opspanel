@@ -19,6 +19,36 @@ export function setupAuth(ctx) {
     const pwForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
     const pwError = ref('');
     const pwSaving = ref(false);
+    const userMenuOpen = ref(false);       // 右上角用户菜单展开状态
+    const pwModalVisible = ref(false);     // 手动打开的修改密码弹窗（非首登强制）
+
+    /** 展开/收起右上角用户菜单。 */
+    function toggleUserMenu() {
+        userMenuOpen.value = !userMenuOpen.value;
+    }
+
+    /** 点击用户菜单外部时收起。 */
+    function handleDocClickForUserMenu(e) {
+        if (userMenuOpen.value && !e.target.closest('.user-menu')) {
+            userMenuOpen.value = false;
+        }
+    }
+    document.addEventListener('click', handleDocClickForUserMenu);
+
+    /** 打开修改密码弹窗（重置表单）。 */
+    function openPwModal() {
+        pwForm.oldPassword = '';
+        pwForm.newPassword = '';
+        pwForm.confirmPassword = '';
+        pwError.value = '';
+        userMenuOpen.value = false;
+        pwModalVisible.value = true;
+    }
+
+    /** 关闭修改密码弹窗。 */
+    function closePwModal() {
+        pwModalVisible.value = false;
+    }
 
     /** 探测登录态：已登录直接进入应用，否则展示登录页。 */
     async function initAuth() {
@@ -88,6 +118,8 @@ export function setupAuth(ctx) {
         authed.value = false;
         mustChangePassword.value = false;
         currentUser.value = '';
+        userMenuOpen.value = false;
+        pwModalVisible.value = false;
         if (ctx.wsController) ctx.wsController.disconnect();
     }
 
@@ -101,6 +133,7 @@ export function setupAuth(ctx) {
         try {
             await apiChangePassword(pwForm.oldPassword, pwForm.newPassword);
             mustChangePassword.value = false;
+            pwModalVisible.value = false;
             pwForm.oldPassword = '';
             pwForm.newPassword = '';
             pwForm.confirmPassword = '';
@@ -116,6 +149,8 @@ export function setupAuth(ctx) {
         authed, authChecked, currentUser, mustChangePassword,
         loginForm, loginError, loginLoading,
         pwForm, pwError, pwSaving,
+        userMenuOpen, pwModalVisible,
+        toggleUserMenu, openPwModal, closePwModal,
         handleLogin, handleLogout, handleChangePassword,
         initAuth, handleUnauthorized,
     });
