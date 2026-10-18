@@ -104,6 +104,10 @@ func New(cfg *config.Config, log *logger.Logger, staticFS embed.FS, dataDir stri
 	gpuHandler := api.NewGPUHandler(log, store)
 	gpuHandler.Register(mux)
 
+	// --- 系统服务管理（systemd 服务启停/自启管理） ---
+	servicesHandler := api.NewServicesHandler(log, store)
+	servicesHandler.Register(mux)
+
 	// --- WebSocket ---
 	hub := ws.NewHub(log)
 	go hub.Run()

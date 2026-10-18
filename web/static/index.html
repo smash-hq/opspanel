@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/css/components/sidebar.css">
     <link rel="stylesheet" href="/css/components/permission-alert.css">
     <link rel="stylesheet" href="/css/components/processes.css">
+    <link rel="stylesheet" href="/css/components/services.css">
     <link rel="stylesheet" href="/css/components/cron.css">
     <link rel="stylesheet" href="/css/components/gpu.css">
     <link rel="stylesheet" href="/css/components/languages.css">
@@ -540,6 +541,7 @@
                 <div class="node-breadcrumb">
                     <button class="bc-tab" :class="{ active: activeTab === 'system' }" @click="activeTab = 'system'">系统信息</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'process' }" @click="activeTab = 'process'; loadProcesses()">进程管理</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'services' }" @click="activeTab = 'services'; loadServices()">systemd</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; currentFilePath = '/'; loadFiles('/')">文件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'languages' }" @click="activeTab = 'languages'; detectServerLanguages()">语言环境</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
@@ -880,6 +882,57 @@
                                 <button class="proc-btn" @click="viewProcessLog(p.pid)" title="日志">📋</button>
                                 <button class="proc-btn danger" @click="handleKillProcess(p.pid, false)" title="终止">✗</button>
                                 <button class="proc-btn danger" @click="handleKillProcess(p.pid, true)" title="强制终止">⚡</button>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 服务管理 Tab（systemd） -->
+                <div v-if="activeTab === 'services'" class="node-tab-content">
+                    <div class="process-toolbar">
+                        <div class="service-toolbar-left">
+                            <h3>systemd 服务</h3>
+                            <input class="service-search" v-model="serviceSearch" placeholder="搜索服务名或描述..." />
+                            <div class="service-state-tabs">
+                                <button v-for="st in serviceStateCounts" :key="st.label" class="state-tab"
+                                    :class="{ active: serviceStateFilter === st.value, 'has-failed': st.value === 'failed' && st.count > 0 }"
+                                    @click="serviceStateFilter = st.value">
+                                    {{ st.label }}<span class="state-tab-count">{{ st.count }}</span>
+                                </button>
+                            </div>
+                        </div>
+                        <button class="toolbar-button" @click="loadServices()" :disabled="servicesLoading">↻ 刷新</button>
+                    </div>
+                    <div v-if="servicesError" class="list-empty">
+                        <span class="empty-icon">⚠</span><strong>{{ servicesError }}</strong>
+                    </div>
+                    <div v-else-if="servicesLoading" class="loading-state" style="padding:20px;">加载中...</div>
+                    <div v-else-if="!filteredServices.length" class="list-empty">
+                        <span class="empty-icon">⌁</span><strong>{{ serviceSearch ? '无匹配服务' : '暂无服务数据' }}</strong>
+                    </div>
+                    <div v-else class="process-table">
+                        <div class="process-header">
+                            <span class="svc-col-name">服务名</span>
+                            <span class="svc-col-desc">描述</span>
+                            <span class="svc-col-state">状态</span>
+                            <span class="svc-col-enabled">开机自启</span>
+                            <span class="svc-col-actions">操作</span>
+                        </div>
+                        <div v-for="s in filteredServices" :key="s.name" class="process-row">
+                            <span class="svc-col-name" :title="s.name">{{ s.name }}</span>
+                            <span class="svc-col-desc" :title="s.description">{{ s.description || '—' }}</span>
+                            <span class="svc-col-state">
+                                <span class="svc-badge" :class="serviceStateClass(s)">{{ serviceStateText(s) }}</span>
+                            </span>
+                            <span class="svc-col-enabled">
+                                <span class="svc-badge" :class="s.enabled === 'enabled' ? 'ok' : 'idle'">{{ s.enabled === 'enabled' ? '已启用' : (s.enabled === 'disabled' ? '未启用' : s.enabled) }}</span>
+                            </span>
+                            <span class="svc-col-actions">
+                                <button class="svc-btn start" @click="handleServiceAction(s, 'start')" :disabled="serviceActionPending === s.name || s.active_state === 'active'">启动</button>
+                                <button class="svc-btn danger" @click="handleServiceAction(s, 'stop')" :disabled="serviceActionPending === s.name || s.active_state !== 'active'">停止</button>
+                                <button class="svc-btn restart" @click="handleServiceAction(s, 'restart')" :disabled="serviceActionPending === s.name">重启</button>
+                                <button class="svc-btn edit" @click="openUnitEditor(s)">编辑</button>
+                                <button class="svc-btn" @click="viewServiceLog(s)">日志</button>
                             </span>
                         </div>
                     </div>
@@ -1942,6 +1995,53 @@
                     <pre>{{ processLogData.content || '暂无日志' }}</pre>
                 </div>
                 <div class="log-loading" v-else>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务日志弹窗 -->
+    <div class="modal-overlay" v-if="serviceLogVisible" @click.self="closeServiceLog">
+        <div class="modal log-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">SYSTEMD LOG</span><h3>{{ serviceLogData.name }} · 服务日志</h3></div>
+                <button class="icon-button" @click="closeServiceLog" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-toolbar">
+                    <span class="log-file-path">journalctl -u {{ serviceLogData.name }}</span>
+                    <span class="log-toolbar-spacer"></span>
+                    <select v-model.number="serviceLogLines" @change="refreshServiceLog()" class="log-lines-select" title="日志行数">
+                        <option :value="50">末尾 50 行</option>
+                        <option :value="100">末尾 100 行</option>
+                        <option :value="200">末尾 200 行</option>
+                        <option :value="500">末尾 500 行</option>
+                        <option :value="1000">末尾 1000 行</option>
+                    </select>
+                    <button class="toolbar-button" @click="refreshServiceLog()">↻ 刷新</button>
+                </div>
+                <div class="log-viewer" v-if="!serviceLogLoading">
+                    <pre>{{ serviceLogData.content || '暂无日志' }}</pre>
+                </div>
+                <div class="log-loading" v-else>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- unit 文件编辑弹窗 -->
+    <div class="modal-overlay" v-if="unitEditVisible" @click.self="closeUnitEditor">
+        <div class="modal log-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">UNIT FILE</span><h3>{{ unitEditData.name }} · 单元文件</h3></div>
+                <button class="icon-button" @click="closeUnitEditor" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-toolbar">
+                    <span class="log-file-path">{{ unitEditData.path || '—' }}</span>
+                    <span class="log-toolbar-spacer"></span>
+                    <button class="toolbar-button" @click="saveUnitFile()" :disabled="unitEditSaving || unitEditLoading || !unitEditData.path">{{ unitEditSaving ? '保存中...' : '保存' }}</button>
+                </div>
+                <textarea class="unit-textarea" v-model="unitEditData.content" :disabled="unitEditLoading" spellcheck="false"></textarea>
+                <div class="unit-tip">保存后自动备份原文件为 *.bak，并执行 systemctl daemon-reload 使配置生效。</div>
             </div>
         </div>
     </div>
