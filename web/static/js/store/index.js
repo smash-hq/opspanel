@@ -24,6 +24,7 @@ import { setupApps } from './apps.js';
 import { setupMirrors } from './mirrors.js';
 import { setupSources } from './sources.js';
 import { setupProcesses } from './processes.js';
+import { setupServices } from './services.js';
 import { setupCron } from './cron.js';
 import { setupGpu } from './gpu.js';
 import { setupTerminal } from './terminal.js';
@@ -50,6 +51,7 @@ export function setupStore() {
     setupMirrors(ctx);
     setupSources(ctx);
     setupProcesses(ctx);
+    setupServices(ctx);
     setupCron(ctx);
     setupGpu(ctx);
     setupTerminal(ctx);
