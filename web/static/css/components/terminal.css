@@ -284,3 +284,34 @@
     scrollbar-color: #3d4550 #0d1117;
 }
 
+/* ─── 容器终端弹窗（docker exec -it）─── */
+.docker-terminal-modal {
+    max-width: 960px;
+    width: 92vw;
+}
+
+.docker-term-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.docker-term-wrap {
+    height: 62vh;
+    min-height: 380px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0d1117;
+    border: 1px solid #30363d;
+}
+
+.docker-term-wrap .xterm {
+    height: 100%;
+    padding: 8px 4px 8px 10px;
+}
+
+.docker-term-wrap .xterm .xterm-viewport {
+    scrollbar-width: thin;
+    scrollbar-color: #3d4550 #0d1117;
+}
+

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/smash-hq/opspanel/internal/remote"
 	"github.com/smash-hq/opspanel/internal/ws"
 )
 
@@ -27,8 +28,10 @@ type terminalClientMsg struct {
 	Rows int    `json:"rows"`
 }
 
-// handleTerminal: GET /api/v1/terminal?server=<id> 升级为 WebSocket，
-// 双向桥接浏览器 xterm.js 与远端 SSH 交互式 shell。
+// handleTerminal: GET /api/v1/terminal?server=<id>[&container=<id>] 升级为 WebSocket，
+// 双向桥接浏览器 xterm.js 与远端交互式会话。
+// 无 container 时桥接远端 SSH 交互式 shell；
+// 带 container 时在远端宿主机执行 docker exec -it 接入容器交互式终端。
 // 协议：浏览器→服务端为 JSON 控制消息（input/resize）；服务端→浏览器为二进制原始输出，
 // 会话结束时发送一条 JSON {"type":"exit"} 文本消息后关闭。
 func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request) {
@@ -57,9 +60,16 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 	}
 	defer wsConn.Close()
 
-	ts, err := h.remoteCollector.OpenTerminalSession(toRemoteServer(srv), 80, 24)
+	// container 参数非空时接入容器终端（docker exec -it），否则为宿主机 SSH shell
+	container := r.URL.Query().Get("container")
+	var ts *remote.TerminalSession
+	if container != "" {
+		ts, err = h.remoteCollector.OpenContainerTerminalSession(toRemoteServer(srv), container, 80, 24)
+	} else {
+		ts, err = h.remoteCollector.OpenTerminalSession(toRemoteServer(srv), 80, 24)
+	}
 	if err != nil {
-		h.log.Errorw("terminal open failed", "server", serverID, "error", err.Error())
+		h.log.Errorw("terminal open failed", "server", serverID, "container", container, "error", err.Error())
 		_ = wsConn.WriteMessage(websocket.TextMessage, mustJSON(map[string]string{"type": "exit", "error": err.Error()}))
 		return
 	}
@@ -163,7 +173,7 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 	case <-time.After(3 * time.Second):
 	}
 	_ = wsConn.Close()
-	h.log.Infow("terminal session closed", "server", serverID)
+	h.log.Infow("terminal session closed", "server", serverID, "container", container)
 }
 
 // mustJSON 序列化为 JSON，失败时返回空对象字节（调用场景均为 map，不会失败）。

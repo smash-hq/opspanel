@@ -84,6 +84,7 @@ func (h *SettingsHandler) handleSettings(w http.ResponseWriter, r *http.Request)
 			}
 			OK(w, map[string]string{
 				"theme":              h.getMeta(r.Context(), "theme", "system"),
+				"language":           h.getMeta(r.Context(), "language", ""),
 				"panel_name":         h.getMeta(r.Context(), "panel_name", ""),
 				"admin_email":        h.getMeta(r.Context(), "admin_email", ""),
 				"push_interval":      h.getMeta(r.Context(), "push_interval", "3"),

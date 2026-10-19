@@ -28,6 +28,20 @@ func (l *localShell) RunRaw(ctx context.Context, cmd string) ([]byte, error) {
 	return exec.CommandContext(ctx, "/bin/sh", "-c", cmd).CombinedOutput()
 }
 
+// RunRawStdout 执行单条命令并仅返回 stdout 原始字节（stderr 不混入），
+// 语义与 sshConn.RunRawStdout 一致，用于二进制传输场景保证输出纯净；
+// 非零退出时将 stderr 内容附加到错误信息便于定位。
+func (l *localShell) RunRawStdout(ctx context.Context, cmd string) ([]byte, error) {
+	out, err := exec.CommandContext(ctx, "/bin/sh", "-c", cmd).Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+			return out, fmt.Errorf("local exec: %s", strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return out, fmt.Errorf("local exec: %w", err)
+	}
+	return out, nil
+}
+
 // RunStream 执行单条命令并通过 sink 增量回调合并输出（stdout+stderr），
 // 语义与 sshConn.RunStream 一致；ctx 取消/超时会 kill 进程。
 func (l *localShell) RunStream(ctx context.Context, cmd string, sink func(chunk string)) error {

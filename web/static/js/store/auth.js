@@ -3,6 +3,8 @@
  *
  * 登录态探测、登录/退出、首登强制改密与会话失效处理。
  */
+import { t } from '../i18n/index.js';
+
 
 import { login as apiLogin, logout as apiLogout, fetchMe, changePassword as apiChangePassword } from '../api/auth.js';
 
@@ -84,14 +86,14 @@ export function setupAuth(ctx) {
     async function handleLogin() {
         loginError.value = '';
         if (!loginForm.username || !loginForm.password) {
-            loginError.value = '请输入用户名和密码';
+            loginError.value = t('请输入用户名和密码');
             return;
         }
         loginLoading.value = true;
         try {
             const data = await apiLogin(loginForm.username, loginForm.password);
             enterApp(data.username, data.must_change_password);
-            if (data.must_change_password) ctx.toastNotify('首次登录，请先修改默认密码');
+            if (data.must_change_password) ctx.toastNotify(t('首次登录，请先修改默认密码'));
         } catch (err) {
             loginError.value = err.message;
         } finally {
@@ -111,7 +113,7 @@ export function setupAuth(ctx) {
     function handleUnauthorized() {
         if (!authed.value) return;
         leaveApp();
-        ctx.toastNotify('登录已过期，请重新登录', true);
+        ctx.toastNotify(t('登录已过期，请重新登录'), true);
     }
 
     /** 清理本地登录态并断开 WebSocket。 */
@@ -127,9 +129,9 @@ export function setupAuth(ctx) {
     /** 提交修改密码（首登强制改密共用）。 */
     async function handleChangePassword() {
         pwError.value = '';
-        if (!pwForm.oldPassword) { pwError.value = '请输入当前密码'; return; }
-        if (pwForm.newPassword.length < 8) { pwError.value = '新密码长度至少 8 位'; return; }
-        if (pwForm.newPassword !== pwForm.confirmPassword) { pwError.value = '两次输入的新密码不一致'; return; }
+        if (!pwForm.oldPassword) { pwError.value = t('请输入当前密码'); return; }
+        if (pwForm.newPassword.length < 8) { pwError.value = t('新密码长度至少 8 位'); return; }
+        if (pwForm.newPassword !== pwForm.confirmPassword) { pwError.value = t('两次输入的新密码不一致'); return; }
         pwSaving.value = true;
         try {
             await apiChangePassword(pwForm.oldPassword, pwForm.newPassword);
@@ -138,7 +140,7 @@ export function setupAuth(ctx) {
             pwForm.oldPassword = '';
             pwForm.newPassword = '';
             pwForm.confirmPassword = '';
-            ctx.toastNotify('密码已修改，后续登录请使用新密码');
+            ctx.toastNotify(t('密码已修改，后续登录请使用新密码'));
         } catch (err) {
             pwError.value = err.message;
         } finally {

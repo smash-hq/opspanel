@@ -3,6 +3,8 @@
  *
  * 添加/编辑服务器、连接测试与删除确认。
  */
+import { t } from '../i18n/index.js';
+
 
 import { createServer, updateServer, testConnection, deleteServer as apiDeleteServer } from '../api/servers.js';
 
@@ -59,17 +61,17 @@ export function setupServerForm(ctx) {
     /** 校验表单并提交。 */
     async function saveServer() {
         formError.value = '';
-        if (!form.name.trim()) { formError.value = '请输入服务器名称'; return; }
+        if (!form.name.trim()) { formError.value = t('请输入服务器名称'); return; }
         if (form.type === 'remote' && (!form.host.trim() || !form.username.trim())) {
-            formError.value = '远程服务器需要填写主机地址和用户名';
+            formError.value = t('远程服务器需要填写主机地址和用户名');
             return;
         }
         if (form.type === 'remote' && formMode.value === 'add' && form.auth_type === 'password' && !form.password) {
-            formError.value = '请输入登录密码';
+            formError.value = t('请输入登录密码');
             return;
         }
         if (form.type === 'remote' && form.auth_type === 'key' && !form.key_path.trim()) {
-            formError.value = '请输入私钥文件路径';
+            formError.value = t('请输入私钥文件路径');
             return;
         }
 
@@ -91,7 +93,7 @@ export function setupServerForm(ctx) {
                 : await createServer(payload);
             await ctx.loadServers();
             formMode.value = null;
-            ctx.toastNotify(isEdit ? '服务器配置已更新' : '服务器已添加');
+            ctx.toastNotify(isEdit ? t('服务器配置已更新') : t('服务器已添加'));
             if (!isEdit && saved?.id) ctx.selectServer(saved.id);
             else if (isEdit && ctx.selectedServer.value === form.id) ctx.refreshCurrent();
         } catch (err) {
@@ -104,7 +106,7 @@ export function setupServerForm(ctx) {
     /** 删除服务器（带确认）。 */
     async function handleDeleteServer(id) {
         const server = ctx.servers.value.find(s => s.id === id);
-        if (!server || !await ctx.confirmDialog(`确定删除「${server.name}」吗？删除后连接配置不可恢复。`, { title: '删除服务器', confirmText: '删除' })) return;
+        if (!server || !await ctx.confirmDialog(t('确定删除「{p1}」吗？删除后连接配置不可恢复。', { p1: server.name }), { title: t('删除服务器'), confirmText: t('删除') })) return;
         try {
             await apiDeleteServer(id);
             if (ctx.selectedServer.value === id) {
@@ -112,7 +114,7 @@ export function setupServerForm(ctx) {
                 if (ctx.wsController) { ctx.wsController.disconnect(); ctx.wsController = null; }
             }
             await ctx.loadServers();
-            ctx.toastNotify('服务器已删除');
+            ctx.toastNotify(t('服务器已删除'));
         } catch (err) {
             ctx.toastNotify(err.message, true);
         }
@@ -124,17 +126,17 @@ export function setupServerForm(ctx) {
         testResult.value = null;
 
         // 基本校验
-        if (!form.name.trim()) { formError.value = '请输入服务器名称'; return; }
+        if (!form.name.trim()) { formError.value = t('请输入服务器名称'); return; }
         if (form.type === 'remote' && (!form.host.trim() || !form.username.trim())) {
-            formError.value = '远程服务器需要填写主机地址和用户名';
+            formError.value = t('远程服务器需要填写主机地址和用户名');
             return;
         }
         if (form.type === 'remote' && form.auth_type === 'password' && !form.password) {
-            formError.value = '请输入登录密码';
+            formError.value = t('请输入登录密码');
             return;
         }
         if (form.type === 'remote' && form.auth_type === 'key' && !form.key_path.trim()) {
-            formError.value = '请输入私钥文件路径';
+            formError.value = t('请输入私钥文件路径');
             return;
         }
 

@@ -123,13 +123,21 @@
 .docker-container-list {
     border: 1px solid var(--card-border, #e5e7eb);
     border-radius: 10px;
-    overflow: hidden;
+    /* 窄屏下行按 min-width: fit-content 撑出横向滚动，而不是把列压扁，
+       这样各行（独立 grid）的列分割点始终一致 */
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .docker-image-row,
 .docker-container-row {
     display: grid;
-    grid-template-columns: 24px 2fr 1fr 90px 80px 70px 130px;
+    /* fr 列必须 minmax(下限, …)：镜像名为 nowrap 文本，fr 列隐式 min-content 会把每行的
+       列分割点撑得各不相同，导致镜像名一行一行错位（容器行各行是独立 grid）。
+       下限保证窄屏时列不会被压没，而是整行溢出交给列表横向滚动。 */
+    grid-template-columns: 24px minmax(140px, 2fr) minmax(200px, 1fr) 90px 80px 70px minmax(330px, auto);
+    /* 低于列宽下限时行不再收缩、整体溢出，保证各行仍逐列对齐 */
+    min-width: fit-content;
     align-items: center;
     padding: 7px 12px;
     border-top: 1px solid var(--card-border, #e2e8f0);
@@ -139,7 +147,7 @@
 
 /* 镜像行子元素较容器行少（无状态/运行时长/端口列），单独定义列宽 */
 .docker-image-row {
-    grid-template-columns: 24px minmax(0, 2fr) 110px 80px 150px;
+    grid-template-columns: 24px minmax(160px, 2fr) 110px 80px 150px;
 }
 
 .docker-image-row:first-child {
@@ -257,6 +265,7 @@
 }
 
 .docker-ctr-image {
+    min-width: 0;
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 0.75rem;
     color: var(--text-muted, #64748b);
@@ -317,22 +326,23 @@
     gap: 3px;
     justify-content: flex-end;
     flex-wrap: nowrap;
-    min-width: 0;
+    /* 动作区列宽由 grid 的 minmax(330px, auto) 固定（按最宽的运行中按钮组），
+       右对齐下各状态行（运行中 7 个按钮 / 已停止 3 个按钮）的按钮区左右边缘都对齐 */
 }
 
 .ctr-btn {
-    width: 26px;
-    height: 26px;
+    height: 22px;
+    padding: 0 8px;
     border: 1px solid var(--card-border, #e2e8f0);
     border-radius: 5px;
     background: transparent;
     cursor: pointer;
-    font-size: 0.7rem;
-    display: flex;
+    font-size: 0.72rem;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    white-space: nowrap;
     transition: all 0.15s;
-    padding: 0;
     line-height: 1;
 }
 

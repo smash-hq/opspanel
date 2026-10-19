@@ -4,6 +4,8 @@
  * Docker 镜像源（Registry）的增删改与默认源设置，
  * 以及将镜像源应用到远程服务器。
  */
+import { t } from '../i18n/index.js';
+
 
 import {
     fetchDockerSources, createDockerSource, updateDockerSource,
@@ -26,7 +28,7 @@ export function setupMirrors(ctx) {
         try {
             dockerSources.value = await fetchDockerSources();
         } catch (err) {
-            ctx.toastNotify('镜像源列表加载失败', true);
+            ctx.toastNotify(t('镜像源列表加载失败'), true);
         }
     }
 
@@ -45,7 +47,7 @@ export function setupMirrors(ctx) {
 
     async function saveDockerSource() {
         if (!dockerSourceForm.name.trim() || !dockerSourceForm.url.trim()) {
-            ctx.toastNotify('名称和地址不能为空', true);
+            ctx.toastNotify(t('名称和地址不能为空'), true);
             return;
         }
         const isEdit = !!dockerSourceForm.id;
@@ -58,22 +60,22 @@ export function setupMirrors(ctx) {
             }
             await loadDockerSources();
             dockerSourceFormVisible.value = false;
-            ctx.toastNotify(isEdit ? '镜像源已更新' : '镜像源已添加');
+            ctx.toastNotify(isEdit ? t('镜像源已更新') : t('镜像源已添加'));
         } catch (err) {
-            ctx.toastNotify('保存失败: ' + err.message, true);
+            ctx.toastNotify(t('保存失败: ') + err.message, true);
         } finally {
             dockerSourceSaving.value = false;
         }
     }
 
     async function removeDockerSource(id) {
-        if (!await ctx.confirmDialog('确定删除此镜像源吗？', { title: '删除镜像源' })) return;
+        if (!await ctx.confirmDialog(t('确定删除此镜像源吗？'), { title: t('删除镜像源') })) return;
         try {
             await apiDeleteDockerSource(id);
             await loadDockerSources();
-            ctx.toastNotify('镜像源已删除');
+            ctx.toastNotify(t('镜像源已删除'));
         } catch (err) {
-            ctx.toastNotify('删除失败: ' + err.message, true);
+            ctx.toastNotify(t('删除失败: ') + err.message, true);
         }
     }
 
@@ -81,9 +83,9 @@ export function setupMirrors(ctx) {
         try {
             await setDefaultDockerSource(id);
             await loadDockerSources();
-            ctx.toastNotify('已设为默认镜像源');
+            ctx.toastNotify(t('已设为默认镜像源'));
         } catch (err) {
-            ctx.toastNotify('设置失败: ' + err.message, true);
+            ctx.toastNotify(t('设置失败: ') + err.message, true);
         }
     }
 
@@ -103,13 +105,13 @@ export function setupMirrors(ctx) {
 
     async function applyMirrorToServer(mirror) {
         if (!ctx.selectedServer.value) return;
-        if (!await ctx.confirmDialog(`确定要将镜像源「${mirror}」应用到当前服务器吗？应用后 Docker 将会重启。`, { title: '应用镜像源', confirmText: '应用' })) return;
+        if (!await ctx.confirmDialog(t('确定要将镜像源「{mirror}」应用到当前服务器吗？应用后 Docker 将会重启。', { mirror: mirror }), { title: t('应用镜像源'), confirmText: t('应用') })) return;
         try {
             await applyServerMirror(ctx.selectedServer.value, mirror);
             serverMirror.value.mirror = mirror;
-            ctx.toastNotify('镜像源已应用到服务器，Docker 正在重启');
+            ctx.toastNotify(t('镜像源已应用到服务器，Docker 正在重启'));
         } catch (err) {
-            ctx.toastNotify('应用失败: ' + err.message, true);
+            ctx.toastNotify(t('应用失败: ') + err.message, true);
         }
     }
 

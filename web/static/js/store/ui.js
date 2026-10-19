@@ -4,6 +4,8 @@
  * 布局状态（侧栏/菜单/Tab）、系统设置、品牌信息、全局确认框、
  * 配置详情弹窗与 Toast 通知。
  */
+import { t, setLocale } from '../i18n/index.js';
+
 
 import { showToast } from '../utils.js';
 import { getSettings, updateSettings, uploadFaviconFile, resetFaviconFile } from '../api/settings.js';
@@ -40,6 +42,7 @@ export function setupUi(ctx) {
                 settingsForm.defaultSSHPort = parseInt(json.data.default_ssh_port) || 22;
                 settingsForm.welcomeMessage = json.data.welcome_message || '';
                 hasCustomFavicon.value = json.data.has_custom_favicon === '1';
+                if (json.data.language) setLocale(json.data.language, { persist: false });
             }
         } catch (err) {
             // 使用默认值
@@ -49,7 +52,7 @@ export function setupUi(ctx) {
 
     // 将启动信息应用到界面（标题 / favicon），品牌名通过 computed 响应式更新
     function applyBrand() {
-        document.title = `${brandName.value} · 服务器管理`;
+        document.title = t('{p1} · 服务器管理', { p1: brandName.value });
         const link = document.querySelector('link[rel="icon"]');
         if (link) link.href = '/api/v1/settings/favicon?' + Date.now();
     }
@@ -67,11 +70,11 @@ export function setupUi(ctx) {
                 default_ssh_port: settingsForm.defaultSSHPort,
                 welcome_message: settingsForm.welcomeMessage,
             });
-            if (json.code !== 0) throw new Error(json.message || '未知错误');
+            if (json.code !== 0) throw new Error(json.message || t('未知错误'));
             applyBrand();
-            ctx.toastNotify('设置已保存');
+            ctx.toastNotify(t('设置已保存'));
         } catch (err) {
-            ctx.toastNotify('保存失败: ' + err.message, true);
+            ctx.toastNotify(t('保存失败: ') + err.message, true);
         } finally {
             settingsSaving.value = false;
         }
@@ -85,39 +88,39 @@ export function setupUi(ctx) {
         const file = event.target.files[0];
         if (!file) return;
         if (file.size > 1024 * 1024) {
-            ctx.toastNotify('图标文件过大（最大 1MB）', true);
+            ctx.toastNotify(t('图标文件过大（最大 1MB）'), true);
             return;
         }
         try {
             const json = await uploadFaviconFile(file);
-            if (json.code !== 0) throw new Error(json.message || '上传失败');
+            if (json.code !== 0) throw new Error(json.message || t('上传失败'));
             faviconTs.value = Date.now();
             hasCustomFavicon.value = true;
             // 更新 head 中的 favicon
             document.querySelector('link[rel="icon"]').href = '/api/v1/settings/favicon?' + faviconTs.value;
-            ctx.toastNotify('图标已更新');
+            ctx.toastNotify(t('图标已更新'));
         } catch (err) {
-            ctx.toastNotify('上传失败: ' + err.message, true);
+            ctx.toastNotify(t('上传失败: ') + err.message, true);
         }
     }
 
     async function resetFavicon() {
         try {
             const json = await resetFaviconFile();
-            if (json.code !== 0) throw new Error(json.message || '操作失败');
+            if (json.code !== 0) throw new Error(json.message || t('操作失败'));
             faviconTs.value = Date.now();
             hasCustomFavicon.value = false;
             document.querySelector('link[rel="icon"]').href = '/favicon.svg';
-            ctx.toastNotify('已恢复默认图标');
+            ctx.toastNotify(t('已恢复默认图标'));
         } catch (err) {
-            ctx.toastNotify('操作失败: ' + err.message, true);
+            ctx.toastNotify(t('操作失败: ') + err.message, true);
         }
     }
 
     // ─── 全局确认框 ───
     const confirmState = reactive({
-        visible: false, title: '操作确认', message: '',
-        confirmText: '确定', danger: true, _resolve: null,
+        visible: false, title: t('操作确认'), message: '',
+        confirmText: t('确定'), danger: true, _resolve: null,
     });
 
     /** 友好的二次确认，替代原生 confirm：返回 Promise<boolean>。 */
@@ -125,9 +128,9 @@ export function setupUi(ctx) {
         return new Promise(resolve => {
             Object.assign(confirmState, {
                 visible: true,
-                title: opts.title || '操作确认',
+                title: opts.title || t('操作确认'),
                 message,
-                confirmText: opts.confirmText || '确定',
+                confirmText: opts.confirmText || t('确定'),
                 danger: opts.danger !== false,
                 _resolve: resolve,
             });
@@ -181,12 +184,15 @@ export function setupUi(ctx) {
         ctx.toastTimer = showToast(toast, message, error);
     }
 
-    // ─── 筛选标签 ───
-    const filters = [
-        { value: 'all', label: '全部' },
-        { value: 'remote', label: '远程' },
-        { value: 'online', label: '在线' },
-    ];
+    // ─── 筛选标签（computed 保证切换语言后重新翻译）───
+    const filters = computed(() => [
+        { value: 'all', label: t('全部') },
+        { value: 'remote', label: t('远程') },
+        { value: 'online', label: t('在线') },
+    ]);
+
+    // 切换语言时刷新浏览器标签页标题
+    window.addEventListener('opspanel:langchange', applyBrand);
 
     Object.assign(ctx, {
         sidebarCollapsed, activeMenu, activeTab, configTab, showDoc, searchQuery, activeFilter, filters,

@@ -1,6 +1,8 @@
 /**
  * store/apps.js — 服务部署管理（java/python/go 应用部署、文件上传、生命周期、日志）
  */
+import { t } from '../i18n/index.js';
+
 import { detectLanguages } from '../api/languages.js';
 import {
     fetchApps, createApp, updateApp, deleteApp,
@@ -125,7 +127,7 @@ export function setupApps(ctx) {
         try {
             apps.value = await fetchApps(ctx.selectedServer.value, refresh);
         } catch (err) {
-            ctx.toastNotify(err.message || '加载服务列表失败', true);
+            ctx.toastNotify(err.message || t('加载服务列表失败'), true);
         } finally {
             appsLoading.value = false;
         }
@@ -139,7 +141,7 @@ export function setupApps(ctx) {
 
     function openAppForm() {
         if (!ctx.selectedServer.value) {
-            ctx.toastNotify('请先在顶部选择目标服务器', true);
+            ctx.toastNotify(t('请先在顶部选择目标服务器'), true);
             return;
         }
         resetAppForm();
@@ -182,7 +184,7 @@ export function setupApps(ctx) {
 
     function closeAppForm() {
         if (appUploadState.running) {
-            ctx.toastNotify('正在上传中，请等待完成', true);
+            ctx.toastNotify(t('正在上传中，请等待完成'), true);
             return;
         }
         appFormVisible.value = false;
@@ -214,10 +216,10 @@ export function setupApps(ctx) {
     async function saveApp() {
         appFormError.value = '';
         const f = appForm;
-        if (!f.name.trim()) return void (appFormError.value = '请填写服务名称');
-        if (!f.deploy_dir.trim()) return void (appFormError.value = '请填写部署目录');
-        if (!f.deploy_dir.trim().startsWith('/')) return void (appFormError.value = '部署目录必须为绝对路径（以 / 开头）');
-        if (!f.start_cmd.trim()) return void (appFormError.value = '请填写启动命令');
+        if (!f.name.trim()) return void (appFormError.value = t('请填写服务名称'));
+        if (!f.deploy_dir.trim()) return void (appFormError.value = t('请填写部署目录'));
+        if (!f.deploy_dir.trim().startsWith('/')) return void (appFormError.value = t('部署目录必须为绝对路径（以 / 开头）'));
+        if (!f.start_cmd.trim()) return void (appFormError.value = t('请填写启动命令'));
 
         appSaving.value = true;
         try {
@@ -244,11 +246,11 @@ export function setupApps(ctx) {
                     remark: f.remark.trim(),
                 });
                 appFormVisible.value = false;
-                ctx.toastNotify('保存成功');
+                ctx.toastNotify(t('保存成功'));
                 loadApps(false);
             }
         } catch (err) {
-            appFormError.value = err.message || '保存失败';
+            appFormError.value = err.message || t('保存失败');
         } finally {
             appSaving.value = false;
         }
@@ -279,7 +281,7 @@ export function setupApps(ctx) {
             const jars = files.filter((f) => /\.jar$/i.test(f.name));
             const rejected = files.length - jars.length;
             if (rejected > 0) {
-                ctx.toastNotify(`Java 服务仅支持上传 .jar 文件，已忽略 ${rejected} 个其他文件`, true);
+                ctx.toastNotify(t('Java 服务仅支持上传 .jar 文件，已忽略 {rejected} 个其他文件', { rejected: rejected }), true);
             }
             files = jars;
         }
@@ -385,12 +387,12 @@ export function setupApps(ctx) {
             }
             pendingAppFiles.value = [];
             ctx.toastNotify(appUploadState.skipped > 0
-                ? `上传完成（断点续传，跳过已传 ${appUploadState.skipped} 个分片）`
-                : `上传完成，共 ${uploadedFiles.value.length} 个文件`);
+                ? t('上传完成（断点续传，跳过已传 {p1} 个分片）', { p1: appUploadState.skipped })
+                : t('上传完成，共 {p1} 个文件', { p1: uploadedFiles.value.length }));
             loadApps(false);
         } catch (err) {
             appUploadFailed.value = true;
-            ctx.toastNotify(`上传 ${appUploadState.currentFileName || ''} 失败：${err.message || '未知错误'}（已传分片保留，可重试续传）`, true);
+            ctx.toastNotify(t('上传 {p1} 失败：{p2}（已传分片保留，可重试续传）', { p1: appUploadState.currentFileName || '', p2: err.message || t('未知错误') }), true);
         } finally {
             appUploadState.running = false;
         }
@@ -405,11 +407,11 @@ export function setupApps(ctx) {
         appBusyAction.value = 'start';
         try {
             const res = await appAction(app.id, 'start');
-            ctx.toastNotify(`服务已启动（PID ${res && res.pid ? res.pid : '-'}）`);
+            ctx.toastNotify(t('服务已启动（PID {p1}）', { p1: res && res.pid ? res.pid : '-' }));
             loadApps(true);
         } catch (err) {
             // 简短 toast + 完整原因进通知中心与状态徽标
-            ctx.toastNotify((err.message || '启动失败').split('\n')[0], true);
+            ctx.toastNotify((err.message || t('启动失败')).split('\n')[0], true);
             ctx.loadNotifications();
             loadApps(false);
         } finally {
@@ -420,9 +422,9 @@ export function setupApps(ctx) {
 
     async function appStop(app) {
         if (appBusyId.value) return;
-        const ok = await ctx.confirmDialog(`确定停止服务「${app.name}」吗？`, {
-            title: '停止服务',
-            confirmText: '停止',
+        const ok = await ctx.confirmDialog(t('确定停止服务「{p1}」吗？', { p1: app.name }), {
+            title: t('停止服务'),
+            confirmText: t('停止'),
             danger: true,
         });
         if (!ok) return;
@@ -430,10 +432,10 @@ export function setupApps(ctx) {
         appBusyAction.value = 'stop';
         try {
             await appAction(app.id, 'stop');
-            ctx.toastNotify('服务已停止');
+            ctx.toastNotify(t('服务已停止'));
             loadApps(true);
         } catch (err) {
-            ctx.toastNotify(err.message || '停止失败', true);
+            ctx.toastNotify(err.message || t('停止失败'), true);
         } finally {
             appBusyId.value = '';
             appBusyAction.value = '';
@@ -442,19 +444,19 @@ export function setupApps(ctx) {
 
     async function appRestart(app) {
         if (appBusyId.value) return;
-        const ok = await ctx.confirmDialog(`确定重启服务「${app.name}」吗？`, {
-            title: '重启服务',
-            confirmText: '重启',
+        const ok = await ctx.confirmDialog(t('确定重启服务「{p1}」吗？', { p1: app.name }), {
+            title: t('重启服务'),
+            confirmText: t('重启'),
         });
         if (!ok) return;
         appBusyId.value = app.id;
         appBusyAction.value = 'restart';
         try {
             const res = await appAction(app.id, 'restart');
-            ctx.toastNotify(`服务已重启（PID ${res && res.pid ? res.pid : '-'}）`);
+            ctx.toastNotify(t('服务已重启（PID {p1}）', { p1: res && res.pid ? res.pid : '-' }));
             loadApps(true);
         } catch (err) {
-            ctx.toastNotify((err.message || '重启失败').split('\n')[0], true);
+            ctx.toastNotify((err.message || t('重启失败')).split('\n')[0], true);
             ctx.loadNotifications();
             loadApps(false);
         } finally {
@@ -479,7 +481,7 @@ export function setupApps(ctx) {
             appLogsData.logs = (res && res.log) || '';
             if (res && res.log_file) appLogsData.logFile = res.log_file;
         } catch (err) {
-            ctx.toastNotify(err.message || '获取日志失败', true);
+            ctx.toastNotify(err.message || t('获取日志失败'), true);
         }
     }
 
@@ -491,16 +493,16 @@ export function setupApps(ctx) {
 
     async function appDelete(app) {
         const ok = await ctx.confirmDialog(
-            `确定删除服务「${app.name}」吗？运行中的进程会被停止，已上传文件保留在服务器上。`,
-            { title: '删除服务', confirmText: '删除', danger: true },
+            t('确定删除服务「{p1}」吗？运行中的进程会被停止，已上传文件保留在服务器上。', { p1: app.name }),
+            { title: t('删除服务'), confirmText: t('删除'), danger: true },
         );
         if (!ok) return;
         try {
             await deleteApp(app.id);
-            ctx.toastNotify('已删除');
+            ctx.toastNotify(t('已删除'));
             loadApps(false);
         } catch (err) {
-            ctx.toastNotify(err.message || '删除失败', true);
+            ctx.toastNotify(err.message || t('删除失败'), true);
         }
     }
 
@@ -516,19 +518,19 @@ export function setupApps(ctx) {
 
     /** 查看上次启动失败原因。 */
     function showAppError(app) {
-        ctx.confirmDialog(app.last_error || '未知错误，可查看服务日志排查。', {
-            title: `「${app.name}」启动失败原因`,
-            confirmText: '知道了',
+        ctx.confirmDialog(app.last_error || t('未知错误，可查看服务日志排查。'), {
+            title: t('「{p1}」启动失败原因', { p1: app.name }),
+            confirmText: t('知道了'),
             danger: false,
         });
     }
 
     /** 状态徽标文案：运行中 / 未启动 / 启动失败 / 状态未知。 */
     function appStatusText(app) {
-        if (app.status === 'running') return '● 运行中';
-        if (app.status === 'failed') return '⚠ 启动失败';
-        if (app.status === 'unknown') return '○ 状态未知';
-        return '○ 未启动';
+        if (app.status === 'running') return t('● 运行中');
+        if (app.status === 'failed') return t('⚠ 启动失败');
+        if (app.status === 'unknown') return t('○ 状态未知');
+        return t('○ 未启动');
     }
 
     /** 状态徽标样式类。 */

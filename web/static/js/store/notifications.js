@@ -5,6 +5,8 @@
  * 每 30s 轮询未读数（页面隐藏时跳过），服务异常事件由后端写入。
  * 另含「通知中心」页面：按类型/模块/已读筛选列表，以及 SMTP 邮件通知配置。
  */
+import { t } from '../i18n/index.js';
+
 
 import {
     fetchNotifications, markNotificationsRead, markNotificationRead, clearNotifications,
@@ -14,16 +16,16 @@ import {
 const { ref, reactive, computed } = window.Vue;
 
 /** 通知类型（level）→ 展示文案。 */
-const TYPE_LABELS = { info: '信息', warn: '警告', error: '错误' };
+const TYPE_LABELS = { info: t('信息'), warn: t('警告'), error: t('错误') };
 
 /** 来源模块 → 展示文案（与节点页签名称一致）。 */
 const MODULE_LABELS = {
-    apps: '服务部署',
-    software: '软件管理',
-    servers: '节点管理',
-    terminal: '终端',
-    cron: '定时任务',
-    system: '系统信息',
+    apps: t('服务部署'),
+    software: t('软件管理'),
+    servers: t('节点管理'),
+    terminal: t('终端'),
+    cron: t('定时任务'),
+    system: t('系统信息'),
     gpu: 'GPU',
     docker: 'Docker',
 };
@@ -78,7 +80,7 @@ export function setupNotifications(ctx) {
             unreadCount.value = 0;
             notifications.value = notifications.value.map(n => ({ ...n, read: true }));
         } catch (err) {
-            ctx.toastNotify(err.message || '标记已读失败', true);
+            ctx.toastNotify(err.message || t('标记已读失败'), true);
         }
     }
 
@@ -89,7 +91,7 @@ export function setupNotifications(ctx) {
             notifications.value = [];
             unreadCount.value = 0;
         } catch (err) {
-            ctx.toastNotify(err.message || '清空失败', true);
+            ctx.toastNotify(err.message || t('清空失败'), true);
         }
     }
 
@@ -115,12 +117,12 @@ export function setupNotifications(ctx) {
 
     /** 通知类型展示文案。 */
     function notifyTypeLabel(level) {
-        return TYPE_LABELS[level] || '信息';
+        return TYPE_LABELS[level] || t('信息');
     }
 
     /** 来源模块展示文案。 */
     function notifyModuleLabel(module) {
-        return MODULE_LABELS[module] || module || '未知模块';
+        return MODULE_LABELS[module] || module || t('未知模块');
     }
 
     /** 通知时间格式化：今天 HH:MM / 昨天 HH:MM / MM-DD HH:MM。 */
@@ -134,7 +136,7 @@ export function setupNotifications(ctx) {
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
         if (sameDay(d, now)) return hm;
-        if (sameDay(d, yesterday)) return `昨天 ${hm}`;
+        if (sameDay(d, yesterday)) return t('昨天 {hm}', { hm: hm });
         return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
     }
 
@@ -188,7 +190,7 @@ export function setupNotifications(ctx) {
             });
             emailHasPassword.value = !!data.has_password;
         } catch (err) {
-            ctx.toastNotify(err.message || '读取邮件配置失败', true);
+            ctx.toastNotify(err.message || t('读取邮件配置失败'), true);
         }
     }
 
@@ -199,9 +201,9 @@ export function setupNotifications(ctx) {
             const data = await updateEmailConfig({ ...emailForm });
             emailHasPassword.value = !!data.has_password;
             emailForm.password = '';
-            ctx.toastNotify('邮件配置已保存');
+            ctx.toastNotify(t('邮件配置已保存'));
         } catch (err) {
-            ctx.toastNotify(err.message || '保存邮件配置失败', true);
+            ctx.toastNotify(err.message || t('保存邮件配置失败'), true);
         } finally {
             emailSaving.value = false;
         }
@@ -212,9 +214,9 @@ export function setupNotifications(ctx) {
         emailTesting.value = true;
         try {
             await sendTestEmail({ to: emailForm.to, password: emailForm.password });
-            ctx.toastNotify('测试邮件已发送，请查收');
+            ctx.toastNotify(t('测试邮件已发送，请查收'));
         } catch (err) {
-            ctx.toastNotify(err.message || '测试邮件发送失败', true);
+            ctx.toastNotify(err.message || t('测试邮件发送失败'), true);
         } finally {
             emailTesting.value = false;
         }

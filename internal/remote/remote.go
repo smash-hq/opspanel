@@ -3,6 +3,7 @@
 package remote
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/smash-hq/opspanel/internal/logger"
 	"github.com/smash-hq/opspanel/internal/system"
@@ -183,6 +185,48 @@ func (c *sshConn) RunRaw(ctx context.Context, cmd string) ([]byte, error) {
 	return out, err
 }
 
+// RunRawStdout 执行单条命令并仅返回 stdout 原始字节，stderr 单独捕获（仅用于错误信息）。
+// 用于二进制传输场景（如容器文件下载/预览）：CombinedOutput 会把 sudo 告警等 stderr
+// 内容混入输出导致文件损坏，此通道保证 stdout 纯净。
+// 错误处理语义与 RunRaw 一致：非零退出（ExitError）视为正常业务结果，
+// 仅连接级错误才标记断开；非零退出时将 stderr 附加到错误信息便于定位。
+func (c *sshConn) RunRawStdout(ctx context.Context, cmd string) ([]byte, error) {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	var outBuf, errBuf bytes.Buffer
+	session.Stdout = &outBuf
+	session.Stderr = &errBuf
+
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Run(cmd)
+	}()
+
+	select {
+	case err := <-done:
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if err != nil {
+			var exitErr *ssh.ExitError
+			if !errors.As(err, &exitErr) {
+				c.broken.Store(true)
+			}
+			if msg := strings.TrimSpace(errBuf.String()); msg != "" {
+				err = fmt.Errorf("%w: %s", err, msg)
+			}
+		}
+		return outBuf.Bytes(), err
+	case <-ctx.Done():
+		session.Close()
+		return nil, ctx.Err()
+	}
+}
+
 // RunStream 执行单条命令并通过 sink 增量回调合并输出（stdout+stderr）。
 // io.Pipe 为同步管道：sink 的消费速度会反压远端写入，避免输出堆积；
 // ctx 取消/超时时关闭 Session 终止远程命令。
@@ -252,6 +296,9 @@ const LocalServerID = "srv_local"
 type commandRunner interface {
 	RunOnce(ctx context.Context, cmd string) (string, error)
 	RunRaw(ctx context.Context, cmd string) ([]byte, error)
+	// RunRawStdout 执行单条命令并仅返回 stdout 原始字节（stderr 不混入），
+	// 用于二进制传输场景，保证输出纯净。
+	RunRawStdout(ctx context.Context, cmd string) ([]byte, error)
 	// RunStream 执行单条命令并增量回调合并输出（stdout+stderr），用于安装等长操作的进度展示。
 	RunStream(ctx context.Context, cmd string, sink func(chunk string)) error
 	usable() bool
@@ -742,6 +789,13 @@ func (rc *RemoteCollector) ListFiles(ctx context.Context, srv *Server, path stri
 		return nil, fmt.Errorf("列出目录失败: %s（目录不存在或无读取权限）", path)
 	}
 
+	return &ListFilesResult{Files: parseLsOutput(path, out), SudoUsed: sudoUsed}, nil
+}
+
+// parseLsOutput 解析 ls -la --time-style=+%Y-%m-%dT%H:%M:%SZ 的输出为 FileInfo 列表。
+// 固定 7 列：mode links owner group size time name...（name 可能含空格）。
+// 宿主机 ListFiles 与容器内 ListContainerFiles 共用。
+func parseLsOutput(dir string, out string) []FileInfo {
 	var files []FileInfo
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -781,7 +835,7 @@ func (rc *RemoteCollector) ListFiles(ctx context.Context, srv *Server, path stri
 		}
 
 		// 拼接完整路径
-		fullPath := path
+		fullPath := dir
 		if !strings.HasSuffix(fullPath, "/") {
 			fullPath += "/"
 		}
@@ -803,8 +857,7 @@ func (rc *RemoteCollector) ListFiles(ctx context.Context, srv *Server, path stri
 			LinkTarget: linkTarget,
 		})
 	}
-
-	return &ListFilesResult{Files: files, SudoUsed: sudoUsed}, nil
+	return files
 }
 
 // GetFileInfo 获取单个文件的详细信息。
@@ -1376,6 +1429,194 @@ func (rc *RemoteCollector) ContainerLogs(ctx context.Context, srv *Server, id st
 		return "", fmt.Errorf("获取容器 %s 日志失败: %w", id, err)
 	}
 	return out, nil
+}
+
+// validateContainerName 校验容器名/ID 字符集（Docker 限定字母数字与 _ . -），
+// 在系统边界拒绝 shell 元字符，防止命令注入。
+func validateContainerName(name string) error {
+	if name == "" {
+		return fmt.Errorf("容器名不能为空")
+	}
+	for _, r := range name {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == '-') {
+			return fmt.Errorf("非法容器名: %q", name)
+		}
+	}
+	return nil
+}
+
+// validateContainerPath 校验容器内路径：强制绝对路径且不允许 .. 上跳，防止路径穿越。
+func validateContainerPath(p string) error {
+	if !strings.HasPrefix(p, "/") {
+		return fmt.Errorf("路径必须为容器内绝对路径: %s", p)
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." {
+			return fmt.Errorf("路径不允许包含 ..: %s", p)
+		}
+	}
+	return nil
+}
+
+// dockerExecCmd 组装 docker exec 命令。内层命令与容器名整体用单引号（shQuote）包裹，
+// 避免路径中的 $ 等元字符被宿主机 shell 展开。
+func dockerExecCmd(container, inner string) string {
+	return fmt.Sprintf("docker exec %s sh -c %s", shQuote(container), shQuote(inner))
+}
+
+// dockerExecRootCmd 组装以容器内 root 身份（-u 0，数字 UID，不依赖容器内 passwd 条目）执行的命令。
+func dockerExecRootCmd(container, inner string) string {
+	return fmt.Sprintf("docker exec -u 0 %s sh -c %s", shQuote(container), shQuote(inner))
+}
+
+// ListContainerFiles 列出容器内指定目录的内容（docker exec ls -la，输出格式与宿主机 ListFiles 一致）。
+// 执行链：普通 docker exec → 容器内 root（-u 0）→ 宿主机 sudo -n 包裹；
+// SudoUsed 标记是否经提权通道成功。
+func (rc *RemoteCollector) ListContainerFiles(ctx context.Context, srv *Server, container, path string) (*ListFilesResult, error) {
+	if err := validateContainerName(container); err != nil {
+		return nil, err
+	}
+	if path == "" {
+		path = "/"
+	}
+	if err := validateContainerPath(path); err != nil {
+		return nil, err
+	}
+	conn, err := rc.Acquire(srv)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Release(srv.ID)
+
+	// TZ=UTC + 自定义 time-style：与 ListFiles 一致，保证 7 列固定、时区无歧义
+	lsCmd := "env TZ=UTC ls -la --time-style=+%Y-%m-%dT%H:%M:%SZ"
+	inner := fmt.Sprintf("%s %s 2>&1", lsCmd, shQuote(path))
+	rootCmd := dockerExecRootCmd(container, inner)
+	out, lsErr := rc.runLogged(ctx, conn, dockerExecCmd(container, inner))
+	rootUsed := false
+	if lsErr != nil {
+		// 容器内权限不足：回退 root 用户重试，仍失败再经宿主机 sudo 整体提权
+		if out, lsErr = rc.runLogged(ctx, conn, rootCmd); lsErr == nil {
+			rootUsed = true
+		} else if out, lsErr = rc.runLogged(ctx, conn, sudoWrap(rootCmd)); lsErr == nil {
+			rootUsed = true
+		}
+	}
+	if lsErr != nil {
+		if hint := appSnippet(out); hint != "" {
+			return nil, fmt.Errorf("列出容器 %s 目录失败: %s: %w；输出: %s", container, path, lsErr, hint)
+		}
+		return nil, fmt.Errorf("列出容器 %s 目录失败: %s: %w", container, path, lsErr)
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, fmt.Errorf("列出容器 %s 目录失败: %s（目录不存在或无读取权限）", container, path)
+	}
+	return &ListFilesResult{Files: parseLsOutput(path, out), SudoUsed: rootUsed}, nil
+}
+
+// containerPreviewMaxBytes 预览读取上限（512KB）。
+const containerPreviewMaxBytes = 512 << 10
+
+// ReadContainerFile 预览容器内文件内容（docker exec head -c 截断，最多 512KB）。
+// 走仅 stdout 通道（RunRawStdout），避免 stderr 告警混入文本；
+// 非 UTF-8 文本（二进制文件）返回错误，提示改用下载。
+func (rc *RemoteCollector) ReadContainerFile(ctx context.Context, srv *Server, container, path string) (string, error) {
+	if err := validateContainerName(container); err != nil {
+		return "", err
+	}
+	if err := validateContainerPath(path); err != nil {
+		return "", err
+	}
+	conn, err := rc.Acquire(srv)
+	if err != nil {
+		return "", err
+	}
+	defer rc.Release(srv.ID)
+
+	inner := fmt.Sprintf("head -c %d %s", containerPreviewMaxBytes, shQuote(path))
+	rootCmd := dockerExecRootCmd(container, inner)
+	data, err := conn.RunRawStdout(ctx, dockerExecCmd(container, inner))
+	if err != nil || len(data) == 0 {
+		// 容器内权限不足：回退 root 用户重试，仍失败再经宿主机 sudo 整体提权
+		if data, err = conn.RunRawStdout(ctx, rootCmd); err != nil {
+			data, err = conn.RunRawStdout(ctx, sudoWrap(rootCmd))
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("读取容器 %s 文件失败: %s: %w", container, path, err)
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("读取容器 %s 文件失败: %s（文件不存在、为空或无读取权限）", container, path)
+	}
+
+	// head -c 截断可能切断尾部多字节字符：先去掉尾部不完整字节再校验 UTF-8
+	for i := 0; i < 3 && len(data) > 0 && !utf8.Valid(data); i++ {
+		data = data[:len(data)-1]
+	}
+	if !utf8.Valid(data) {
+		return "", fmt.Errorf("文件 %s 为二进制内容，不支持预览，请下载后查看", path)
+	}
+	return string(data), nil
+}
+
+// DownloadContainerFile 从容器内下载文件用于导出；目录会打包为 tar 返回。
+// 走仅 stdout 通道（RunRawStdout），保证二进制流不被 stderr 告警污染。
+// 执行链：普通 docker exec → 容器内 root（-u 0）→ 宿主机 sudo -n 包裹。
+func (rc *RemoteCollector) DownloadContainerFile(ctx context.Context, srv *Server, container, path string) ([]byte, string, error) {
+	if err := validateContainerName(container); err != nil {
+		return nil, "", err
+	}
+	if err := validateContainerPath(path); err != nil {
+		return nil, "", err
+	}
+	// 下载可能传输大文件/目录打包，属于长操作，套 30 分钟超时
+	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
+	defer cancel()
+
+	conn, err := rc.Acquire(srv)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rc.Release(srv.ID)
+
+	// 去掉尾部分隔符，取最后一段作为名称，其余为父目录
+	clean := strings.TrimSuffix(path, "/")
+	name := strings.TrimPrefix(clean, "/")
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	if name == "" {
+		return nil, "", fmt.Errorf("invalid path: %s", path)
+	}
+	parent := strings.TrimSuffix(clean[:len(clean)-len(name)], "/")
+	if parent == "" {
+		parent = "/"
+	}
+
+	// 目录打包为 tar（容器内不保证有 gzip，故不做压缩），普通文件直接 cat
+	inner := fmt.Sprintf("if [ -d %s ]; then tar -cf - -C %s %s; else cat %s; fi",
+		shQuote(clean), shQuote(parent), shQuote(name), shQuote(clean))
+	rootCmd := dockerExecRootCmd(container, inner)
+	data, err := conn.RunRawStdout(ctx, dockerExecCmd(container, inner))
+	if err != nil || len(data) == 0 {
+		// 容器内权限不足：回退 root 用户重试，仍失败再经宿主机 sudo 整体提权
+		if data, err = conn.RunRawStdout(ctx, rootCmd); err != nil {
+			data, err = conn.RunRawStdout(ctx, sudoWrap(rootCmd))
+		}
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("从容器 %s 下载失败: %s: %w", container, path, err)
+	}
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("从容器 %s 下载失败: %s（文件不存在、为空或无读取权限）", container, path)
+	}
+
+	// tar 头部偏移 257 处为 "ustar" 魔数，说明走的是目录打包分支
+	filename := name
+	if len(data) > 262 && string(data[257:262]) == "ustar" {
+		filename = name + ".tar"
+	}
+	return data, filename, nil
 }
 
 // RemoveContainer 删除容器。

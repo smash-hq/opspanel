@@ -3,6 +3,8 @@
  *
  * 进程列表、终止进程与进程日志查看。
  */
+import { t } from '../i18n/index.js';
+
 
 import { fetchProcesses, killProcess, fetchProcessLog } from '../api/processes.js';
 
@@ -45,7 +47,7 @@ export function setupProcesses(ctx) {
         try {
             processes.value = await fetchProcesses(ctx.selectedServer.value, lines || 50);
         } catch (err) {
-            ctx.toastNotify('进程列表加载失败: ' + err.message, true);
+            ctx.toastNotify(t('进程列表加载失败: ') + err.message, true);
         } finally {
             processLoading.value = false;
         }
@@ -53,13 +55,13 @@ export function setupProcesses(ctx) {
 
     async function handleKillProcess(pid, force) {
         if (!ctx.selectedServer.value) return;
-        if (!await ctx.confirmDialog(`确定要终止进程 PID: ${pid} 吗？${force ? '（强制终止）' : ''}`, { title: '终止进程', confirmText: '终止' })) return;
+        if (!await ctx.confirmDialog(t('确定要终止进程 PID: {pid} 吗？{p1}', { pid: pid, p1: force ? t('（强制终止）') : '' }), { title: t('终止进程'), confirmText: t('终止') })) return;
         try {
             await killProcess(ctx.selectedServer.value, pid, force);
-            ctx.toastNotify(`进程 ${pid} 已终止`);
+            ctx.toastNotify(t('进程 {pid} 已终止', { pid: pid }));
             loadProcesses();
         } catch (err) {
-            ctx.toastNotify('终止失败: ' + err.message, true);
+            ctx.toastNotify(t('终止失败: ') + err.message, true);
         }
     }
 
@@ -70,9 +72,9 @@ export function setupProcesses(ctx) {
         processLogData.value = { pid, content: '' };
         try {
             const data = await fetchProcessLog(ctx.selectedServer.value, pid, 50);
-            processLogData.value.content = data.log || '暂无日志';
+            processLogData.value.content = data.log || t('暂无日志');
         } catch (err) {
-            processLogData.value.content = '获取日志失败: ' + err.message;
+            processLogData.value.content = t('获取日志失败: ') + err.message;
         } finally {
             processLogLoading.value = false;
         }

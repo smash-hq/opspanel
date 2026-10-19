@@ -1,6 +1,8 @@
 /**
  * files.js — 文件管理 API
  */
+import { t } from '../i18n/index.js';
+
 
 import { request, API_PREFIX, notifyUnauthorized, ApiError } from './http.js';
 
@@ -37,17 +39,17 @@ export async function downloadFile(serverId, path) {
     try {
         response = await fetch(`${API_PREFIX}/files/download?${params}`);
     } catch {
-        throw new ApiError('网络连接失败，文件下载中断');
+        throw new ApiError(t('网络连接失败，文件下载中断'));
     }
     if (response.status === 401) {
         notifyUnauthorized();
-        throw new ApiError('未登录或会话已过期');
+        throw new ApiError(t('未登录或会话已过期'));
     }
     if (!response.ok) {
         // 失败时后端返回 JSON 错误信封，透出 message + detail
         let text = '';
         try { text = await response.text(); } catch { /* 忽略读取失败 */ }
-        let msg = '文件下载失败';
+        let msg = t('文件下载失败');
         let detail = '';
         try {
             const json = JSON.parse(text);

@@ -29,9 +29,10 @@ import { setupCron } from './cron.js';
 import { setupGpu } from './gpu.js';
 import { setupTerminal } from './terminal.js';
 import { setupLifecycle } from './lifecycle.js';
+import { locale, setLocale, t } from '../i18n/index.js';
 import { number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress } from '../utils.js';
 
-const { nextTick } = window.Vue;
+const { nextTick, computed } = window.Vue;
 
 export function setupStore() {
     const ctx = {};
@@ -57,10 +58,24 @@ export function setupStore() {
     setupTerminal(ctx);
     setupLifecycle(ctx);
 
-    // 模板直接调用的工具函数
+    // 模板直接调用的工具函数（lang/setLang 供顶栏语言切换器使用）
     Object.assign(ctx, {
-        number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, nextTick,
+        t, number, bounded, fmtBytes, fmtUptime, usageClass, statusText, serverAddress, nextTick,
+        lang: computed(() => locale.value),
+        setLang: l => setLocale(l),
     });
 
     return ctx;
+}
+
+// 模块级单例：全部视图组件共享同一份上下文。
+// 页面模板拆分后由多个组件渲染，但行为与拆分前"单模板 + setup 一次"完全等价：
+// setupStore 仅在首次调用时执行，后续组件直接复用同一 ctx（响应式状态天然共享）。
+let _ctx = null;
+
+export function appCtx() {
+    if (!_ctx) {
+        _ctx = setupStore();
+    }
+    return _ctx;
 }

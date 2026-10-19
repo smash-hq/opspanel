@@ -4,6 +4,8 @@
  * 服务器列表、选中与系统快照详情、监控 WebSocket 生命周期，
  * 以及列表筛选相关的计算属性。
  */
+import { t } from '../i18n/index.js';
+
 
 import { fetchServers, loadServerInfo } from '../api/servers.js';
 import { connectWS } from '../ws.js';
@@ -61,9 +63,9 @@ export function setupServers(ctx) {
 
     /** 连接状态显示文本。 */
     const connectionLabel = computed(() => {
-        if (connectionState.value === 'error') return '连接失败';
-        if (connectionState.value === 'loading') return '连接中';
-        return wsConnected.value ? '实时在线' : '已连接';
+        if (connectionState.value === 'error') return t('连接失败');
+        if (connectionState.value === 'loading') return t('连接中');
+        return wsConnected.value ? t('实时在线') : t('已连接');
     });
 
     /** 磁盘挂载点数量。 */
@@ -98,7 +100,7 @@ export function setupServers(ctx) {
         try {
             servers.value = await fetchServers();
         } catch (err) {
-            ctx.toastNotify('服务器列表加载失败', true);
+            ctx.toastNotify(t('服务器列表加载失败'), true);
         }
     }
 
@@ -113,7 +115,7 @@ export function setupServers(ctx) {
             Object.assign(info, data);
             serverStatus[serverId] = 'ok';
         } catch (err) {
-            loadError.value = err.message || '获取服务器信息失败';
+            loadError.value = err.message || t('获取服务器信息失败');
             serverStatus[serverId] = 'error';
         } finally {
             loading.value = false;

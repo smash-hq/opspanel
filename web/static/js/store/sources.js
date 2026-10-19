@@ -3,6 +3,8 @@
  *
  * 上游软件源（apt/yum 镜像配置）的增删改。
  */
+import { t } from '../i18n/index.js';
+
 
 import { fetchSources, createSource, updateSource, deleteSource as apiDeleteSource } from '../api/sources.js';
 
@@ -21,7 +23,7 @@ export function setupSources(ctx) {
         try {
             sources.value = await fetchSources();
         } catch (err) {
-            ctx.toastNotify('软件源列表加载失败', true);
+            ctx.toastNotify(t('软件源列表加载失败'), true);
         }
     }
 
@@ -47,9 +49,9 @@ export function setupSources(ctx) {
     /** 保存软件源。 */
     async function saveSource() {
         sourceFormError.value = '';
-        if (!sourceForm.name.trim()) { sourceFormError.value = '请输入名称'; return; }
-        if (!sourceForm.url.trim()) { sourceFormError.value = '请输入地址'; return; }
-        if (!sourceForm.id.trim()) { sourceFormError.value = '请输入 ID'; return; }
+        if (!sourceForm.name.trim()) { sourceFormError.value = t('请输入名称'); return; }
+        if (!sourceForm.url.trim()) { sourceFormError.value = t('请输入地址'); return; }
+        if (!sourceForm.id.trim()) { sourceFormError.value = t('请输入 ID'); return; }
 
         sourceSaving.value = true;
         const payload = {
@@ -64,10 +66,10 @@ export function setupSources(ctx) {
         try {
             if (sourceFormMode.value === 'edit') {
                 await updateSource(sourceForm.id, payload);
-                ctx.toastNotify('软件源已更新');
+                ctx.toastNotify(t('软件源已更新'));
             } else {
                 await createSource(payload);
-                ctx.toastNotify('软件源已添加');
+                ctx.toastNotify(t('软件源已添加'));
             }
             await loadSources();
             sourceFormMode.value = null;
@@ -81,11 +83,11 @@ export function setupSources(ctx) {
     /** 删除软件源。 */
     async function handleDeleteSource(id) {
         const src = sources.value.find(s => s.id === id);
-        if (!src || !await ctx.confirmDialog(`确定删除软件源「${src.name}」吗？`, { title: '删除软件源' })) return;
+        if (!src || !await ctx.confirmDialog(t('确定删除软件源「{p1}」吗？', { p1: src.name }), { title: t('删除软件源') })) return;
         try {
             await apiDeleteSource(id);
             await loadSources();
-            ctx.toastNotify('软件源已删除');
+            ctx.toastNotify(t('软件源已删除'));
         } catch (err) {
             ctx.toastNotify(err.message, true);
         }

@@ -3,6 +3,8 @@
  *
  * 远程目录浏览、文件预览/详情/下载与权限指引弹窗。
  */
+import { t } from '../i18n/index.js';
+
 
 import { fetchFiles, fetchFileInfo, fetchFilePreview, downloadFile } from '../api/files.js';
 import { fmtBytes } from '../utils.js';
@@ -37,7 +39,7 @@ export function setupFiles(ctx) {
             fileSudoWarning.value = !result.sudo_used;
             if (path) currentFilePath.value = path;
         } catch (err) {
-            ctx.toastNotify('文件列表加载失败: ' + err.message, true);
+            ctx.toastNotify(t('文件列表加载失败: ') + err.message, true);
             fileSudoWarning.value = false;
         } finally {
             filesLoading.value = false;
@@ -56,10 +58,10 @@ export function setupFiles(ctx) {
         filePreviewData.content = '';
         try {
             const data = await fetchFilePreview(ctx.selectedServer.value, file.path, 100);
-            filePreviewData.content = data.content || '空文件';
+            filePreviewData.content = data.content || t('空文件');
             filePreviewData.size = data.content ? data.content.length : 0;
         } catch (err) {
-            filePreviewData.content = '读取失败: ' + err.message;
+            filePreviewData.content = t('读取失败: ') + err.message;
         } finally {
             filePreviewLoading.value = false;
         }
@@ -94,9 +96,9 @@ export function setupFiles(ctx) {
         if (!ctx.selectedServer.value) return;
         try {
             await downloadFile(ctx.selectedServer.value, file.path);
-            ctx.toastNotify('下载已开始');
+            ctx.toastNotify(t('下载已开始'));
         } catch (err) {
-            ctx.toastNotify('下载失败: ' + err.message, true);
+            ctx.toastNotify(t('下载失败: ') + err.message, true);
         }
     }
 

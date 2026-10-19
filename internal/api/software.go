@@ -91,6 +91,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/docker/containers/batch", h.handleBatchContainerAction) // POST 批量容器操作
 	mux.HandleFunc("/api/v1/docker/exec", h.handleDockerExec)                       // POST 执行命令
 	mux.HandleFunc("/api/v1/docker/logs", h.handleDockerLogs)                       // GET ?server=&id=&lines= 容器日志
+	mux.HandleFunc("/api/v1/docker/files", h.handleDockerFiles)                     // GET ?server=&container=&path=&op=list|preview|download 容器文件
 
 	// Docker 镜像源管理
 	mux.HandleFunc("/api/v1/docker-sources", h.handleDockerSources)       // GET 列表 / POST 新增
@@ -815,6 +816,69 @@ func (h *SoftwareHandler) handleFileDownload(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Write(data)
+}
+
+// handleDockerFiles: GET ?server=<id>&container=<name>&path=<path>&op=list|preview|download
+// 容器内文件浏览/预览/下载（docker exec 实现，详见 remote 层）。
+func (h *SoftwareHandler) handleDockerFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+
+	q := r.URL.Query()
+	serverID := q.Get("server")
+	container := q.Get("container")
+	path := q.Get("path")
+	op := q.Get("op")
+	if op == "" {
+		op = "list"
+	}
+	if container == "" {
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：container")
+		return
+	}
+	if path == "" {
+		path = "/"
+	}
+
+	srv, ok := h.store.Get(r.Context(), serverID)
+	if !ok {
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
+		return
+	}
+
+	switch op {
+	case "list":
+		result, err := h.remoteCollector.ListContainerFiles(r.Context(), toRemoteServer(srv), container, path)
+		if err != nil {
+			h.log.Errorw("list container files failed", "server", serverID, "container", container, "path", path, "error", err)
+			FailErr(w, http.StatusInternalServerError, "列出容器文件失败", err)
+			return
+		}
+		OK(w, result)
+	case "preview":
+		content, err := h.remoteCollector.ReadContainerFile(r.Context(), toRemoteServer(srv), container, path)
+		if err != nil {
+			h.log.Errorw("read container file failed", "server", serverID, "container", container, "path", path, "error", err)
+			FailErr(w, http.StatusInternalServerError, "读取容器文件失败", err)
+			return
+		}
+		OK(w, map[string]string{"path": path, "content": content})
+	case "download":
+		data, filename, err := h.remoteCollector.DownloadContainerFile(r.Context(), toRemoteServer(srv), container, path)
+		if err != nil {
+			h.log.Errorw("download container file failed", "server", serverID, "container", container, "path", path, "error", err)
+			FailErr(w, http.StatusInternalServerError, "下载容器文件失败", err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+		w.Write(data)
+	default:
+		Fail(w, http.StatusBadRequest, 400, "op 仅支持 list|preview|download")
+	}
 }
 
 // --- Docker 批量操作 ---

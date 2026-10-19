@@ -3,6 +3,8 @@
  *
  * 自定义软件包的增删改（配置详情弹窗在 ui 域）。
  */
+import { t } from '../i18n/index.js';
+
 
 import { createPackage, updatePackage, deletePackage as apiDeletePackage } from '../api/packages.js';
 import { parseVersions } from '../utils.js';
@@ -40,14 +42,14 @@ export function setupPackages(ctx) {
 
     async function savePackage() {
         packageFormError.value = '';
-        if (!packageForm.name.trim()) { packageFormError.value = '请输入名称'; return; }
-        if (!packageForm.id.trim()) { packageFormError.value = '请输入 ID'; return; }
+        if (!packageForm.name.trim()) { packageFormError.value = t('请输入名称'); return; }
+        if (!packageForm.id.trim()) { packageFormError.value = t('请输入 ID'); return; }
         let installCmd, uninstallCmd;
         try {
             installCmd = JSON.parse(packageForm.install_cmd || '{}');
             uninstallCmd = JSON.parse(packageForm.uninstall_cmd || '{}');
         } catch (e) {
-            packageFormError.value = '安装/卸载命令必须是有效的 JSON';
+            packageFormError.value = t('安装/卸载命令必须是有效的 JSON');
             return;
         }
         packageSaving.value = true;
@@ -68,7 +70,7 @@ export function setupPackages(ctx) {
             }
             await ctx.loadSoftwareCatalog();
             packageFormMode.value = null;
-            ctx.toastNotify(isEdit ? '软件包已更新' : '软件包已添加');
+            ctx.toastNotify(isEdit ? t('软件包已更新') : t('软件包已添加'));
         } catch (err) {
             packageFormError.value = err.message;
         } finally {
@@ -77,11 +79,11 @@ export function setupPackages(ctx) {
     }
 
     async function handleDeletePackage(id) {
-        if (!await ctx.confirmDialog(`确定删除软件包「${id}」吗？`, { title: '删除软件包' })) return;
+        if (!await ctx.confirmDialog(t('确定删除软件包「{id}」吗？', { id: id }), { title: t('删除软件包') })) return;
         try {
             await apiDeletePackage(id);
             await ctx.loadSoftwareCatalog();
-            ctx.toastNotify('软件包已删除');
+            ctx.toastNotify(t('软件包已删除'));
         } catch (err) {
             ctx.toastNotify(err.message, true);
         }

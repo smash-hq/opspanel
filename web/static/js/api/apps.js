@@ -1,6 +1,8 @@
 /**
  * apps.js — 应用部署管理 API
  */
+import { t } from '../i18n/index.js';
+
 
 import { request, API_PREFIX, notifyUnauthorized } from './http.js';
 
@@ -81,17 +83,17 @@ export function uploadAppChunk(appId, key, index, blob, onProgress) {
         xhr.onload = () => {
             if (xhr.status === 401) {
                 notifyUnauthorized();
-                return reject(new Error('未登录或会话已过期'));
+                return reject(new Error(t('未登录或会话已过期')));
             }
             let json = null;
             try { json = JSON.parse(xhr.responseText); } catch { /* ignore */ }
             if (xhr.status >= 200 && xhr.status < 300 && json && json.code === 0) {
                 resolve(json.data);
             } else {
-                reject(new Error((json && json.message) || `分片上传失败（HTTP ${xhr.status}）`));
+                reject(new Error((json && json.message) || t('分片上传失败（HTTP {p1}）', { p1: xhr.status })));
             }
         };
-        xhr.onerror = () => reject(new Error('网络异常，分片上传中断'));
+        xhr.onerror = () => reject(new Error(t('网络异常，分片上传中断')));
         xhr.send(form); // FormData 自动带 boundary，勿手动设置 Content-Type
     });
 }

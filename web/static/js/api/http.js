@@ -6,6 +6,8 @@
  * 网络中断、会话失效均被规范化为 ApiError 抛出，
  * message = 规范化提示 + 底层 detail（运维排障所需的原始错误）。
  */
+import { t } from '../i18n/index.js';
+
 
 export const API_PREFIX = '/api/v1';
 
@@ -37,18 +39,18 @@ export class ApiError extends Error {
 
 /** HTTP 状态码 → 专业提示。 */
 const HTTP_MESSAGES = {
-    400: '请求参数不合法',
-    401: '未登录或会话已过期',
-    403: '没有执行该操作的权限',
-    404: '接口不存在，请检查请求地址或升级面板',
-    405: '请求方法不支持',
-    408: '请求超时，请稍后重试',
-    413: '请求数据超出大小限制',
-    429: '请求过于频繁，请稍后重试',
-    500: '服务器内部错误，请稍后重试或查看服务日志',
-    502: '网关或上游服务异常',
-    503: '服务暂时不可用，请稍后重试',
-    504: '上游服务响应超时，请稍后重试',
+    400: t('请求参数不合法'),
+    401: t('未登录或会话已过期'),
+    403: t('没有执行该操作的权限'),
+    404: t('接口不存在，请检查请求地址或升级面板'),
+    405: t('请求方法不支持'),
+    408: t('请求超时，请稍后重试'),
+    413: t('请求数据超出大小限制'),
+    429: t('请求过于频繁，请稍后重试'),
+    500: t('服务器内部错误，请稍后重试或查看服务日志'),
+    502: t('网关或上游服务异常'),
+    503: t('服务暂时不可用，请稍后重试'),
+    504: t('上游服务响应超时，请稍后重试'),
 };
 
 /**
@@ -58,7 +60,7 @@ const HTTP_MESSAGES = {
 async function toApiError(response, text) {
     const status = response ? response.status : 0;
     const message = (response && HTTP_MESSAGES[status])
-        || (status ? `服务响应异常（HTTP ${status}）` : '网络连接失败，请检查面板服务是否正常运行');
+        || (status ? t('服务响应异常（HTTP {status}）', { status: status }) : t('网络连接失败，请检查面板服务是否正常运行'));
     let detail = (text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     if (detail.length > 300) detail = detail.slice(0, 300) + '…';
     return new ApiError(message, detail, status);
@@ -77,7 +79,7 @@ export async function request(path, options = {}) {
         response = await fetch(API_PREFIX + path, options);
     } catch (err) {
         if (err && err.name === 'AbortError') throw err; // 主动取消不包装
-        throw new ApiError('网络连接失败，请检查面板服务是否正常运行');
+        throw new ApiError(t('网络连接失败，请检查面板服务是否正常运行'));
     }
 
     if (response.status === 401) {
@@ -98,7 +100,7 @@ export async function request(path, options = {}) {
         throw await toApiError(response, text);
     }
     if (json.code !== 0) {
-        throw new ApiError(json.message || '操作失败', json.detail || '', response.status, json.code);
+        throw new ApiError(t(json.message) || t('操作失败'), json.detail || '', response.status, json.code);
     }
     return json;
 }

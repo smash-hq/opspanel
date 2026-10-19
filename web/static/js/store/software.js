@@ -4,6 +4,8 @@
  * 软件目录与安装状态、安装/卸载/服务控制、运行日志查看，
  * 以及版本下拉组合框的交互。
  */
+import { t } from '../i18n/index.js';
+
 
 import {
     fetchSoftwareCatalog, fetchSoftwareStatus, installSoftware,
@@ -64,7 +66,7 @@ export function setupSoftware(ctx) {
         try {
             softwareCatalog.value = await fetchSoftwareCatalog();
         } catch (err) {
-            ctx.toastNotify('软件目录加载失败', true);
+            ctx.toastNotify(t('软件目录加载失败'), true);
         }
     }
 
@@ -79,7 +81,7 @@ export function setupSoftware(ctx) {
             const statuses = await fetchSoftwareStatus(serverId);
             softwareStatuses.value = statuses;
         } catch (err) {
-            ctx.toastNotify('软件状态查询失败', true);
+            ctx.toastNotify(t('软件状态查询失败'), true);
             softwareStatuses.value = [];
         } finally {
             softwareLoading.value = false;
@@ -89,11 +91,11 @@ export function setupSoftware(ctx) {
     /** 安装软件。 */
     async function installPackage(packageId, version) {
         const serverId = ctx.selectedServer.value;
-        if (!serverId || serverId === 'srv_local') { ctx.toastNotify('请先选择远程服务器', true); return; }
+        if (!serverId || serverId === 'srv_local') { ctx.toastNotify(t('请先选择远程服务器'), true); return; }
         softwareOperating[packageId] = true;
         try {
             await installSoftware(serverId, packageId, version);
-            ctx.toastNotify('正在安装中，请稍后刷新查看状态');
+            ctx.toastNotify(t('正在安装中，请稍后刷新查看状态'));
         } catch (err) {
             ctx.toastNotify(err.message, true);
         } finally {
@@ -104,12 +106,12 @@ export function setupSoftware(ctx) {
     /** 卸载软件。 */
     async function uninstallPackage(packageId) {
         const serverId = ctx.selectedServer.value;
-        if (!serverId || serverId === 'srv_local') { ctx.toastNotify('请先选择远程服务器', true); return; }
-        if (!await ctx.confirmDialog('确定要卸载此软件吗？卸载后数据可能会丢失。', { title: '卸载软件', confirmText: '卸载' })) return;
+        if (!serverId || serverId === 'srv_local') { ctx.toastNotify(t('请先选择远程服务器'), true); return; }
+        if (!await ctx.confirmDialog(t('确定要卸载此软件吗？卸载后数据可能会丢失。'), { title: t('卸载软件'), confirmText: t('卸载') })) return;
         softwareOperating[packageId] = true;
         try {
             await uninstallSoftware(serverId, packageId);
-            ctx.toastNotify('正在卸载中，请稍后刷新查看状态');
+            ctx.toastNotify(t('正在卸载中，请稍后刷新查看状态'));
         } catch (err) {
             ctx.toastNotify(err.message, true);
         } finally {
@@ -120,10 +122,10 @@ export function setupSoftware(ctx) {
     /** 控制服务启停。 */
     async function controlPackageService(packageId, action) {
         const serverId = ctx.selectedServer.value;
-        if (!serverId || serverId === 'srv_local') { ctx.toastNotify('请先选择远程服务器', true); return; }
+        if (!serverId || serverId === 'srv_local') { ctx.toastNotify(t('请先选择远程服务器'), true); return; }
         try {
             await controlService(serverId, packageId, action);
-            ctx.toastNotify(`服务${action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启'}成功`);
+            ctx.toastNotify(t('服务{p1}成功', { p1: action === 'start' ? t('启动') : action === 'stop' ? t('停止') : t('重启') }));
             setTimeout(() => loadSoftwareStatus(serverId), 1000);
         } catch (err) {
             ctx.toastNotify(err.message, true);
@@ -137,7 +139,7 @@ export function setupSoftware(ctx) {
 
     async function viewLog(packageId) {
         if (!ctx.selectedServer.value || ctx.selectedServer.value === 'srv_local') {
-            ctx.toastNotify('请先选择远程服务器', true);
+            ctx.toastNotify(t('请先选择远程服务器'), true);
             return;
         }
         logModalVisible.value = true;
@@ -145,9 +147,9 @@ export function setupSoftware(ctx) {
         logData.value = { package: packageId, server: ctx.selectedServer.value, content: '' };
         try {
             const data = await fetchSoftwareLog(ctx.selectedServer.value, packageId, logLines.value);
-            logData.value.content = data.log || '暂无日志';
+            logData.value.content = data.log || t('暂无日志');
         } catch (err) {
-            logData.value.content = '获取日志失败: ' + err.message;
+            logData.value.content = t('获取日志失败: ') + err.message;
         } finally {
             logLoading.value = false;
         }

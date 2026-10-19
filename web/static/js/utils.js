@@ -4,6 +4,8 @@
  * 提供格式化、转换等无副作用的工具函数。
  * 不依赖 Vue 响应式系统，可在任意上下文中使用。
  */
+import { t } from './i18n/index.js';
+
 
 /**
  * 数字格式化：保留 1 位小数。
@@ -46,9 +48,9 @@ export function fmtUptime(seconds) {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    if (days) return `${days}天 ${hours}时`;
-    if (hours) return `${hours}时 ${minutes}分`;
-    return `${minutes}分`;
+    if (days) return t('{days}天 {hours}时', { days: days, hours: hours });
+    if (hours) return t('{hours}时 {minutes}分', { hours: hours, minutes: minutes });
+    return t('{minutes}分', { minutes: minutes });
 }
 
 /**
@@ -68,10 +70,10 @@ export function usageClass(percent) {
  * @returns {string} 中文状态文本
  */
 export function statusText(status) {
-    return status === 'ok' ? '在线'
-        : status === 'loading' ? '连接中'
-            : status === 'error' ? '离线'
-                : '未检查';
+    return status === 'ok' ? t('在线')
+        : status === 'loading' ? t('连接中')
+            : status === 'error' ? t('离线')
+                : t('未检查');
 }
 
 /**
@@ -81,7 +83,7 @@ export function statusText(status) {
  */
 export function serverAddress(server) {
     return server.type === 'local' ? 'localhost'
-        : `${server.host || '未配置'}:${server.port || 22}`;
+        : t('{p1}:{p2}', { p1: server.host || t('未配置'), p2: server.port || 22 });
 }
 
 /**

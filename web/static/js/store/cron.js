@@ -5,14 +5,16 @@
  * 任务由服务器系统 cron 守护进程执行，本服务仅负责 crontab 的读写。
  * 表单提供主流的「执行周期选择器」：按类型生成 5 字段 cron 表达式，支持自定义。
  */
+import { t } from '../i18n/index.js';
+
 
 import {
     fetchCronJobs, createCronJob, updateCronJob, deleteCronJob, previewCronExpr,
 } from '../api/cron.js';
 
-const { ref, reactive } = window.Vue;
+const { ref, reactive, computed } = window.Vue;
 
-// 执行周期类型
+// 执行周期类型（label 存中文源键，暴露时经 computed 渲染期翻译，语言切换即时生效）
 const CRON_KINDS = [
     { key: 'minutes', label: '每 N 分钟' },
     { key: 'hourly', label: '每小时' },
@@ -55,7 +57,7 @@ export function setupCron(ctx) {
         try {
             cronJobs.value = await fetchCronJobs(ctx.selectedServer.value);
         } catch (err) {
-            ctx.toastNotify('定时任务加载失败: ' + err.message, true);
+            ctx.toastNotify(t('定时任务加载失败: ') + err.message, true);
         } finally {
             cronLoading.value = false;
         }
@@ -152,7 +154,7 @@ export function setupCron(ctx) {
             if (!expr) {
                 cronPreview.valid = false;
                 cronPreview.next = [];
-                cronPreview.error = '表达式不能为空';
+                cronPreview.error = t('表达式不能为空');
                 return;
             }
             cronPreview.loading = true;
@@ -171,8 +173,8 @@ export function setupCron(ctx) {
     }
 
     async function submitCronForm() {
-        if (!cronForm.command.trim()) return ctx.toastNotify('请填写执行命令', true);
-        if (!cronPreview.valid) return ctx.toastNotify('cron 表达式无效: ' + cronPreview.error, true);
+        if (!cronForm.command.trim()) return ctx.toastNotify(t('请填写执行命令'), true);
+        if (!cronPreview.valid) return ctx.toastNotify(t('cron 表达式无效: ') + cronPreview.error, true);
 
         const payload = {
             server_id: ctx.selectedServer.value,
@@ -184,10 +186,10 @@ export function setupCron(ctx) {
         try {
             if (cronForm.id) {
                 await updateCronJob(cronForm.id, payload);
-                ctx.toastNotify('任务已更新');
+                ctx.toastNotify(t('任务已更新'));
             } else {
                 await createCronJob(payload);
-                ctx.toastNotify('任务已写入 crontab');
+                ctx.toastNotify(t('任务已写入 crontab'));
             }
             cronFormVisible.value = false;
             loadCronJobs();
@@ -206,10 +208,10 @@ export function setupCron(ctx) {
                 server_id: ctx.selectedServer.value,
                 enabled: !job.enabled,
             });
-            ctx.toastNotify(job.enabled ? '任务已停用（注释该行）' : '任务已启用');
+            ctx.toastNotify(job.enabled ? t('任务已停用（注释该行）') : t('任务已启用'));
             loadCronJobs();
         } catch (err) {
-            ctx.toastNotify('切换失败: ' + err.message, true);
+            ctx.toastNotify(t('切换失败: ') + err.message, true);
         } finally {
             cronBusyId.value = '';
         }
@@ -217,14 +219,14 @@ export function setupCron(ctx) {
 
     async function handleDeleteCronJob(job) {
         const label = job.name || job.expr + ' ' + job.command;
-        if (!await ctx.confirmDialog(`确定从服务器 crontab 中删除任务「${label}」吗？`, { title: '删除任务', confirmText: '删除' })) return;
+        if (!await ctx.confirmDialog(t('确定从服务器 crontab 中删除任务「{label}」吗？', { label: label }), { title: t('删除任务'), confirmText: t('删除') })) return;
         cronBusyId.value = job.id;
         try {
             await deleteCronJob(job.id, ctx.selectedServer.value);
-            ctx.toastNotify('任务已删除');
+            ctx.toastNotify(t('任务已删除'));
             loadCronJobs();
         } catch (err) {
-            ctx.toastNotify('删除失败: ' + err.message, true);
+            ctx.toastNotify(t('删除失败: ') + err.message, true);
         } finally {
             cronBusyId.value = '';
         }
@@ -242,7 +244,8 @@ export function setupCron(ctx) {
     Object.assign(ctx, {
         cronJobs, cronLoading, cronBusyId,
         cronFormVisible, cronFormSaving, cronForm, cronPreview,
-        cronKinds: CRON_KINDS, cronWeekdays: CRON_WEEKDAYS,
+        cronKinds: computed(() => CRON_KINDS.map(k => ({ ...k, label: t(k.label) }))),
+        cronWeekdays: computed(() => CRON_WEEKDAYS.map(d => ({ ...d, label: t(d.label) }))),
         loadCronJobs, openCronForm, closeCronForm, applyCronKind, updateCronSchedule, refreshCronPreview, submitCronForm,
         toggleCronJob, handleDeleteCronJob,
         cronExprText, cronNextText,
