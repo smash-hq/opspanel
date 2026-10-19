@@ -33,7 +33,7 @@ func (h *SystemHandler) handleInfo(w http.ResponseWriter, r *http.Request) {
 	info, err := h.collector.Snapshot(r.Context(), serverID)
 	if err != nil {
 		h.log.Errorw("snapshot failed", "server", serverID, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to collect system info: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "系统信息采集失败", err)
 		return
 	}
 	OK(w, info)

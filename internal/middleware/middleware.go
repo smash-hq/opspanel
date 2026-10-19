@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -79,14 +80,21 @@ func Recovery(log *logger.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if rec := recover(); rec != nil {
+					detail := fmt.Sprintf("%v", rec)
 					log.Errorw("panic recovered",
-						"error", fmt.Sprintf("%v", rec),
+						"error", detail,
 						"stack", string(debug.Stack()),
 						"path", r.URL.Path,
 					)
+					// 结构化错误信封：message 规范化，detail 透出 panic 值；堆栈只进日志
+					resp, _ := json.Marshal(map[string]any{
+						"code":    500,
+						"message": "服务器内部错误，请稍后重试或查看服务日志",
+						"detail":  detail,
+					})
 					w.Header().Set("Content-Type", "application/json; charset=utf-8")
 					w.WriteHeader(http.StatusInternalServerError)
-					fmt.Fprint(w, `{"code":500,"message":"internal server error"}`)
+					_, _ = w.Write(resp)
 				}
 			}()
 			next.ServeHTTP(w, r)

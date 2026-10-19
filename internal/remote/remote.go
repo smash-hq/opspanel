@@ -291,7 +291,8 @@ func (rc *RemoteCollector) CloseConn(serverID string) {
 	rc.pool.CloseConn(serverID)
 }
 
-// runLogged 执行命令并记录调试日志，返回输出与错误（错误时输出置空）。
+// runLogged 执行命令并记录调试日志，返回输出与错误。
+// 失败时仍返回已捕获的输出（常含报错原因），由调用方决定是否使用。
 // ctx 无 deadline 时附加 30s 默认超时。
 func (rc *RemoteCollector) runLogged(ctx context.Context, client commandRunner, cmd string) (string, error) {
 	ctx, cancel := withDefaultTimeout(ctx, DefaultCmdTimeout)
@@ -300,7 +301,7 @@ func (rc *RemoteCollector) runLogged(ctx context.Context, client commandRunner, 
 	out, err := client.RunOnce(ctx, cmd)
 	if err != nil {
 		rc.log.Debugw("remote cmd error", "cmd", cmd, "error", err.Error())
-		return "", err
+		return strings.TrimSpace(out), err
 	}
 	// 截断过长的输出用于日志
 	logOut := out
@@ -333,6 +334,29 @@ func (rc *RemoteCollector) RunWithSudo(ctx context.Context, client commandRunner
 	rc.log.Debugw("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
 	sudoOut, _ := rc.runLogged(ctx, client, sudoCmd)
 	return sudoOut
+}
+
+// RunWithSudoErr 与 RunWithSudo 相同（先直接执行、失败回退 sudo -n），
+// 但两次尝试均失败时返回错误，并附上远端输出片段辅助定位原因。
+// 命令成功时输出可能为空，失败时输出已并入错误信息。
+func (rc *RemoteCollector) RunWithSudoErr(ctx context.Context, client commandRunner, cmd string) (string, error) {
+	out, err := rc.runLogged(ctx, client, cmd)
+	if err == nil {
+		return out, nil
+	}
+	sudoCmd := sudoWrap(cmd)
+	rc.log.Debugw("remote cmd sudo fallback", "original_cmd", cmd, "sudo_cmd", sudoCmd)
+	sudoOut, sudoErr := rc.runLogged(ctx, client, sudoCmd)
+	if sudoErr == nil {
+		return sudoOut, nil
+	}
+	if hint := appSnippet(sudoOut); hint != "" {
+		return "", fmt.Errorf("远端命令失败: %w；输出: %s", sudoErr, hint)
+	}
+	if hint := appSnippet(out); hint != "" {
+		return "", fmt.Errorf("远端命令失败: %w；输出: %s", sudoErr, hint)
+	}
+	return "", fmt.Errorf("远端命令失败: %w", sudoErr)
 }
 
 // pmCandidates 常见包管理器（探测与分支匹配共用），按优先级排列。
@@ -698,18 +722,24 @@ func (rc *RemoteCollector) ListFiles(ctx context.Context, srv *Server, path stri
 	}
 
 	sudoUsed := false
-	// TZ=UTC + 自定义 time-style：时间输出为单字段 RFC3339，保证列数固定、时区无歧义
+	// TZ=UTC + 自定义 time-style：时间输出为单字段 RFC3339，保证列数固定、时区无歧义。
+	// 合并 stderr（2>&1）：失败原因随输出返回，且不会与正常列表混淆（失败时无列表输出）。
 	lsCmd := "env TZ=UTC ls -la --time-style=+%Y-%m-%dT%H:%M:%SZ"
-	cmd := fmt.Sprintf("%s %q 2>/dev/null", lsCmd, path)
-	out := rc.RunOne(ctx, conn, "sudo -n "+cmd)
-	if out != "" {
-		sudoUsed = true
-	} else {
-		// sudo 失败，回退到普通 ls
-		out = rc.RunOne(ctx, conn, cmd)
+	cmd := fmt.Sprintf("%s %q 2>&1", lsCmd, path)
+	out, lsErr := rc.runLogged(ctx, conn, sudoWrap(cmd))
+	sudoUsed = lsErr == nil
+	if !sudoUsed {
+		// sudo 不可用时回退普通 ls
+		out, lsErr = rc.runLogged(ctx, conn, cmd)
 	}
-	if out == "" {
-		return nil, fmt.Errorf("cannot list directory: %s", path)
+	if lsErr != nil {
+		if hint := appSnippet(out); hint != "" {
+			return nil, fmt.Errorf("列出目录失败: %s: %w；输出: %s", path, lsErr, hint)
+		}
+		return nil, fmt.Errorf("列出目录失败: %s: %w", path, lsErr)
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, fmt.Errorf("列出目录失败: %s（目录不存在或无读取权限）", path)
 	}
 
 	var files []FileInfo
@@ -785,10 +815,10 @@ func (rc *RemoteCollector) GetFileInfo(ctx context.Context, srv *Server, path st
 	}
 	defer rc.Release(srv.ID)
 
-	cmd := fmt.Sprintf("stat -c '%%n|%%F|%%s|%%a|%%Y|%%U|%%G' %q 2>/dev/null", path)
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	if out == "" {
-		return nil, fmt.Errorf("file not found: %s", path)
+	cmd := fmt.Sprintf("stat -c '%%n|%%F|%%s|%%a|%%Y|%%U|%%G' %q 2>&1", path)
+	out, statErr := rc.RunWithSudoErr(ctx, conn, cmd)
+	if statErr != nil {
+		return nil, fmt.Errorf("获取文件信息失败: %s: %w", path, statErr)
 	}
 
 	parts := strings.Split(out, "|")
@@ -830,17 +860,25 @@ func (rc *RemoteCollector) ReadFileContent(ctx context.Context, srv *Server, pat
 	}
 	defer rc.Release(srv.ID)
 
-	// 先检查文件大小，避免读取过大的文件
-	cmd := fmt.Sprintf("stat -c %%s %q 2>/dev/null", path)
-	out := rc.RunOne(ctx, conn, cmd)
+	// 先检查文件大小，避免读取过大的文件；stat 失败（不存在/无权限）直接报错
+	cmd := fmt.Sprintf("stat -c %%s %q 2>&1", path)
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		return "", fmt.Errorf("读取文件失败: %s: %w", path, err)
+	}
 	var size int64
 	fmt.Sscanf(out, "%d", &size)
 	if size > 1<<20 { // > 1MB
 		return "", fmt.Errorf("file too large (%d bytes), max 1MB", size)
 	}
 
+	// cat 失败但 stat 成功，通常是无读权限；输出为空且文件非空时报错
 	cmd = fmt.Sprintf("cat %q 2>/dev/null | head -n %d", path, lines)
-	return rc.RunWithSudo(ctx, conn, cmd), nil
+	content := rc.RunWithSudo(ctx, conn, cmd)
+	if content == "" && size > 0 {
+		return "", fmt.Errorf("读取文件失败: %s（可能无读取权限）", path)
+	}
+	return content, nil
 }
 
 // DownloadFile 读取文件内容用于下载；目录会打包为 tar.gz 返回。
@@ -876,12 +914,16 @@ func (rc *RemoteCollector) DownloadFile(ctx context.Context, srv *Server, path s
 	cmd := fmt.Sprintf("if [ -d %q ]; then tar -czf - -C %q %q 2>/dev/null; else cat %q 2>/dev/null; fi", clean, parent, name, clean)
 
 	data, err := conn.RunRaw(ctx, cmd)
-	if len(data) == 0 {
-		// 权限不足时 sudo 回退
-		data, _ = conn.RunRaw(ctx, "sudo -n "+cmd)
+	if err != nil || len(data) == 0 {
+		// 权限不足时 sudo 回退。必须用 sh -c 包裹整条复合命令（if/tar/cat），
+		// 直接加 "sudo -n " 前缀会让 sudo 尝试执行 "if" 命令而必然失败。
+		data, err = conn.RunRaw(ctx, sudoWrap(cmd))
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("下载失败: %s: %w", path, err)
 	}
 	if len(data) == 0 {
-		return nil, "", fmt.Errorf("cannot download: %s", path)
+		return nil, "", fmt.Errorf("下载失败: %s（文件不存在、为空或无读取权限）", path)
 	}
 
 	// gzip 魔数（1f 8b）说明走的是 tar 打包分支
@@ -906,9 +948,16 @@ func (rc *RemoteCollector) KillProcess(ctx context.Context, srv *Server, pid int
 		signal = "KILL"
 	}
 	cmd := fmt.Sprintf("kill -%s %d 2>&1", signal, pid)
-	out := rc.RunOne(ctx, conn, cmd)
-	if out != "" && strings.Contains(out, "Operation not permitted") {
-		return fmt.Errorf("permission denied: try using sudo or running as root")
+	_, err = rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		// 进程已退出视为成功（幂等）；权限不足给出明确提示
+		if strings.Contains(err.Error(), "No such process") {
+			return nil
+		}
+		if strings.Contains(err.Error(), "Operation not permitted") {
+			return fmt.Errorf("无权限终止进程 %d（需要 root/sudo 权限）", pid)
+		}
+		return fmt.Errorf("终止进程 %d 失败: %w", pid, err)
 	}
 	return nil
 }
@@ -1107,8 +1156,11 @@ func (rc *RemoteCollector) PullImage(ctx context.Context, srv *Server, image str
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker pull %q 2>&1", image)
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	rc.log.Infow("docker pull", "image", image, "output", out)
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		return fmt.Errorf("拉取镜像 %s 失败: %w", image, err)
+	}
+	rc.log.Infow("docker pull", "image", image, "output", appSnippet(out))
 	return nil
 }
 
@@ -1121,10 +1173,14 @@ func (rc *RemoteCollector) RemoveImage(ctx context.Context, srv *Server, id stri
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker rmi %q 2>&1", id)
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	if strings.Contains(out, "No such image") {
-		return fmt.Errorf("image not found: %s", id)
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		if strings.Contains(err.Error(), "No such image") {
+			return fmt.Errorf("镜像不存在: %s", id)
+		}
+		return fmt.Errorf("删除镜像 %s 失败: %w", id, err)
 	}
+	rc.log.Debugw("docker rmi", "image", id, "output", appSnippet(out))
 	return nil
 }
 
@@ -1275,8 +1331,11 @@ func (rc *RemoteCollector) ContainerAction(ctx context.Context, srv *Server, id,
 	}
 
 	cmd := fmt.Sprintf("docker %s %q 2>&1", action, id)
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	rc.log.Infow("docker container action", "action", action, "id", id, "output", out)
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		return fmt.Errorf("容器 %s 执行 %s 失败: %w", id, action, err)
+	}
+	rc.log.Infow("docker container action", "action", action, "id", id, "output", appSnippet(out))
 	return nil
 }
 
@@ -1293,7 +1352,10 @@ func (rc *RemoteCollector) ExecInContainer(ctx context.Context, srv *Server, id,
 	defer rc.Release(srv.ID)
 
 	fullCmd := fmt.Sprintf("docker exec %q sh -c %q 2>&1", id, cmd)
-	out := rc.RunWithSudo(ctx, conn, fullCmd)
+	out, err := rc.RunWithSudoErr(ctx, conn, fullCmd)
+	if err != nil {
+		return out, fmt.Errorf("容器 %s 内执行命令失败: %w", id, err)
+	}
 	return out, nil
 }
 
@@ -1309,7 +1371,11 @@ func (rc *RemoteCollector) ContainerLogs(ctx context.Context, srv *Server, id st
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker logs --tail %d %q 2>&1", lines, id)
-	return rc.RunWithSudo(ctx, conn, cmd), nil
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		return "", fmt.Errorf("获取容器 %s 日志失败: %w", id, err)
+	}
+	return out, nil
 }
 
 // RemoveContainer 删除容器。
@@ -1321,8 +1387,11 @@ func (rc *RemoteCollector) RemoveContainer(ctx context.Context, srv *Server, id 
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker rm -f %q 2>&1", id)
-	out := rc.RunWithSudo(ctx, conn, cmd)
-	rc.log.Infow("docker rm", "id", id, "output", out)
+	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
+	if err != nil {
+		return fmt.Errorf("删除容器 %s 失败: %w", id, err)
+	}
+	rc.log.Infow("docker rm", "id", id, "output", appSnippet(out))
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -76,6 +77,13 @@ func NewHub(log *logger.Logger) *Hub {
 
 // Run 启动 Hub 事件循环，直到 Close 被调用。
 func (h *Hub) Run() {
+	// 进程级长生命周期 goroutine，不在 HTTP Recovery 中间件覆盖范围内，
+	// panic 会导致整个进程退出，这里兜底记录后退出循环
+	defer func() {
+		if r := recover(); r != nil {
+			h.log.Errorw("ws hub event loop panicked", "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
 	for {
 		select {
 		case <-h.done:
@@ -204,6 +212,9 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 func (c *client) writePump() {
 	ticker := time.NewTicker(30 * time.Second) // 心跳
 	defer func() {
+		if r := recover(); r != nil {
+			c.hub.log.Errorw("ws write pump panicked", "panic", r, "stack", string(debug.Stack()))
+		}
 		ticker.Stop()
 		c.conn.Close()
 	}()
@@ -233,6 +244,9 @@ func (c *client) writePump() {
 // 支持客户端通过 JSON 消息切换订阅服务器：{"action": "switch", "server": "<id>"}
 func (c *client) readPump() {
 	defer func() {
+		if r := recover(); r != nil {
+			c.hub.log.Errorw("ws read pump panicked", "panic", r, "stack", string(debug.Stack()))
+		}
 		// Hub 已关闭时事件循环不再消费 unregister，放弃注入避免 goroutine 泄漏
 		select {
 		case c.hub.unregister <- c:

@@ -11,7 +11,6 @@ export async function fetchApps(serverId, refresh) {
     if (refresh) params.set('refresh', '1');
     const qs = params.toString();
     const json = await request(`/apps${qs ? '?' + qs : ''}`);
-    if (json.code !== 0) throw new Error(json.message || '加载服务列表失败');
     return json.data || [];
 }
 
@@ -22,7 +21,6 @@ export async function createApp(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建失败');
     return json.data;
 }
 
@@ -33,14 +31,12 @@ export async function updateApp(id, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '更新失败');
     return json.data;
 }
 
-/** 删除部署应用（运行中的进程会被一并停止）。 */
+/** 删除部署应用（危险操作，需用户确认后携带 confirm 标记；运行中的进程会被一并停止）。 */
 export async function deleteApp(id) {
-    const json = await request(`/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (json.code !== 0) throw new Error(json.message || '删除失败');
+    await request(`/apps/${encodeURIComponent(id)}?confirm=true`, { method: 'DELETE' });
 }
 
 /**
@@ -53,14 +49,12 @@ export async function initAppUpload(appId, relPath, size, key) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app_id: appId, rel_path: relPath, size, key: key || '' }),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建上传会话失败');
     return json.data;
 }
 
 /** 查询已落盘分片索引（断点续传依据），返回 { received: number[] }。 */
 export async function fetchAppUploadStatus(appId, key) {
     const json = await request(`/apps/upload/status?key=${encodeURIComponent(key)}&app_id=${encodeURIComponent(appId)}`);
-    if (json.code !== 0) throw new Error(json.message || '查询上传进度失败');
     return json.data;
 }
 
@@ -109,20 +103,18 @@ export async function completeAppUpload(appId, key, relPath, total, size) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app_id: appId, key, rel_path: relPath, total, size }),
     });
-    if (json.code !== 0) throw new Error(json.message || '合并分片失败');
     return json.data;
 }
 
-/** 应用生命周期操作：start / stop / restart。 */
+/** 应用生命周期操作：start / stop / restart（stop/restart 为危险操作，需携带 confirm 标记）。 */
 export async function appAction(id, action) {
-    const json = await request(`/apps/${encodeURIComponent(id)}/${action}`, { method: 'POST' });
-    if (json.code !== 0) throw new Error(json.message || '操作失败');
+    const qs = action === 'start' ? '' : '?confirm=true';
+    const json = await request(`/apps/${encodeURIComponent(id)}/${action}${qs}`, { method: 'POST' });
     return json.data;
 }
 
 /** 查看应用日志末尾。 */
 export async function fetchAppLogs(id, lines) {
     const json = await request(`/apps/${encodeURIComponent(id)}/logs?lines=${lines || 200}`);
-    if (json.code !== 0) throw new Error(json.message || '获取日志失败');
     return json.data;
 }

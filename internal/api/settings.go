@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -52,14 +54,14 @@ func (h *SettingsHandler) Register(mux *http.ServeMux) {
 // handlePushControl: POST {"paused": true/false} 暂停/恢复系统快照推送。
 func (h *SettingsHandler) handlePushControl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
 		Paused bool `json:"paused"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if h.pushCtrl != nil {
@@ -92,31 +94,37 @@ func (h *SettingsHandler) handleSettings(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if reservedSettingKey(key) {
-			Fail(w, http.StatusForbidden, 403, "reserved setting key")
+			Fail(w, http.StatusForbidden, 403, "保留字段不允许通过通用设置接口访问")
 			return
 		}
 		OK(w, map[string]string{key: h.getMeta(r.Context(), key, "")})
 	case http.MethodPut:
 		var settings map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		for key := range settings {
 			if reservedSettingKey(key) {
-				Fail(w, http.StatusForbidden, 403, "reserved setting key: "+key)
+				Fail(w, http.StatusForbidden, 403, "保留字段不允许修改："+key)
 				return
 			}
 		}
+		var saveErrs []error
 		for key, value := range settings {
 			if err := h.setMeta(r.Context(), key, value); err != nil {
 				h.log.Errorw("save setting failed", "key", key, "error", err)
+				saveErrs = append(saveErrs, fmt.Errorf("%s: %w", key, err))
 			}
+		}
+		if len(saveErrs) > 0 {
+			FailErr(w, http.StatusInternalServerError, "部分设置保存失败", errors.Join(saveErrs...))
+			return
 		}
 		OK(w, settings)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -140,18 +148,18 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
-			Fail(w, http.StatusBadRequest, 400, "file too large (max 1MB)")
+			FailErr(w, http.StatusBadRequest, "站点图标过大（最大 1MB）", err)
 			return
 		}
 		// 仅接受位图格式：SVG 可携带脚本（存储型 XSS 载体），非图片一律拒绝
 		if ct := detectImageType(data); ct == "image/svg+xml" || ct == "application/octet-stream" {
-			Fail(w, http.StatusBadRequest, 400, "only PNG/JPEG/GIF/ICO images are allowed")
+			Fail(w, http.StatusBadRequest, 400, "仅支持 PNG/JPEG/GIF/ICO 格式的图标")
 			return
 		}
 		customPath := filepath.Join(h.dataDir, "favicon.custom")
 		if err := os.WriteFile(customPath, data, 0644); err != nil {
 			h.log.Errorw("save favicon failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to save favicon")
+			FailErr(w, http.StatusInternalServerError, "保存站点图标失败", err)
 			return
 		}
 		OK(w, map[string]string{"status": "ok"})
@@ -162,7 +170,7 @@ func (h *SettingsHandler) handleFavicon(w http.ResponseWriter, r *http.Request) 
 		OK(w, map[string]string{"deleted": "favicon"})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 

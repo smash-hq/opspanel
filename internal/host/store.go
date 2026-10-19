@@ -44,10 +44,13 @@ func NewStore(dataDir string) (*Store, error) {
 
 	inner := storage.NewServerStore(db)
 
-	// 兜底：如果服务器表仍为空，写入本机条目（启动期引导，使用 Background）
+	// 兜底：如果服务器表仍为空，写入本机条目（启动期引导，使用 Background）。
+	// 插入失败会导致面板没有本机节点，属致命问题，直接启动失败。
 	if inner.Count(context.Background()) == 0 {
-		srv := buildLocalServer()
-		_ = inner.Add(context.Background(), srv)
+		if err := inner.Add(context.Background(), buildLocalServer()); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("初始化本机服务器条目失败: %w", err)
+		}
 	}
 
 	return &Store{inner: inner, db: db}, nil

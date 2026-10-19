@@ -108,7 +108,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 // handleCatalog: GET 软件目录列表（从数据库读取）。
 func (h *SoftwareHandler) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	OK(w, h.swStore.ListPackages(r.Context()))
@@ -117,19 +117,19 @@ func (h *SoftwareHandler) handleCatalog(w http.ResponseWriter, r *http.Request) 
 // handleStatus: GET ?server=<id> 查询所有软件包的安装状态。
 func (h *SoftwareHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	serverID := r.URL.Query().Get("server")
 	if serverID == "" || serverID == host.LocalServerID {
-		Fail(w, http.StatusBadRequest, 400, "remote server required")
+		Fail(w, http.StatusBadRequest, 400, "该操作仅支持远程服务器")
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *SoftwareHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 // handleInstall: POST 安装软件。
 func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -155,13 +155,13 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 		Version   string `json:"version"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
 	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "目标服务器或软件包不存在", err)
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 	// 超时由 Manager.Install 内部的长操作超时兜底。
 	go func() {
 		if err := h.manager.Install(context.Background(), srv, pkg, req.Version); err != nil {
-			h.log.Errorw("install failed", "pkg", pkg.ID, "error", err)
+			h.log.Errorw("install failed", "server", srv.ID, "pkg", pkg.ID, "error", err)
 		}
 	}()
 
@@ -179,29 +179,33 @@ func (h *SoftwareHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 // handleUninstall: POST 卸载软件。
 func (h *SoftwareHandler) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	var req struct {
 		ServerID  string `json:"server_id"`
 		PackageID string `json:"package_id"`
+		Confirm   bool   `json:"confirm"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+		return
+	}
+	if !requireBodyConfirm(w, req.Confirm) {
 		return
 	}
 
 	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "目标服务器或软件包不存在", err)
 		return
 	}
 
 	// 异步卸载：理由同 handleInstall。
 	go func() {
 		if err := h.manager.Uninstall(context.Background(), srv, pkg); err != nil {
-			h.log.Errorw("uninstall failed", "pkg", pkg.ID, "error", err)
+			h.log.Errorw("uninstall failed", "server", srv.ID, "pkg", pkg.ID, "error", err)
 		}
 	}()
 
@@ -211,7 +215,7 @@ func (h *SoftwareHandler) handleUninstall(w http.ResponseWriter, r *http.Request
 // handleService: POST 服务启停。
 func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -219,26 +223,30 @@ func (h *SoftwareHandler) handleService(w http.ResponseWriter, r *http.Request) 
 		ServerID  string `json:"server_id"`
 		PackageID string `json:"package_id"`
 		Action    string `json:"action"`
+		Confirm   bool   `json:"confirm"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+		return
+	}
+	if !requireBodyConfirm(w, req.Confirm) {
 		return
 	}
 
 	if req.Action != "start" && req.Action != "stop" && req.Action != "restart" {
-		Fail(w, http.StatusBadRequest, 400, "invalid action")
+		Fail(w, http.StatusBadRequest, 400, "参数不合法：action")
 		return
 	}
 
 	srv, pkg, err := h.getServerAndPackage(r.Context(), req.ServerID, req.PackageID)
 	if err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "目标服务器或软件包不存在", err)
 		return
 	}
 
 	if err := h.manager.ServiceControl(r.Context(), srv, pkg, req.Action); err != nil {
-		h.log.Errorw("service control failed", "pkg", pkg.ID, "action", req.Action, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		h.log.Errorw("service control failed", "server", srv.ID, "pkg", pkg.ID, "action", req.Action, "error", err)
+		FailErr(w, http.StatusInternalServerError, "服务控制操作执行失败", err)
 		return
 	}
 
@@ -256,20 +264,20 @@ func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request)
 	case http.MethodPost:
 		var pkg software.Package
 		if err := decodeBody(r, &pkg); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if pkg.ID == "" || pkg.Name == "" {
-			Fail(w, http.StatusBadRequest, 400, "id and name are required")
+			Fail(w, http.StatusBadRequest, 400, "缺少必填参数：id、name")
 			return
 		}
 		if !pkgIDPattern.MatchString(pkg.ID) {
-			Fail(w, http.StatusBadRequest, 400, "invalid package id")
+			Fail(w, http.StatusBadRequest, 400, "参数不合法：软件包 ID")
 			return
 		}
 		if err := h.swStore.AddPackage(r.Context(), &pkg); err != nil {
 			h.log.Errorw("add package failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to add package")
+			FailErr(w, http.StatusInternalServerError, "添加软件包失败", err)
 			return
 		}
 		// 刷新内存索引
@@ -277,7 +285,7 @@ func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request)
 		OK(w, pkg)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -285,11 +293,11 @@ func (h *SoftwareHandler) handlePackages(w http.ResponseWriter, r *http.Request)
 func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/software/packages/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "package id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：软件包 ID")
 		return
 	}
 	if !pkgIDPattern.MatchString(id) {
-		Fail(w, http.StatusBadRequest, 400, "invalid package id")
+		Fail(w, http.StatusBadRequest, 400, "参数不合法：软件包 ID")
 		return
 	}
 
@@ -297,13 +305,13 @@ func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Req
 	case http.MethodPut:
 		var pkg software.Package
 		if err := decodeBody(r, &pkg); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		pkg.ID = id
 		if err := h.swStore.UpdatePackage(r.Context(), &pkg); err != nil {
 			h.log.Errorw("update package failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to update package")
+			FailErr(w, http.StatusInternalServerError, "更新软件包失败", err)
 			return
 		}
 		software.LoadFromStore(r.Context(), h.swStore)
@@ -312,14 +320,14 @@ func (h *SoftwareHandler) handlePackageDetail(w http.ResponseWriter, r *http.Req
 	case http.MethodDelete:
 		if err := h.swStore.DeletePackage(r.Context(), id); err != nil {
 			h.log.Errorw("delete package failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to delete package")
+			FailErr(w, http.StatusInternalServerError, "删除软件包失败", err)
 			return
 		}
 		software.LoadFromStore(r.Context(), h.swStore)
 		OK(w, map[string]string{"deleted": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -334,22 +342,22 @@ func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) 
 	case http.MethodPost:
 		var src storage.SourceRecord
 		if err := decodeBody(r, &src); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if src.ID == "" || src.Name == "" || src.URL == "" {
-			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
+			Fail(w, http.StatusBadRequest, 400, "缺少必填参数：id、name、url")
 			return
 		}
 		if err := h.swStore.AddSource(r.Context(), &src); err != nil {
 			h.log.Errorw("add source failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
+			FailErr(w, http.StatusInternalServerError, "添加软件源失败", err)
 			return
 		}
 		OK(w, src)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -357,7 +365,7 @@ func (h *SoftwareHandler) handleSources(w http.ResponseWriter, r *http.Request) 
 func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/software/sources/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "source id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：软件源 ID")
 		return
 	}
 
@@ -365,13 +373,13 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 	case http.MethodPut:
 		var src storage.SourceRecord
 		if err := decodeBody(r, &src); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		src.ID = id
 		if err := h.swStore.UpdateSource(r.Context(), &src); err != nil {
 			h.log.Errorw("update source failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
+			FailErr(w, http.StatusInternalServerError, "更新软件源失败", err)
 			return
 		}
 		OK(w, src)
@@ -379,13 +387,13 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 	case http.MethodDelete:
 		if err := h.swStore.DeleteSource(r.Context(), id); err != nil {
 			h.log.Errorw("delete source failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
+			FailErr(w, http.StatusInternalServerError, "删除软件源失败", err)
 			return
 		}
 		OK(w, map[string]string{"deleted": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -394,7 +402,7 @@ func (h *SoftwareHandler) handleSourceDetail(w http.ResponseWriter, r *http.Requ
 // handleLogs: GET ?server=<id>&package=<id>&lines=<n> 获取软件运行日志。
 func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -411,20 +419,20 @@ func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	pkg, ok := software.Get(pkgID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "package not found")
+		Fail(w, http.StatusNotFound, 404, "软件包不存在")
 		return
 	}
 
 	log, err := h.manager.GetLog(r.Context(), srv, pkg.ID, lines)
 	if err != nil {
 		h.log.Errorw("get log failed", "server", serverID, "pkg", pkgID, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to get log: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取安装日志失败", err)
 		return
 	}
 
@@ -440,13 +448,13 @@ func (h *SoftwareHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 // handleDockerCheck: GET ?server=<id> 检测 Docker 环境。
 func (h *SoftwareHandler) handleDockerCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	available, version := h.remoteCollector.CheckDocker(r.Context(), toRemoteServer(srv))
@@ -456,18 +464,18 @@ func (h *SoftwareHandler) handleDockerCheck(w http.ResponseWriter, r *http.Reque
 // handleDockerImages: GET ?server=<id> 列出镜像。
 func (h *SoftwareHandler) handleDockerImages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	images, err := h.remoteCollector.ListImages(r.Context(), toRemoteServer(srv))
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "failed to list images: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取镜像列表失败", err)
 		return
 	}
 	OK(w, images)
@@ -476,7 +484,7 @@ func (h *SoftwareHandler) handleDockerImages(w http.ResponseWriter, r *http.Requ
 // handleDockerPull: POST {"server_id": "...", "image": "..."} 拉取镜像。
 func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -484,12 +492,12 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 		Image    string `json:"image"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	// 异步拉取：理由同 handleInstall。
@@ -504,7 +512,7 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 // handleDockerRun: POST {"server_id": "...", "image": "...", ...} 基于已有镜像一键启动容器。
 func (h *SoftwareHandler) handleDockerRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -513,41 +521,49 @@ func (h *SoftwareHandler) handleDockerRun(w http.ResponseWriter, r *http.Request
 		remote.DockerRunOptions
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if strings.TrimSpace(req.Image) == "" {
-		Fail(w, http.StatusBadRequest, 400, "image is required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：image")
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	containerID, err := h.remoteCollector.RunContainer(r.Context(), toRemoteServer(srv), req.Image, req.DockerRunOptions)
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "容器启动失败", err)
 		return
 	}
 	OK(w, map[string]string{"status": "started", "container_id": containerID})
 }
 
-// handleDockerImageDetail: DELETE /api/v1/docker/images/{id}?server=<id> 删除镜像。
+// handleDockerImageDetail: DELETE /api/v1/docker/images/{id}?server=<id>&confirm=true 删除镜像。
 func (h *SoftwareHandler) handleDockerImageDetail(w http.ResponseWriter, r *http.Request) {
+	// 严格限制方法：该端点执行的是删除操作，绝不能让 GET 等方法落入删除分支
+	if r.Method != http.MethodDelete {
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+	if !requireQueryConfirm(w, r) {
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/docker/images/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "image id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：镜像 ID")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	if err := h.remoteCollector.RemoveImage(r.Context(), toRemoteServer(srv), id); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "failed to remove image: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "删除镜像失败", err)
 		return
 	}
 	OK(w, map[string]string{"deleted": id})
@@ -556,19 +572,19 @@ func (h *SoftwareHandler) handleDockerImageDetail(w http.ResponseWriter, r *http
 // handleDockerContainers: GET ?server=<id>&all=<bool> 列出容器。
 func (h *SoftwareHandler) handleDockerContainers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
 	all := r.URL.Query().Get("all") == "true"
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	containers, err := h.remoteCollector.ListContainers(r.Context(), toRemoteServer(srv), all)
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "failed to list containers: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取容器列表失败", err)
 		return
 	}
 	OK(w, containers)
@@ -579,14 +595,14 @@ func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.R
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/docker/containers/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 {
-		Fail(w, http.StatusBadRequest, 400, "container id and action required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：容器 ID 与操作")
 		return
 	}
 	id, action := parts[0], parts[1]
 	serverID := r.URL.Query().Get("server")
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
@@ -595,31 +611,38 @@ func (h *SoftwareHandler) handleDockerContainer(w http.ResponseWriter, r *http.R
 		switch action {
 		case "start", "stop", "restart", "kill":
 		default:
-			Fail(w, http.StatusBadRequest, 400, "invalid action")
+			Fail(w, http.StatusBadRequest, 400, "参数不合法：action")
+			return
+		}
+		// stop/restart/kill 影响运行中的服务：要求显式二次确认
+		if action != "start" && !requireQueryConfirm(w, r) {
 			return
 		}
 		if err := h.remoteCollector.ContainerAction(r.Context(), toRemoteServer(srv), id, action); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
+			FailErr(w, http.StatusInternalServerError, "容器操作执行失败", err)
 			return
 		}
 		OK(w, map[string]string{"status": "ok", "action": action})
 
 	case http.MethodDelete:
+		if !requireQueryConfirm(w, r) {
+			return
+		}
 		if err := h.remoteCollector.RemoveContainer(r.Context(), toRemoteServer(srv), id); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed to remove container: "+err.Error())
+			FailErr(w, http.StatusInternalServerError, "删除容器失败", err)
 			return
 		}
 		OK(w, map[string]string{"deleted": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
 // handleDockerExec: POST {"server_id": "...", "container_id": "...", "command": "..."} 执行命令。
 func (h *SoftwareHandler) handleDockerExec(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -628,17 +651,17 @@ func (h *SoftwareHandler) handleDockerExec(w http.ResponseWriter, r *http.Reques
 		Command   string `json:"command"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	output, err := h.remoteCollector.ExecInContainer(r.Context(), toRemoteServer(srv), req.Container, req.Command)
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "exec failed: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "容器命令执行失败", err)
 		return
 	}
 	OK(w, map[string]string{"output": output})
@@ -647,7 +670,7 @@ func (h *SoftwareHandler) handleDockerExec(w http.ResponseWriter, r *http.Reques
 // handleDockerLogs: GET ?server=&id=&lines= 容器日志。
 func (h *SoftwareHandler) handleDockerLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
@@ -658,12 +681,12 @@ func (h *SoftwareHandler) handleDockerLogs(w http.ResponseWriter, r *http.Reques
 	}
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	logs, err := h.remoteCollector.ContainerLogs(r.Context(), toRemoteServer(srv), id, lines)
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "failed to get logs: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取容器日志失败", err)
 		return
 	}
 	OK(w, map[string]string{"id": id, "logs": logs})
@@ -674,7 +697,7 @@ func (h *SoftwareHandler) handleDockerLogs(w http.ResponseWriter, r *http.Reques
 // handleFiles: GET ?server=<id>&path=<path> 列出目录内容。
 func (h *SoftwareHandler) handleFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -686,14 +709,14 @@ func (h *SoftwareHandler) handleFiles(w http.ResponseWriter, r *http.Request) {
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	result, err := h.remoteCollector.ListFiles(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("list files failed", "server", serverID, "path", path, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to list files: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "读取目录失败", err)
 		return
 	}
 
@@ -703,27 +726,27 @@ func (h *SoftwareHandler) handleFiles(w http.ResponseWriter, r *http.Request) {
 // handleFileInfo: GET ?server=<id>&path=<path> 获取文件详情。
 func (h *SoftwareHandler) handleFileInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	serverID := r.URL.Query().Get("server")
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		Fail(w, http.StatusBadRequest, 400, "path is required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：path")
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	info, err := h.remoteCollector.GetFileInfo(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("get file info failed", "server", serverID, "path", path, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to get file info: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "读取文件信息失败", err)
 		return
 	}
 
@@ -733,7 +756,7 @@ func (h *SoftwareHandler) handleFileInfo(w http.ResponseWriter, r *http.Request)
 // handleFilePreview: GET ?server=<id>&path=<path>&lines=<n> 读取文件内容用于预览。
 func (h *SoftwareHandler) handleFilePreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -747,14 +770,14 @@ func (h *SoftwareHandler) handleFilePreview(w http.ResponseWriter, r *http.Reque
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	content, err := h.remoteCollector.ReadFileContent(r.Context(), toRemoteServer(srv), path, lines)
 	if err != nil {
 		h.log.Errorw("read file failed", "server", serverID, "path", path, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to read file: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "读取文件失败", err)
 		return
 	}
 
@@ -764,27 +787,27 @@ func (h *SoftwareHandler) handleFilePreview(w http.ResponseWriter, r *http.Reque
 // handleFileDownload: GET ?server=<id>&path=<path> 下载文件。
 func (h *SoftwareHandler) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	serverID := r.URL.Query().Get("server")
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		Fail(w, http.StatusBadRequest, 400, "path is required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：path")
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	data, filename, err := h.remoteCollector.DownloadFile(r.Context(), toRemoteServer(srv), path)
 	if err != nil {
 		h.log.Errorw("download file failed", "server", serverID, "path", path, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to download file: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "下载文件失败", err)
 		return
 	}
 
@@ -796,23 +819,27 @@ func (h *SoftwareHandler) handleFileDownload(w http.ResponseWriter, r *http.Requ
 
 // --- Docker 批量操作 ---
 
-// handleBatchDeleteImages: POST {"server_id": "...", "ids": [...]} 批量删除镜像。
+// handleBatchDeleteImages: POST {"server_id": "...", "ids": [...], "confirm": true} 批量删除镜像。
 func (h *SoftwareHandler) handleBatchDeleteImages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
 		ServerID string   `json:"server_id"`
 		IDs      []string `json:"ids"`
+		Confirm  bool     `json:"confirm"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+		return
+	}
+	if !requireBodyConfirm(w, req.Confirm) {
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	var deleted []string
@@ -827,28 +854,32 @@ func (h *SoftwareHandler) handleBatchDeleteImages(w http.ResponseWriter, r *http
 	OK(w, map[string]any{"deleted": deleted, "errors": errors})
 }
 
-// handleBatchContainerAction: POST {"server_id": "...", "ids": [...], "action": "stop/start/restart"} 批量容器操作。
+// handleBatchContainerAction: POST {"server_id": "...", "ids": [...], "action": "stop/start/restart", "confirm": true} 批量容器操作。
 func (h *SoftwareHandler) handleBatchContainerAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
 		ServerID string   `json:"server_id"`
 		IDs      []string `json:"ids"`
 		Action   string   `json:"action"`
+		Confirm  bool     `json:"confirm"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+		return
+	}
+	if !requireBodyConfirm(w, req.Confirm) {
 		return
 	}
 	if req.Action != "stop" && req.Action != "start" && req.Action != "restart" && req.Action != "rm" {
-		Fail(w, http.StatusBadRequest, 400, "invalid action")
+		Fail(w, http.StatusBadRequest, 400, "参数不合法：action")
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	var done []string
@@ -881,21 +912,21 @@ func (h *SoftwareHandler) handleDockerSources(w http.ResponseWriter, r *http.Req
 	case http.MethodPost:
 		var src storage.DockerSource
 		if err := decodeBody(r, &src); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if src.ID == "" || src.Name == "" || src.URL == "" {
-			Fail(w, http.StatusBadRequest, 400, "id, name and url are required")
+			Fail(w, http.StatusBadRequest, 400, "缺少必填参数：id、name、url")
 			return
 		}
 		if err := sourceStore.AddSource(r.Context(), &src); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed to add source")
+			FailErr(w, http.StatusInternalServerError, "添加软件源失败", err)
 			return
 		}
 		OK(w, src)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -904,7 +935,7 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 	sourceStore := storage.NewDockerSourceStore(h.db)
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/docker-sources/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "source id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：软件源 ID")
 		return
 	}
 
@@ -912,19 +943,19 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 	case http.MethodPut:
 		var src storage.DockerSource
 		if err := decodeBody(r, &src); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		src.ID = id
 		if err := sourceStore.UpdateSource(r.Context(), &src); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed to update source")
+			FailErr(w, http.StatusInternalServerError, "更新软件源失败", err)
 			return
 		}
 		OK(w, src)
 
 	case http.MethodDelete:
 		if err := sourceStore.DeleteSource(r.Context(), id); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed to delete source")
+			FailErr(w, http.StatusInternalServerError, "删除软件源失败", err)
 			return
 		}
 		OK(w, map[string]string{"deleted": id})
@@ -932,13 +963,13 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 	case http.MethodPost:
 		// 设为默认
 		if err := sourceStore.SetDefaultSource(r.Context(), id); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed to set default")
+			FailErr(w, http.StatusInternalServerError, "设置默认软件源失败", err)
 			return
 		}
 		OK(w, map[string]string{"default": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -948,13 +979,13 @@ func (h *SoftwareHandler) handleDockerSourceDetail(w http.ResponseWriter, r *htt
 func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Request) {
 	serverID := r.URL.Query().Get("server")
 	if serverID == "" {
-		Fail(w, http.StatusBadRequest, 400, "server required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server")
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
@@ -962,32 +993,37 @@ func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Requ
 	case http.MethodGet:
 		config, err := h.remoteCollector.GetMirrorSources(r.Context(), toRemoteServer(srv))
 		if err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "failed: "+err.Error())
+			FailErr(w, http.StatusInternalServerError, "获取镜像源配置失败", err)
 			return
 		}
 		OK(w, config)
 
 	case http.MethodPost:
+		// 改写远程 daemon.json 并重启 Docker，属于影响面较大的操作：要求二次确认
 		var req struct {
-			Mirror string `json:"mirror"`
+			Mirror  string `json:"mirror"`
+			Confirm bool   `json:"confirm"`
 		}
 		if err := decodeBody(r, &req); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+			return
+		}
+		if !requireBodyConfirm(w, req.Confirm) {
 			return
 		}
 		if req.Mirror == "" {
-			Fail(w, http.StatusBadRequest, 400, "mirror url required")
+			Fail(w, http.StatusBadRequest, 400, "缺少必填参数：镜像源地址")
 			return
 		}
 		if err := h.remoteCollector.ApplyMirrorSource(r.Context(), toRemoteServer(srv), req.Mirror); err != nil {
 			h.log.Errorw("apply mirror failed", "server", serverID, "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to apply mirror: "+err.Error())
+			FailErr(w, http.StatusInternalServerError, "应用镜像源配置失败", err)
 			return
 		}
 		OK(w, map[string]string{"status": "ok", "mirror": req.Mirror})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -996,7 +1032,7 @@ func (h *SoftwareHandler) handleDockerMirror(w http.ResponseWriter, r *http.Requ
 // handleProcesses: GET ?server=<id>&lines=<n> 获取进程列表。
 func (h *SoftwareHandler) handleProcesses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1009,24 +1045,24 @@ func (h *SoftwareHandler) handleProcesses(w http.ResponseWriter, r *http.Request
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	processes, err := h.remoteCollector.ListProcesses(r.Context(), toRemoteServer(srv), lines)
 	if err != nil {
 		h.log.Errorw("list processes failed", "server", serverID, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to list processes: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取进程列表失败", err)
 		return
 	}
 
 	OK(w, processes)
 }
 
-// handleKillProcess: POST {"server_id": "...", "pid": 123, "force": false} 终止进程。
+// handleKillProcess: POST {"server_id": "...", "pid": 123, "force": false, "confirm": true} 终止进程。
 func (h *SoftwareHandler) handleKillProcess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1034,21 +1070,30 @@ func (h *SoftwareHandler) handleKillProcess(w http.ResponseWriter, r *http.Reque
 		ServerID string `json:"server_id"`
 		PID      int    `json:"pid"`
 		Force    bool   `json:"force"`
+		Confirm  bool   `json:"confirm"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
+		return
+	}
+	if !requireBodyConfirm(w, req.Confirm) {
+		return
+	}
+	// PID 合法性校验：0 会作用于整个进程组、1 是 init，负数非法 —— 绝不能对目标服务器执行
+	if req.PID <= 1 {
+		Fail(w, http.StatusBadRequest, 400, "参数不合法：pid 必须为大于 1 的进程 ID")
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	if err := h.remoteCollector.KillProcess(r.Context(), toRemoteServer(srv), req.PID, req.Force); err != nil {
 		h.log.Errorw("kill process failed", "server", req.ServerID, "pid", req.PID, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to kill process: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "终止进程失败", err)
 		return
 	}
 
@@ -1058,7 +1103,7 @@ func (h *SoftwareHandler) handleKillProcess(w http.ResponseWriter, r *http.Reque
 // handleProcessLog: GET ?server=<id>&pid=<pid>&lines=<n> 获取进程日志。
 func (h *SoftwareHandler) handleProcessLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1074,14 +1119,14 @@ func (h *SoftwareHandler) handleProcessLog(w http.ResponseWriter, r *http.Reques
 
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	log, err := h.remoteCollector.GetProcessLog(r.Context(), toRemoteServer(srv), pid, lines)
 	if err != nil {
 		h.log.Errorw("get process log failed", "server", serverID, "pid", pid, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, "failed to get process log: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "获取进程日志失败", err)
 		return
 	}
 
@@ -1104,23 +1149,23 @@ func (h *SoftwareHandler) handleLanguages(w http.ResponseWriter, r *http.Request
 	case http.MethodPost:
 		var lang storage.LanguageRecord
 		if err := decodeBody(r, &lang); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if lang.ID == "" || lang.Name == "" {
-			Fail(w, http.StatusBadRequest, 400, "id and name are required")
+			Fail(w, http.StatusBadRequest, 400, "缺少必填参数：id、name")
 			return
 		}
 		langStore := storage.NewLanguageStore(h.db)
 		if err := langStore.AddLanguage(r.Context(), &lang); err != nil {
 			h.log.Errorw("add language failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to add language")
+			FailErr(w, http.StatusInternalServerError, "添加语言环境失败", err)
 			return
 		}
 		OK(w, lang)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -1128,7 +1173,7 @@ func (h *SoftwareHandler) handleLanguages(w http.ResponseWriter, r *http.Request
 func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/languages/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "language id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：语言 ID")
 		return
 	}
 
@@ -1136,14 +1181,14 @@ func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Re
 	case http.MethodPut:
 		var lang storage.LanguageRecord
 		if err := decodeBody(r, &lang); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		lang.ID = id
 		langStore := storage.NewLanguageStore(h.db)
 		if err := langStore.UpdateLanguage(r.Context(), &lang); err != nil {
 			h.log.Errorw("update language failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to update language")
+			FailErr(w, http.StatusInternalServerError, "更新语言环境失败", err)
 			return
 		}
 		OK(w, lang)
@@ -1152,27 +1197,27 @@ func (h *SoftwareHandler) handleLanguageDetail(w http.ResponseWriter, r *http.Re
 		langStore := storage.NewLanguageStore(h.db)
 		if err := langStore.DeleteLanguage(r.Context(), id); err != nil {
 			h.log.Errorw("delete language failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to delete language")
+			FailErr(w, http.StatusInternalServerError, "删除语言环境失败", err)
 			return
 		}
 		OK(w, map[string]string{"deleted": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
 // handleDetectLanguages: GET ?server=<id> 检测服务器已安装的语言。
 func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	serverID := r.URL.Query().Get("server")
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
@@ -1206,7 +1251,7 @@ func (h *SoftwareHandler) handleDetectLanguages(w http.ResponseWriter, r *http.R
 // handleInstallLanguage: POST {"server_id": "...", "language_id": "..."} 安装语言环境。
 func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1216,20 +1261,20 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 		Version    string `json:"version"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	langStore := storage.NewLanguageStore(h.db)
 	lang, ok := langStore.GetLanguage(r.Context(), req.LanguageID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "language not found")
+		Fail(w, http.StatusNotFound, 404, "语言环境不存在")
 		return
 	}
 	if lang.InstallCmd == "" {
@@ -1249,7 +1294,7 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 		err := h.remoteCollector.InstallLanguageStream(context.Background(), toRemoteServer(srv), lang.InstallCmd, req.Version, job.append)
 		job.finish(err)
 		if err != nil {
-			h.log.Errorw("install language failed", "lang", lang.ID, "error", err)
+			h.log.Errorw("install language failed", "server", req.ServerID, "lang", lang.ID, "error", err)
 		}
 	}()
 
@@ -1259,7 +1304,7 @@ func (h *SoftwareHandler) handleInstallLanguage(w http.ResponseWriter, r *http.R
 // handleUninstallLanguage: POST {"server_id": "...", "language_id": "..."} 卸载语言环境。
 func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1268,20 +1313,20 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		LanguageID string `json:"language_id"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), req.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
 	langStore := storage.NewLanguageStore(h.db)
 	lang, ok := langStore.GetLanguage(r.Context(), req.LanguageID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "language not found")
+		Fail(w, http.StatusNotFound, 404, "语言环境不存在")
 		return
 	}
 	if lang.UninstallCmd == "" {
@@ -1296,7 +1341,7 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 		err := h.remoteCollector.InstallLanguageStream(context.Background(), toRemoteServer(srv), lang.UninstallCmd, "", job.append)
 		job.finish(err)
 		if err != nil {
-			h.log.Errorw("uninstall language failed", "lang", lang.ID, "error", err)
+			h.log.Errorw("uninstall language failed", "server", req.ServerID, "lang", lang.ID, "error", err)
 		}
 	}()
 
@@ -1306,7 +1351,7 @@ func (h *SoftwareHandler) handleUninstallLanguage(w http.ResponseWriter, r *http
 // handleLanguageJob: GET ?server_id=&language_id=&action=install|uninstall 查询任务状态与输出。
 func (h *SoftwareHandler) handleLanguageJob(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
@@ -1314,7 +1359,7 @@ func (h *SoftwareHandler) handleLanguageJob(w http.ResponseWriter, r *http.Reque
 	langID := r.URL.Query().Get("language_id")
 	action := r.URL.Query().Get("action")
 	if serverID == "" || langID == "" || (action != "install" && action != "uninstall") {
-		Fail(w, http.StatusBadRequest, 400, "invalid query params")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server_id、language_id，或 action 不合法")
 		return
 	}
 

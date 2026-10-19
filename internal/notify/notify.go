@@ -7,6 +7,8 @@ package notify
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
+	"errors"
 	"fmt"
 	"mime"
 	"net"
@@ -184,7 +186,11 @@ func (n *Notifier) sendMail(ctx context.Context, cfg MailConfig, to []string, su
 	}
 	defer c.Close()
 
-	deadline, _ := ctx.Deadline()
+	// 连接级超时兜底：ctx 无 deadline 时用 sendTimeout，避免 SMTP 会话永久挂起
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(sendTimeout)
+	}
 	_ = conn.SetDeadline(deadline)
 
 	// STARTTLS：服务器支持时升级加密
@@ -262,6 +268,10 @@ func splitEmails(s string) []string {
 func (n *Notifier) meta(ctx context.Context, key string) string {
 	val, err := n.db.GetMeta(ctx, metaPrefix+key)
 	if err != nil {
+		// 未命中属正常（返回空值）；其他读取错误记录日志，避免静默吞掉 DB 故障
+		if !errors.Is(err, sql.ErrNoRows) {
+			n.log.Warnw("read smtp meta failed", "key", key, "error", err)
+		}
 		return ""
 	}
 	return val

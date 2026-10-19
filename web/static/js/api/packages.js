@@ -7,7 +7,6 @@ import { request } from './http.js';
 /** 获取软件包列表。 */
 export async function fetchPackages() {
     const json = await request('/software/packages');
-    if (json.code !== 0) throw new Error(json.message || '加载软件包失败');
     return json.data || [];
 }
 
@@ -18,7 +17,6 @@ export async function createPackage(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建失败');
     return json.data;
 }
 
@@ -29,12 +27,10 @@ export async function updatePackage(id, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '更新失败');
     return json.data;
 }
 
 /** 删除软件包。 */
 export async function deletePackage(id) {
-    const json = await request(`/software/packages/${id}`, { method: 'DELETE' });
-    if (json.code !== 0) throw new Error(json.message || '删除失败');
+    await request(`/software/packages/${id}`, { method: 'DELETE' });
 }

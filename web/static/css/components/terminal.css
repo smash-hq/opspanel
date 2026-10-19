@@ -142,7 +142,7 @@
     flex: 1;
     min-height: 0;      /* 允许 flex 子项收缩，命令多时在面板内滚动 */
     overflow-y: auto;
-    padding: 4px 6px 10px;
+    padding: 0 6px 10px; /* 顶部不留内边距：吸顶组头贴住滚动口上缘，滚动内容不会从缝隙漏出 */
     scrollbar-width: thin;
 }
 
@@ -161,7 +161,7 @@
 
 .cmd-group-head {
     position: sticky;       /* 滚动时当前分类标题吸顶，滚出该组才被下一组顶走 */
-    top: 0;
+    top: -1px;              /* 上移 1px 压住抗锯齿缝隙，确保吸顶时上方无内容透出 */
     z-index: 2;
     display: flex;
     align-items: center;

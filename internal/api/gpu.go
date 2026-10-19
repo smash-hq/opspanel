@@ -36,7 +36,7 @@ func (h *GPUHandler) Register(mux *http.ServeMux) {
 // handleSnapshot: GET /api/v1/gpu?server_id= 返回该服务器 GPU 快照。
 func (h *GPUHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	srv, ok := h.server(r.Context(), r.URL.Query().Get("server_id"))
@@ -51,7 +51,7 @@ func (h *GPUHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	client, err := h.rc.Acquire(toRemoteServer(srv))
 	if err != nil {
 		h.log.Errorw("acquire connection failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "连接服务器失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "连接服务器失败", err)
 		return
 	}
 	defer h.rc.Release(srv.ID)
@@ -59,7 +59,7 @@ func (h *GPUHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	snap, err := gpu.Collect(ctx, sshRunner{client})
 	if err != nil {
 		h.log.Errorw("gpu collect failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "GPU 信息采集失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "GPU 信息采集失败", err)
 		return
 	}
 	OK(w, snap)

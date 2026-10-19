@@ -8,18 +8,16 @@ import { request } from './http.js';
 export async function fetchProcesses(serverId, lines) {
     const params = new URLSearchParams({ server: serverId, lines: lines || 50 });
     const json = await request(`/processes?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取进程列表失败');
     return json.data || [];
 }
 
-/** 终止进程。 */
+/** 终止进程（危险操作，需用户确认后携带 confirm 标记）。 */
 export async function killProcess(serverId, pid, force) {
     const json = await request('/processes/kill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, pid, force: force || false }),
+        body: JSON.stringify({ server_id: serverId, pid, force: force || false, confirm: true }),
     });
-    if (json.code !== 0) throw new Error(json.message || '终止进程失败');
     return json.data;
 }
 
@@ -27,6 +25,5 @@ export async function killProcess(serverId, pid, force) {
 export async function fetchProcessLog(serverId, pid, lines) {
     const params = new URLSearchParams({ server: serverId, pid, lines: lines || 50 });
     const json = await request(`/processes/log?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取进程日志失败');
     return json.data;
 }

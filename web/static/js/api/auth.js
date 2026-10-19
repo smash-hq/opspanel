@@ -11,21 +11,18 @@ export async function login(username, password) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
     });
-    if (json.code !== 0) throw new Error(json.message || '登录失败');
     return json.data;
 }
 
 /** 注销当前会话。 */
 export async function logout() {
     const json = await request('/auth/logout', { method: 'POST' });
-    if (json.code !== 0) throw new Error(json.message || '注销失败');
     return json.data;
 }
 
 /** 探测当前登录态，返回 { username, must_change_password }，未登录抛错。 */
 export async function fetchMe() {
     const json = await request('/auth/me');
-    if (json.code !== 0) throw new Error(json.message || '获取登录态失败');
     return json.data;
 }
 
@@ -36,6 +33,5 @@ export async function changePassword(oldPassword, newPassword) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     });
-    if (json.code !== 0) throw new Error(json.message || '修改密码失败');
     return json.data;
 }

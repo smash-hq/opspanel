@@ -164,6 +164,7 @@ func generateID() string {
 
 func randomStr(n int) string {
 	b := make([]byte, n/2+1)
+	// Go 1.24+ crypto/rand.Read 保证填满且不返回错误，忽略 err 是安全的
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)[:n]
 }

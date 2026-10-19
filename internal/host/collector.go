@@ -42,8 +42,11 @@ func (c *Collector) Snapshot(ctx context.Context, serverID string) (*system.Info
 	switch srv.Type {
 	case "remote":
 		return c.remote.Snapshot(ctx, toRemoteServer(srv))
-	default:
+	case "local":
 		return c.local.Snapshot(ctx)
+	default:
+		// 未知类型不能静默用本机数据冒充目标主机，直接报错
+		return nil, fmt.Errorf("未知的服务器类型 %q（server %s）", srv.Type, srv.ID)
 	}
 }
 

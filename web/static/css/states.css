@@ -152,7 +152,10 @@
     transition: transform var(--transition-spring), opacity var(--transition-spring);
     z-index: 200;
     pointer-events: none;
-    max-width: 360px;
+    max-width: 460px;
+    /* 支持多行错误详情（message + 底层 detail 换行组合） */
+    white-space: pre-line;
+    word-break: break-all;
 }
 
 .toast.visible { transform: translateY(0); opacity: 1; }

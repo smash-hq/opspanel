@@ -64,7 +64,10 @@ func (rc *RemoteCollector) runSSHWithStdin(ctx context.Context, srv *Server, cmd
 	select {
 	case r := <-done:
 		if r.err != nil {
-			return string(r.out), fmt.Errorf("远端命令失败: %s", appSnippet(string(r.out)))
+			if hint := appSnippet(string(r.out)); hint != "" {
+				return string(r.out), fmt.Errorf("远端命令失败: %w；输出: %s", r.err, hint)
+			}
+			return string(r.out), fmt.Errorf("远端命令失败: %w", r.err)
 		}
 		return string(r.out), nil
 	case <-ctx.Done():
@@ -85,7 +88,10 @@ func (rc *RemoteCollector) runAppCmd(ctx context.Context, srv *Server, cmd strin
 	defer cancel()
 	out, err := rc.runLogged(ctx, conn, cmd)
 	if err != nil {
-		return out, fmt.Errorf("远端命令失败: %s", appSnippet(out))
+		if hint := appSnippet(out); hint != "" {
+			return out, fmt.Errorf("远端命令失败: %w；输出: %s", err, hint)
+		}
+		return out, fmt.Errorf("远端命令失败: %w", err)
 	}
 	return out, nil
 }

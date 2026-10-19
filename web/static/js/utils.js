@@ -87,7 +87,7 @@ export function serverAddress(server) {
 /**
  * 显示 Toast 通知。
  * @param {Object} toast - Vue reactive 对象 { visible, message, error }
- * @param {string} message - 通知文本
+ * @param {string} message - 通知文本（可含换行，CSS pre-line 渲染多行）
  * @param {boolean} [error=false] - 是否为错误样式
  * @returns {number} setTimeout ID，供清理使用
  */
@@ -95,7 +95,8 @@ export function showToast(toast, message, error = false) {
     toast.message = message;
     toast.error = error;
     toast.visible = true;
-    return setTimeout(() => { toast.visible = false; }, 2800);
+    // 错误信息驻留更久，给运维人员足够的阅读时间
+    return setTimeout(() => { toast.visible = false; }, error ? 6000 : 2800);
 }
 
 /**

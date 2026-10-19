@@ -10,6 +10,5 @@ import { request } from './http.js';
 export async function fetchGpuSnapshot(serverId) {
     const params = new URLSearchParams({ server_id: serverId });
     const json = await request(`/gpu?${params}`);
-    if (json.code !== 0) throw new Error(json.message || 'GPU 信息采集失败');
     return json.data || { vendor: '', devices: [] };
 }

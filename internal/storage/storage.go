@@ -5,6 +5,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -173,13 +174,17 @@ func (d *DB) migrate() error {
 		return err
 	}
 
-	// 增量迁移：为已有数据库补上新加列（忽略已存在错误）
-	_ = d.addColumnIfNotExists("languages", "uninstall_cmd", "TEXT NOT NULL DEFAULT ''")
-	_ = d.addColumnIfNotExists("software_packages", "versions", "TEXT NOT NULL DEFAULT '[]'")
-	_ = d.addColumnIfNotExists("languages", "versions", "TEXT NOT NULL DEFAULT '[]'")
-	_ = d.addColumnIfNotExists("deployed_apps", "last_error", "TEXT NOT NULL DEFAULT ''")
-	_ = d.addColumnIfNotExists("notifications", "module", "TEXT NOT NULL DEFAULT ''")
-	return nil
+	// 增量迁移：为已有数据库补上新加列（列已存在的 duplicate column 错误已在内部忽略）。
+	// 其余迁移错误意味着 schema 不完整，聚合返回并阻止启动。
+	var migErrs []error
+	migErrs = append(migErrs,
+		d.addColumnIfNotExists("languages", "uninstall_cmd", "TEXT NOT NULL DEFAULT ''"),
+		d.addColumnIfNotExists("software_packages", "versions", "TEXT NOT NULL DEFAULT '[]'"),
+		d.addColumnIfNotExists("languages", "versions", "TEXT NOT NULL DEFAULT '[]'"),
+		d.addColumnIfNotExists("deployed_apps", "last_error", "TEXT NOT NULL DEFAULT ''"),
+		d.addColumnIfNotExists("notifications", "module", "TEXT NOT NULL DEFAULT ''"),
+	)
+	return errors.Join(migErrs...)
 }
 
 // addColumnIfNotExists 给表追加列（若列已存在则忽略错误）。
@@ -224,12 +229,16 @@ func (d *DB) InitDefaultData() error {
 		{"src_nodejs_official", "Node.js 官方源", "repo", "https://deb.nodesource.com/"},
 	}
 	// Docker 引擎仓库不属于软件源范畴（Docker 相关配置由「Docker 镜像源」管理），清理历史种子数据
-	d.db.ExecContext(ctx, `DELETE FROM software_sources WHERE id IN ('src_docker_official', 'src_docker_aliyun')`)
+	if _, err := d.db.ExecContext(ctx, `DELETE FROM software_sources WHERE id IN ('src_docker_official', 'src_docker_aliyun')`); err != nil {
+		return fmt.Errorf("清理历史软件源种子数据失败: %w", err)
+	}
 	for _, s := range sources {
-		d.db.ExecContext(ctx, `
+		if _, err := d.db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO software_sources (id, name, type, url, enabled, priority, created_at, updated_at)
 			VALUES (?, ?, ?, ?, 1, 100, ?, ?)`,
-			s.id, s.name, s.typ, s.url, now, now)
+			s.id, s.name, s.typ, s.url, now, now); err != nil {
+			return fmt.Errorf("写入默认软件源 %s 失败: %w", s.id, err)
+		}
 	}
 
 	return nil

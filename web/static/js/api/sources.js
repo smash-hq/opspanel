@@ -7,7 +7,6 @@ import { request } from './http.js';
 /** 获取软件源列表。 */
 export async function fetchSources() {
     const json = await request('/software/sources');
-    if (json.code !== 0) throw new Error(json.message || '加载软件源失败');
     return json.data || [];
 }
 
@@ -18,7 +17,6 @@ export async function createSource(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建失败');
     return json.data;
 }
 
@@ -29,12 +27,10 @@ export async function updateSource(id, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '更新失败');
     return json.data;
 }
 
 /** 删除软件源。 */
 export async function deleteSource(id) {
-    const json = await request(`/software/sources/${id}`, { method: 'DELETE' });
-    if (json.code !== 0) throw new Error(json.message || '删除失败');
+    await request(`/software/sources/${id}`, { method: 'DELETE' });
 }

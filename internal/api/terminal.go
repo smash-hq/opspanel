@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -32,17 +33,17 @@ type terminalClientMsg struct {
 // 会话结束时发送一条 JSON {"type":"exit"} 文本消息后关闭。
 func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	serverID := r.URL.Query().Get("server")
 	if serverID == "" {
-		Fail(w, http.StatusBadRequest, 400, "server id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server_id")
 		return
 	}
 	srv, ok := h.store.Get(r.Context(), serverID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	if srv.Type == "local" {
@@ -76,7 +77,12 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 	// 读泵：浏览器 → SSH stdin
 	go func() {
-		defer close(readDone)
+		defer func() {
+			if r := recover(); r != nil {
+				h.log.Errorw("terminal read pump panicked", "panic", r, "stack", string(debug.Stack()))
+			}
+			close(readDone)
+		}()
 		for {
 			_, raw, err := wsConn.ReadMessage()
 			if err != nil {
@@ -105,6 +111,11 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
+		defer func() {
+			if r := recover(); r != nil {
+				h.log.Errorw("terminal ping loop panicked", "panic", r, "stack", string(debug.Stack()))
+			}
+		}()
 		for {
 			select {
 			case <-ticker.C:
@@ -119,6 +130,11 @@ func (h *SoftwareHandler) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 	// 浏览器断开时（读泵退出）主动关闭 SSH 会话，唤醒阻塞的 ts.Read
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				h.log.Errorw("terminal disconnect watcher panicked", "panic", r, "stack", string(debug.Stack()))
+			}
+		}()
 		select {
 		case <-readDone:
 			ts.Close()

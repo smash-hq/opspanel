@@ -8,18 +8,16 @@ import { request } from './http.js';
 export async function fetchServices(serverId) {
     const params = new URLSearchParams({ server: serverId });
     const json = await request(`/services?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取服务列表失败');
     return json.data || [];
 }
 
-/** 执行服务操作（start/stop/restart/enable/disable）。 */
+/** 执行服务操作（start/stop/restart/enable/disable，需用户确认后携带 confirm 标记）。 */
 export async function serviceAction(serverId, name, action) {
     const json = await request('/services/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, name, action }),
+        body: JSON.stringify({ server_id: serverId, name, action, confirm: true }),
     });
-    if (json.code !== 0) throw new Error(json.message || '服务操作失败');
     return json.data;
 }
 
@@ -27,7 +25,6 @@ export async function serviceAction(serverId, name, action) {
 export async function fetchServiceLog(serverId, name, lines) {
     const params = new URLSearchParams({ server: serverId, name, lines: lines || 100 });
     const json = await request(`/services/logs?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取服务日志失败');
     return json.data;
 }
 
@@ -35,17 +32,15 @@ export async function fetchServiceLog(serverId, name, lines) {
 export async function fetchUnitFile(serverId, name) {
     const params = new URLSearchParams({ server: serverId, name });
     const json = await request(`/services/unit?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '读取 unit 文件失败');
     return json.data || { path: '', content: '' };
 }
 
-/** 保存服务 unit 文件（自动备份 *.bak 并 daemon-reload）。 */
+/** 保存服务 unit 文件（自动备份 *.bak 并 daemon-reload，需用户确认后携带 confirm 标记）。 */
 export async function saveUnitFile(serverId, name, content) {
     const json = await request('/services/unit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, name, content }),
+        body: JSON.stringify({ server_id: serverId, name, content, confirm: true }),
     });
-    if (json.code !== 0) throw new Error(json.message || '保存 unit 文件失败');
     return json.data;
 }

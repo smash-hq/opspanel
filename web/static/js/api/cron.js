@@ -10,7 +10,6 @@ import { request } from './http.js';
 export async function fetchCronJobs(serverId) {
     const params = new URLSearchParams({ server_id: serverId });
     const json = await request(`/cron/jobs?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取定时任务失败');
     return json.data || [];
 }
 
@@ -21,7 +20,6 @@ export async function createCronJob(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建定时任务失败');
     return json.data;
 }
 
@@ -33,7 +31,6 @@ export async function updateCronJob(id, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '更新定时任务失败');
     return json.data;
 }
 
@@ -41,7 +38,6 @@ export async function updateCronJob(id, payload) {
 export async function deleteCronJob(id, serverId) {
     const params = new URLSearchParams({ server_id: serverId });
     const json = await request(`/cron/jobs/${id}?${params}`, { method: 'DELETE' });
-    if (json.code !== 0) throw new Error(json.message || '删除定时任务失败');
     return json.data;
 }
 
@@ -52,6 +48,5 @@ export async function previewCronExpr(expr) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expr }),
     });
-    if (json.code !== 0) throw new Error(json.message || '表达式解析失败');
     return json.data;
 }

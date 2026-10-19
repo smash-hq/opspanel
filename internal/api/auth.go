@@ -10,8 +10,10 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -95,7 +97,7 @@ func (h *AuthHandler) Middleware(next http.Handler) http.Handler {
 // handleLogin: POST {"username","password"} 登录并下发会话 Cookie。
 func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -103,11 +105,15 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
-	user := h.loadUser(r.Context())
+	user, err := h.loadUser(r.Context())
+	if err != nil {
+		FailErr(w, http.StatusInternalServerError, "读取账户信息失败", err)
+		return
+	}
 	if req.Username != user.Username ||
 		bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		Fail(w, http.StatusUnauthorized, 401, "用户名或密码错误")
@@ -117,7 +123,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	token, err := h.newSession()
 	if err != nil {
 		// 随机源故障时拒绝签发可预测 token
-		Fail(w, http.StatusInternalServerError, 500, "internal error")
+		FailErr(w, http.StatusInternalServerError, "登录会话签发失败", err)
 		return
 	}
 	h.setSessionCookie(w, token)
@@ -128,7 +134,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 // handleLogout: POST 注销当前会话并清除 Cookie。
 func (h *AuthHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	if token := h.cookieToken(r); token != "" {
@@ -150,14 +156,18 @@ func (h *AuthHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 // handleMe: GET 返回当前登录账户（中间件已校验会话，此处兜底）。
 func (h *AuthHandler) handleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	if !h.renewSession(h.cookieToken(r)) {
 		Fail(w, http.StatusUnauthorized, 401, "未登录或会话已过期")
 		return
 	}
-	user := h.loadUser(r.Context())
+	user, err := h.loadUser(r.Context())
+	if err != nil {
+		FailErr(w, http.StatusInternalServerError, "读取账户信息失败", err)
+		return
+	}
 	OK(w, map[string]any{"username": user.Username, "must_change_password": user.MustChange && enforcePasswordChange})
 }
 
@@ -165,7 +175,7 @@ func (h *AuthHandler) handleMe(w http.ResponseWriter, r *http.Request) {
 // 修改成功后清除 must_change 标记，新密码持久化生效（重新部署前）。
 func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	if !h.renewSession(h.cookieToken(r)) {
@@ -177,11 +187,15 @@ func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Reques
 		NewPassword string `json:"new_password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
-	user := h.loadUser(r.Context())
+	user, err := h.loadUser(r.Context())
+	if err != nil {
+		FailErr(w, http.StatusInternalServerError, "读取账户信息失败", err)
+		return
+	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)) != nil {
 		Fail(w, http.StatusBadRequest, 400, "当前密码不正确")
 		return
@@ -211,25 +225,38 @@ func (h *AuthHandler) handleChangePassword(w http.ResponseWriter, r *http.Reques
 	OK(w, map[string]bool{"ok": true})
 }
 
-// loadUser 读取账户信息；首次部署（无记录）时懒初始化默认账户并持久化。
-func (h *AuthHandler) loadUser(ctx context.Context) authUserRecord {
-	if h.db != nil {
-		if raw, err := h.db.GetMeta(ctx, authMetaKey); err == nil && raw != "" {
-			var u authUserRecord
-			if json.Unmarshal([]byte(raw), &u) == nil && u.Username != "" && u.PasswordHash != "" {
-				return u
-			}
-		}
+// loadUser 读取账户信息。仅首次部署（meta 无记录）时懒初始化默认账户并持久化；
+// 记录损坏或数据库读取失败时返回错误（fail-closed），避免把管理员密码静默重置为默认值。
+func (h *AuthHandler) loadUser(ctx context.Context) (authUserRecord, error) {
+	if h.db == nil {
+		return h.initDefaultUser(ctx)
 	}
+	raw, err := h.db.GetMeta(ctx, authMetaKey)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return authUserRecord{}, fmt.Errorf("读取账户记录失败: %w", err)
+	}
+	if raw != "" {
+		var u authUserRecord
+		if json.Unmarshal([]byte(raw), &u) != nil || u.Username == "" || u.PasswordHash == "" {
+			return authUserRecord{}, fmt.Errorf("账户记录损坏（meta.%s），请修复或删除该记录", authMetaKey)
+		}
+		return u, nil
+	}
+	return h.initDefaultUser(ctx)
+}
+
+// initDefaultUser 懒初始化默认账户 admin/admin123 并持久化。
+func (h *AuthHandler) initDefaultUser(ctx context.Context) (authUserRecord, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
 	if err != nil {
-		h.log.Errorw("hash default password failed", "error", err)
+		return authUserRecord{}, fmt.Errorf("hash default password: %w", err)
 	}
 	u := authUserRecord{Username: defaultUsername, PasswordHash: string(hash), MustChange: enforcePasswordChange}
 	if err := h.saveUser(ctx, u); err != nil {
-		h.log.Errorw("init default user failed", "error", err)
+		return authUserRecord{}, fmt.Errorf("初始化默认账户失败: %w", err)
 	}
-	return u
+	h.log.Infow("default admin user initialized", "username", defaultUsername)
+	return u, nil
 }
 
 // saveUser 将账户信息写入 meta 表。

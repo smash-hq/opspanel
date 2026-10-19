@@ -79,7 +79,7 @@ func (h *AppHandler) handleApps(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.createApp(w, r)
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -115,13 +115,13 @@ func (h *AppHandler) listApps(w http.ResponseWriter, r *http.Request) {
 				if pid := h.remoteCollector.AdoptApp(r.Context(), srv, app.StartCmd); pid > 0 {
 					app.PID = pid
 					app.Status = "running"
-					_ = h.apps.UpdateApp(r.Context(), app)
+					h.saveAppState(r.Context(), app, "adopt")
 				}
 				continue
 			}
 			if status := h.remoteCollector.AppStatus(r.Context(), srv, app.PID); status != app.Status {
 				app.Status = status
-				_ = h.apps.UpdateApp(r.Context(), app)
+				h.saveAppState(r.Context(), app, "refresh-status")
 			}
 		}
 	}
@@ -143,7 +143,7 @@ func (h *AppHandler) createApp(w http.ResponseWriter, r *http.Request) {
 		Remark    string `json:"remark"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -152,7 +152,7 @@ func (h *AppHandler) createApp(w http.ResponseWriter, r *http.Request) {
 	req.LogFile = strings.TrimSpace(req.LogFile)
 
 	if req.ServerID == "" || req.Name == "" || req.StartCmd == "" {
-		Fail(w, http.StatusBadRequest, 400, "服务器、名称与启动命令不能为空")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server_id、name、start_cmd")
 		return
 	}
 	switch req.Language {
@@ -166,7 +166,7 @@ func (h *AppHandler) createApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := h.store.Get(r.Context(), req.ServerID); !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *AppHandler) createApp(w http.ResponseWriter, r *http.Request) {
 		Remark:    strings.TrimSpace(req.Remark),
 	}
 	if err := h.apps.AddApp(r.Context(), app); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "保存部署记录失败: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "保存部署记录失败", err)
 		return
 	}
 	OK(w, app)
@@ -195,7 +195,7 @@ const appChunkSize = 4 << 20
 // key 可选：前端对同一文件生成稳定 key，重试/重开弹窗时复用已落盘分片（断点续传）。
 func (h *AppHandler) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -205,7 +205,7 @@ func (h *AppHandler) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 		Key     string `json:"key"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	app, err := h.apps.GetApp(r.Context(), strings.TrimSpace(req.AppID))
@@ -222,12 +222,12 @@ func (h *AppHandler) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 	}
 	srv, err := h.uploadServer(r.Context(), app)
 	if err != nil {
-		Fail(w, http.StatusNotFound, 404, err.Error())
+		FailErr(w, http.StatusNotFound, "目标服务器不存在", err)
 		return
 	}
 	if err := h.remoteCollector.AppUploadInit(r.Context(), srv, app.DeployDir, key); err != nil {
 		h.log.Errorw("init upload session failed", "app", app.ID, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "创建上传会话失败", err)
 		return
 	}
 	OK(w, map[string]any{"key": key, "chunk_size": appChunkSize})
@@ -236,7 +236,7 @@ func (h *AppHandler) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 // handleUploadStatus: GET ?key=&total= 查询已落盘分片索引（断点续传依据）。
 func (h *AppHandler) handleUploadStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	key := r.URL.Query().Get("key")
@@ -253,12 +253,12 @@ func (h *AppHandler) handleUploadStatus(w http.ResponseWriter, r *http.Request) 
 	}
 	srv, err := h.uploadServer(r.Context(), app)
 	if err != nil {
-		Fail(w, http.StatusNotFound, 404, err.Error())
+		FailErr(w, http.StatusNotFound, "目标服务器不存在", err)
 		return
 	}
 	received, err := h.remoteCollector.AppUploadStatus(r.Context(), srv, app.DeployDir, key)
 	if err != nil {
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "查询已上传分片失败", err)
 		return
 	}
 	OK(w, map[string]any{"received": received})
@@ -267,11 +267,11 @@ func (h *AppHandler) handleUploadStatus(w http.ResponseWriter, r *http.Request) 
 // handleUploadChunk: POST multipart {key, index, file} 上传单个分片。
 func (h *AppHandler) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "解析上传数据失败: "+err.Error())
+		FailErr(w, http.StatusBadRequest, "解析上传数据失败", err)
 		return
 	}
 	key := strings.TrimSpace(r.FormValue("key"))
@@ -299,12 +299,12 @@ func (h *AppHandler) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 
 	srv, err := h.uploadServer(r.Context(), app)
 	if err != nil {
-		Fail(w, http.StatusNotFound, 404, err.Error())
+		FailErr(w, http.StatusNotFound, "目标服务器不存在", err)
 		return
 	}
 	if err := h.remoteCollector.AppUploadChunk(r.Context(), srv, app.DeployDir, key, idx, file); err != nil {
 		h.log.Errorw("upload chunk failed", "app", app.ID, "index", idx, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "分片上传失败", err)
 		return
 	}
 	OK(w, map[string]any{"index": idx})
@@ -313,7 +313,7 @@ func (h *AppHandler) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 // handleUploadComplete: POST {app_id, key, rel_path, total, size} 合并分片为最终文件。
 func (h *AppHandler) handleUploadComplete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -324,7 +324,7 @@ func (h *AppHandler) handleUploadComplete(w http.ResponseWriter, r *http.Request
 		Size    int64  `json:"size"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	app, err := h.apps.GetApp(r.Context(), strings.TrimSpace(req.AppID))
@@ -342,53 +342,31 @@ func (h *AppHandler) handleUploadComplete(w http.ResponseWriter, r *http.Request
 	}
 	relPath, err := sanitizeRelPath(req.RelPath, "")
 	if err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "文件路径不合法", err)
 		return
 	}
 
 	srv, err := h.uploadServer(r.Context(), app)
 	if err != nil {
-		Fail(w, http.StatusNotFound, 404, err.Error())
+		FailErr(w, http.StatusNotFound, "目标服务器不存在", err)
 		return
 	}
 	size, err := h.remoteCollector.AppUploadComplete(r.Context(), srv, app.DeployDir, req.Key, relPath, req.Total, req.Size)
 	if err != nil {
 		h.log.Errorw("complete upload failed", "app", app.ID, "path", relPath, "error", err)
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "合并上传分片失败", err)
 		return
 	}
 
 	// 记录已上传文件清单
-	app, err = h.apps.GetApp(r.Context(), app.ID)
-	if err == nil {
-		addArtifact(app, relPath)
-		_ = h.apps.UpdateApp(r.Context(), app)
+	if refreshed, err := h.apps.GetApp(r.Context(), app.ID); err != nil {
+		h.log.Errorw("reload app after upload failed", "app", app.ID, "error", err)
+	} else {
+		addArtifact(refreshed, relPath)
+		h.saveAppState(r.Context(), refreshed, "upload-artifact")
 	}
 	h.log.Infow("app file uploaded", "app", app.ID, "path", relPath, "size", size)
 	OK(w, map[string]any{"path": relPath, "size": size})
-}
-
-// uploadTargetApp 解析上传请求中的 app_id 并校验应用存在。
-func (h *AppHandler) uploadTargetApp(r *http.Request) (*storage.DeployedApp, error) {
-	var req struct {
-		AppID string `json:"app_id"`
-	}
-	// init/complete 走 JSON body；兼容 form 提交
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		if err := decodeBody(r, &req); err != nil {
-			return nil, fmt.Errorf("invalid request body")
-		}
-	} else {
-		req.AppID = strings.TrimSpace(r.FormValue("app_id"))
-	}
-	if req.AppID == "" {
-		return nil, fmt.Errorf("app_id 不能为空")
-	}
-	app, err := h.apps.GetApp(r.Context(), req.AppID)
-	if err != nil {
-		return nil, fmt.Errorf("部署应用不存在")
-	}
-	return app, nil
 }
 
 // uploadServer 获取应用所属服务器的远程执行对象；服务器已删除时返回错误。
@@ -432,7 +410,7 @@ func (h *AppHandler) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(r.URL.Path, "/api/v1/apps/")
 	parts := strings.Split(p, "/")
 	if len(parts) == 0 || parts[0] == "" {
-		Fail(w, http.StatusNotFound, 404, "not found")
+		Fail(w, http.StatusNotFound, 404, "接口不存在")
 		return
 	}
 	app, err := h.apps.GetApp(r.Context(), parts[0])
@@ -448,14 +426,14 @@ func (h *AppHandler) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		case http.MethodDelete:
 			h.deleteApp(w, r, app)
 		default:
-			Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+			Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		}
 		return
 	}
 
 	srv, ok := h.store.Get(r.Context(), app.ServerID)
 	if !ok {
-		Fail(w, http.StatusNotFound, 404, "server not found")
+		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
 	rs := toRemoteServer(srv)
@@ -470,12 +448,19 @@ func (h *AppHandler) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	case "logs":
 		h.appLogs(w, r, app, rs)
 	default:
-		Fail(w, http.StatusNotFound, 404, "not found")
+		Fail(w, http.StatusNotFound, 404, "接口不存在")
 	}
 }
 
 // maxLastErrorLen 限制 last_error 存储长度，避免异常堆栈撑爆记录。
 const maxLastErrorLen = 2000
+
+// saveAppState 持久化应用状态变更；失败仅记日志（状态回写尽力而为，不向请求方叠加错误）。
+func (h *AppHandler) saveAppState(ctx context.Context, app *storage.DeployedApp, action string) {
+	if err := h.apps.UpdateApp(ctx, app); err != nil {
+		h.log.Errorw("save app state failed", "app", app.ID, "action", action, "error", err)
+	}
+}
 
 // markStartFailed 记录一次启动失败：置 failed 状态、保存原因并写入站内通知。
 func (h *AppHandler) markStartFailed(ctx context.Context, app *storage.DeployedApp, reason string) {
@@ -498,7 +483,7 @@ func (h *AppHandler) markStartFailed(ctx context.Context, app *storage.DeployedA
 // startApp: POST {id}/start 启动服务（先检测语言环境，缺失则提示安装）。
 func (h *AppHandler) startApp(w http.ResponseWriter, r *http.Request, app *storage.DeployedApp, rs *remote.Server) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	opCtx, cancel := appOpCtx()
@@ -513,50 +498,56 @@ func (h *AppHandler) startApp(w http.ResponseWriter, r *http.Request, app *stora
 	if err != nil {
 		h.log.Errorw("start app failed", "app", app.ID, "error", err)
 		h.markStartFailed(opCtx, app, err.Error())
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "服务启动失败", err)
 		return
 	}
 	app.PID = pid
 	app.Status = "running"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(opCtx, app)
+	h.saveAppState(opCtx, app, "start")
 	h.log.Infow("app started", "app", app.ID, "pid", pid)
 	OK(w, map[string]any{"status": "running", "pid": pid})
 }
 
-// stopApp: POST {id}/stop 停止服务。
+// stopApp: POST {id}/stop?confirm=true 停止服务。
 func (h *AppHandler) stopApp(w http.ResponseWriter, r *http.Request, app *storage.DeployedApp, rs *remote.Server) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+	if !requireQueryConfirm(w, r) {
 		return
 	}
 	opCtx, cancel := appOpCtx()
 	defer cancel()
 	if app.PID > 0 {
 		if err := h.remoteCollector.StopApp(opCtx, rs, app.PID); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, err.Error())
+			FailErr(w, http.StatusInternalServerError, "服务停止失败", err)
 			return
 		}
 	}
 	app.PID = 0
 	app.Status = "stopped"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(opCtx, app)
+	h.saveAppState(opCtx, app, "stop")
 	h.log.Infow("app stopped", "app", app.ID)
 	OK(w, map[string]string{"status": "stopped"})
 }
 
-// restartApp: POST {id}/restart 重启服务（先停旧进程再启动）。
+// restartApp: POST {id}/restart?confirm=true 重启服务（先停旧进程再启动）。
 func (h *AppHandler) restartApp(w http.ResponseWriter, r *http.Request, app *storage.DeployedApp, rs *remote.Server) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+	if !requireQueryConfirm(w, r) {
 		return
 	}
 	opCtx, cancel := appOpCtx()
 	defer cancel()
 	if app.PID > 0 {
 		if err := h.remoteCollector.StopApp(opCtx, rs, app.PID); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "停止旧进程失败: "+err.Error())
+			FailErr(w, http.StatusInternalServerError, "停止旧进程失败", err)
 			return
 		}
 	}
@@ -570,13 +561,13 @@ func (h *AppHandler) restartApp(w http.ResponseWriter, r *http.Request, app *sto
 	if err != nil {
 		h.log.Errorw("restart app failed", "app", app.ID, "error", err)
 		h.markStartFailed(opCtx, app, err.Error())
-		Fail(w, http.StatusInternalServerError, 500, err.Error())
+		FailErr(w, http.StatusInternalServerError, "服务启动失败", err)
 		return
 	}
 	app.PID = pid
 	app.Status = "running"
 	app.LastError = ""
-	_ = h.apps.UpdateApp(opCtx, app)
+	h.saveAppState(opCtx, app, "restart")
 	h.log.Infow("app restarted", "app", app.ID, "pid", pid)
 	OK(w, map[string]any{"status": "running", "pid": pid})
 }
@@ -584,7 +575,7 @@ func (h *AppHandler) restartApp(w http.ResponseWriter, r *http.Request, app *sto
 // appLogs: GET {id}/logs?lines=200 查看服务日志末尾。
 func (h *AppHandler) appLogs(w http.ResponseWriter, r *http.Request, app *storage.DeployedApp, rs *remote.Server) {
 	if r.Method != http.MethodGet {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	lines := 200
@@ -612,7 +603,7 @@ func (h *AppHandler) updateApp(w http.ResponseWriter, r *http.Request, app *stor
 		Remark    *string `json:"remark"`
 	}
 	if err := decodeBody(r, &req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
@@ -640,23 +631,26 @@ func (h *AppHandler) updateApp(w http.ResponseWriter, r *http.Request, app *stor
 		app.Remark = strings.TrimSpace(*req.Remark)
 	}
 	if err := h.apps.UpdateApp(r.Context(), app); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "更新部署记录失败: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "更新部署记录失败", err)
 		return
 	}
 	OK(w, app)
 }
 
-// deleteApp: DELETE {id} 删除部署应用（进程仍在运行时先尽力停止，失败不阻断删除）。
+// deleteApp: DELETE {id}?confirm=true 删除部署应用（进程仍在运行时先尽力停止，失败不阻断删除）。
 func (h *AppHandler) deleteApp(w http.ResponseWriter, r *http.Request, app *storage.DeployedApp) {
 	if r.Method != http.MethodDelete {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+	if !requireQueryConfirm(w, r) {
 		return
 	}
 	if srv, ok := h.store.Get(r.Context(), app.ServerID); ok && app.PID > 0 {
 		_ = h.remoteCollector.StopApp(r.Context(), toRemoteServer(srv), app.PID)
 	}
 	if err := h.apps.DeleteApp(r.Context(), app.ID); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "删除部署记录失败: "+err.Error())
+		FailErr(w, http.StatusInternalServerError, "删除部署记录失败", err)
 		return
 	}
 	h.log.Infow("app deleted", "app", app.ID)

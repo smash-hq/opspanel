@@ -10,7 +10,6 @@ import { request } from './http.js';
  */
 export async function fetchServers() {
     const json = await request('/servers');
-    if (json.code !== 0) throw new Error(json.message || '加载服务器列表失败');
     return json.data || [];
 }
 
@@ -25,7 +24,6 @@ export async function createServer(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '创建失败');
     return json.data;
 }
 
@@ -41,18 +39,16 @@ export async function updateServer(id, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '更新失败');
     return json.data;
 }
 
 /**
- * 删除服务器。
+ * 删除服务器（危险操作，需用户确认后携带 confirm 标记）。
  * @param {string} id - 服务器 ID
  * @returns {void}
  */
 export async function deleteServer(id) {
-    const json = await request(`/servers/${id}`, { method: 'DELETE' });
-    if (json.code !== 0) throw new Error(json.message || '删除失败');
+    await request(`/servers/${id}?confirm=true`, { method: 'DELETE' });
 }
 
 /**
@@ -62,7 +58,6 @@ export async function deleteServer(id) {
  */
 export async function loadServerInfo(serverId) {
     const json = await request(`/system/info?server=${encodeURIComponent(serverId)}`);
-    if (json.code !== 0) throw new Error(json.message || '获取服务器信息失败');
     return json.data;
 }
 
@@ -77,6 +72,5 @@ export async function testConnection(payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (json.code !== 0) throw new Error(json.message || '测试连接失败');
     return json.data;
 }

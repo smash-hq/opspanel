@@ -10,7 +10,6 @@ import { request } from './http.js';
  */
 export async function fetchSoftwareCatalog() {
     const json = await request('/software/catalog');
-    if (json.code !== 0) throw new Error(json.message || '加载软件目录失败');
     return json.data || [];
 }
 
@@ -21,7 +20,6 @@ export async function fetchSoftwareCatalog() {
  */
 export async function fetchSoftwareStatus(serverId) {
     const json = await request(`/software/status?server=${encodeURIComponent(serverId)}`);
-    if (json.code !== 0) throw new Error(json.message || '查询软件状态失败');
     return json.data || [];
 }
 
@@ -37,7 +35,6 @@ export async function installSoftware(serverId, packageId, version) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ server_id: serverId, package_id: packageId, version: version || '' }),
     });
-    if (json.code !== 0) throw new Error(json.message || '安装失败');
     return json.data;
 }
 
@@ -51,9 +48,8 @@ export async function uninstallSoftware(serverId, packageId) {
     const json = await request('/software/uninstall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, package_id: packageId }),
+        body: JSON.stringify({ server_id: serverId, package_id: packageId, confirm: true }),
     });
-    if (json.code !== 0) throw new Error(json.message || '卸载失败');
     return json.data;
 }
 
@@ -68,9 +64,8 @@ export async function controlService(serverId, packageId, action) {
     const json = await request('/software/service', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, package_id: packageId, action }),
+        body: JSON.stringify({ server_id: serverId, package_id: packageId, action, confirm: true }),
     });
-    if (json.code !== 0) throw new Error(json.message || '操作失败');
     return json.data;
 }
 
@@ -78,6 +73,5 @@ export async function controlService(serverId, packageId, action) {
 export async function fetchSoftwareLog(serverId, packageId, lines) {
     const params = new URLSearchParams({ server: serverId, package: packageId, lines: lines || 100 });
     const json = await request(`/software/logs?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取日志失败');
     return json.data;
 }

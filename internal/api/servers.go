@@ -42,7 +42,7 @@ func (h *ServersHandler) handleServers(w http.ResponseWriter, r *http.Request) {
 		servers, err := h.store.List(r.Context())
 		if err != nil {
 			h.log.Errorw("list servers failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to list servers")
+			FailErr(w, http.StatusInternalServerError, "获取服务器列表失败", err)
 			return
 		}
 		// 返回时清除敏感字段
@@ -54,23 +54,23 @@ func (h *ServersHandler) handleServers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var srv host.Server
 		if err := json.NewDecoder(r.Body).Decode(&srv); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if err := validateServer(&srv); err != nil {
-			Fail(w, http.StatusBadRequest, 400, err.Error())
+			FailErr(w, http.StatusBadRequest, "服务器配置不合法", err)
 			return
 		}
 		if err := h.store.Add(r.Context(), &srv); err != nil {
 			h.log.Errorw("add server failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "failed to add server")
+			FailErr(w, http.StatusInternalServerError, "新增服务器失败", err)
 			return
 		}
 		srv.Password = ""
 		OK(w, srv)
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -79,13 +79,13 @@ func (h *ServersHandler) handleServers(w http.ResponseWriter, r *http.Request) {
 // 成功时返回远程主机基本信息供预览。
 func (h *ServersHandler) handleTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 
 	var srv host.Server
 	if err := json.NewDecoder(r.Body).Decode(&srv); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *ServersHandler) handleTest(w http.ResponseWriter, r *http.Request) {
 
 	// 远程节点：校验必填字段后尝试 SSH 连接
 	if err := validateServer(&srv); err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "服务器配置不合法", err)
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 	// 从 URL 提取 ID: /api/v1/servers/{id}
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")
 	if id == "" {
-		Fail(w, http.StatusBadRequest, 400, "server id required")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server_id")
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 	case http.MethodPut:
 		var srv host.Server
 		if err := json.NewDecoder(r.Body).Decode(&srv); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		srv.ID = id // URL 中的 ID 优先
@@ -164,15 +164,15 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		if err := validateServer(&srv); err != nil {
-			Fail(w, http.StatusBadRequest, 400, err.Error())
+			FailErr(w, http.StatusBadRequest, "服务器配置不合法", err)
 			return
 		}
 		if err := h.store.Update(r.Context(), &srv); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				Fail(w, http.StatusNotFound, 404, "server not found")
+				Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 			} else {
 				h.log.Errorw("update server failed", "error", err)
-				Fail(w, http.StatusInternalServerError, 500, "failed to update server")
+				FailErr(w, http.StatusInternalServerError, "更新服务器配置失败", err)
 			}
 			return
 		}
@@ -182,8 +182,21 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 		OK(w, srv)
 
 	case http.MethodDelete:
+		if !requireQueryConfirm(w, r) {
+			return
+		}
+		// 本机节点是面板自身的锚点，绝不可删除
+		if id == host.LocalServerID {
+			Fail(w, http.StatusBadRequest, 400, "本机节点不可删除")
+			return
+		}
 		if err := h.store.Delete(r.Context(), id); err != nil {
-			Fail(w, http.StatusNotFound, 404, "server not found")
+			if errors.Is(err, os.ErrNotExist) {
+				Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
+			} else {
+				h.log.Errorw("delete server failed", "server", id, "error", err)
+				FailErr(w, http.StatusInternalServerError, "删除服务器配置失败", err)
+			}
 			return
 		}
 		// 优雅关闭该服务器的池化连接
@@ -191,7 +204,7 @@ func (h *ServersHandler) handleServerDetail(w http.ResponseWriter, r *http.Reque
 		OK(w, map[string]string{"deleted": id})
 
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -215,10 +228,10 @@ func validateServer(srv *host.Server) error {
 }
 
 var (
-	errEmptyName     = &validationError{"name is required"}
-	errInvalidType   = &validationError{"type must be 'local' or 'remote'"}
-	errEmptyHost     = &validationError{"host is required for remote server"}
-	errEmptyUsername = &validationError{"username is required for remote server"}
+	errEmptyName     = &validationError{"缺少必填参数：name（服务器名称）"}
+	errInvalidType   = &validationError{"参数不合法：type（仅支持 local / remote）"}
+	errEmptyHost     = &validationError{"缺少必填参数：host（远程服务器必填）"}
+	errEmptyUsername = &validationError{"缺少必填参数：username（远程服务器必填）"}
 )
 
 type validationError struct {

@@ -143,7 +143,10 @@ func (m *Manager) Install(ctx context.Context, srv *storage.Server, pkg *Package
 		if version != "" {
 			cmd = strings.ReplaceAll(cmd, "{{VERSION}}", version)
 		}
-		out := m.remote.RunWithSudo(ctx, client, cmd)
+		out, err := m.remote.RunWithSudoErr(ctx, client, cmd)
+		if err != nil {
+			return fmt.Errorf("安装 %s 执行失败（%s）: %w", pkg.ID, cmd, err)
+		}
 		m.log.Infow("install cmd", "pkg", pkg.ID, "cmd", cmd, "version", version, "out", out)
 	}
 
@@ -173,7 +176,10 @@ func (m *Manager) Uninstall(ctx context.Context, srv *storage.Server, pkg *Packa
 	defer m.remote.Release(srv.ID)
 
 	for _, cmd := range cmds {
-		out := m.remote.RunWithSudo(ctx, client, cmd)
+		out, err := m.remote.RunWithSudoErr(ctx, client, cmd)
+		if err != nil {
+			return fmt.Errorf("卸载 %s 执行失败（%s）: %w", pkg.ID, cmd, err)
+		}
 		m.log.Infow("uninstall cmd", "pkg", pkg.ID, "cmd", cmd, "out", out)
 	}
 
@@ -204,7 +210,10 @@ func (m *Manager) ServiceControl(ctx context.Context, srv *storage.Server, pkg *
 		return fmt.Errorf("service action %s not supported for %s", action, pkg.ID)
 	}
 
-	out := m.remote.RunWithSudo(ctx, client, cmd)
+	out, err := m.remote.RunWithSudoErr(ctx, client, cmd)
+	if err != nil {
+		return fmt.Errorf("服务 %s 执行 %s 失败: %w", pkg.ID, action, err)
+	}
 	m.log.Infow("service control", "pkg", pkg.ID, "action", action, "out", out)
 	return nil
 }

@@ -57,23 +57,23 @@ func (h *NotificationHandler) handleNotifications(w http.ResponseWriter, r *http
 		OK(w, map[string]any{"items": items, "unread": h.notifications.UnreadCount(r.Context())})
 	case http.MethodDelete:
 		if err := h.notifications.Clear(r.Context()); err != nil {
-			Fail(w, http.StatusInternalServerError, 500, "清空通知失败")
+			FailErr(w, http.StatusInternalServerError, "清空通知失败", err)
 			return
 		}
 		OK(w, map[string]string{"status": "cleared"})
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
 // handleMarkRead: POST 全部标记已读，返回最新未读数。
 func (h *NotificationHandler) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	if err := h.notifications.MarkAllRead(r.Context()); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "标记已读失败")
+		FailErr(w, http.StatusInternalServerError, "标记已读失败", err)
 		return
 	}
 	OK(w, map[string]int{"unread": 0})
@@ -87,7 +87,7 @@ func (h *NotificationHandler) handleMarkOneRead(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.notifications.MarkRead(r.Context(), id); err != nil {
-		Fail(w, http.StatusInternalServerError, 500, "标记已读失败")
+		FailErr(w, http.StatusInternalServerError, "标记已读失败", err)
 		return
 	}
 	OK(w, map[string]int{"unread": h.notifications.UnreadCount(r.Context())})
@@ -120,7 +120,7 @@ func (h *NotificationHandler) handleEmailConfig(w http.ResponseWriter, r *http.R
 			Encryption string `json:"encryption"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			Fail(w, http.StatusBadRequest, 400, "invalid request body")
+			FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 			return
 		}
 		if req.Port <= 0 {
@@ -142,20 +142,20 @@ func (h *NotificationHandler) handleEmailConfig(w http.ResponseWriter, r *http.R
 		keepPassword := req.Password == ""
 		if err := h.notifications.SaveEmailConfig(r.Context(), cfg, keepPassword); err != nil {
 			h.log.Errorw("save email config failed", "error", err)
-			Fail(w, http.StatusInternalServerError, 500, "保存邮件配置失败")
+			FailErr(w, http.StatusInternalServerError, "保存邮件配置失败", err)
 			return
 		}
 		masked, hasPassword := h.notifications.EmailConfigMasked(r.Context())
 		OK(w, map[string]any{"enabled": masked.Enabled, "has_password": hasPassword})
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
 // handleEmailTest: POST 发送测试邮件。body 可选 {to}, {password}(回传明文覆盖已存密码用于测试)。
 func (h *NotificationHandler) handleEmailTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
@@ -171,7 +171,7 @@ func (h *NotificationHandler) handleEmailTest(w http.ResponseWriter, r *http.Req
 	}
 	if err := h.notifications.SendTest(r.Context(), cfg, req.To); err != nil {
 		h.log.Errorw("send test email failed", "error", err)
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "测试邮件发送失败", err)
 		return
 	}
 	OK(w, map[string]string{"status": "sent"})

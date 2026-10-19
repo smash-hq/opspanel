@@ -66,7 +66,7 @@ func (h *CronHandler) handleJobs(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.handleCreate(w, r)
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 	}
 }
 
@@ -81,7 +81,7 @@ func (h *CronHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	doc, _, err := h.readCrontab(r.Context(), srv)
 	if err != nil {
 		h.log.Errorw("read crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "读取 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "读取 crontab 失败", err)
 		return
 	}
 
@@ -96,15 +96,15 @@ func (h *CronHandler) handleList(w http.ResponseWriter, r *http.Request) {
 func (h *CronHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var payload jobPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if strings.TrimSpace(payload.Command) == "" {
-		Fail(w, http.StatusBadRequest, 400, "执行命令不能为空")
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：command（执行命令）")
 		return
 	}
 	if err := cron.ValidateExpr(payload.Expr); err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "定时任务表达式不合法", err)
 		return
 	}
 
@@ -119,16 +119,16 @@ func (h *CronHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	doc, mode, err := h.readCrontab(r.Context(), srv)
 	if err != nil {
 		h.log.Errorw("read crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "读取 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "读取 crontab 失败", err)
 		return
 	}
 	if err := doc.AddJob(payload.Name, payload.Expr, payload.Command); err != nil {
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "定时任务参数不合法", err)
 		return
 	}
 	if err := h.writeCrontab(r.Context(), srv, mode, doc.Render()); err != nil {
 		h.log.Errorw("write crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "写回 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "写回 crontab 失败", err)
 		return
 	}
 	h.log.Infow("cron job created", "server", srv.ID, "expr", payload.Expr)
@@ -139,7 +139,7 @@ func (h *CronHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 func (h *CronHandler) handleJobItem(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/cron/jobs/")
 	if id == "" {
-		Fail(w, http.StatusNotFound, 404, "job not found")
+		Fail(w, http.StatusNotFound, 404, "定时任务不存在")
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *CronHandler) handleJobItem(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		handle = h.handleDelete
 	default:
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	handle(w, r, r.URL.Query().Get("server_id"), id)
@@ -160,12 +160,12 @@ func (h *CronHandler) handleJobItem(w http.ResponseWriter, r *http.Request) {
 func (h *CronHandler) handleUpdate(w http.ResponseWriter, r *http.Request, serverID, id string) {
 	var payload jobPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if strings.TrimSpace(payload.Expr) != "" {
 		if err := cron.ValidateExpr(payload.Expr); err != nil {
-			Fail(w, http.StatusBadRequest, 400, err.Error())
+			FailErr(w, http.StatusBadRequest, "定时任务表达式不合法", err)
 			return
 		}
 	}
@@ -181,7 +181,7 @@ func (h *CronHandler) handleUpdate(w http.ResponseWriter, r *http.Request, serve
 	doc, mode, err := h.readCrontab(r.Context(), srv)
 	if err != nil {
 		h.log.Errorw("read crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "读取 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "读取 crontab 失败", err)
 		return
 	}
 	if err := doc.UpdateJob(id, payload.Name, payload.Expr, payload.Command); err != nil {
@@ -189,7 +189,7 @@ func (h *CronHandler) handleUpdate(w http.ResponseWriter, r *http.Request, serve
 			Fail(w, http.StatusNotFound, 404, "定时任务不存在")
 			return
 		}
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "定时任务参数不合法", err)
 		return
 	}
 	if payload.Enabled != nil {
@@ -200,7 +200,7 @@ func (h *CronHandler) handleUpdate(w http.ResponseWriter, r *http.Request, serve
 	}
 	if err := h.writeCrontab(r.Context(), srv, mode, doc.Render()); err != nil {
 		h.log.Errorw("write crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "写回 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "写回 crontab 失败", err)
 		return
 	}
 	h.log.Infow("cron job updated", "server", srv.ID, "id", id)
@@ -220,7 +220,7 @@ func (h *CronHandler) handleDelete(w http.ResponseWriter, r *http.Request, serve
 	doc, mode, err := h.readCrontab(r.Context(), srv)
 	if err != nil {
 		h.log.Errorw("read crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "读取 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "读取 crontab 失败", err)
 		return
 	}
 	if err := doc.RemoveJob(id); err != nil {
@@ -228,12 +228,12 @@ func (h *CronHandler) handleDelete(w http.ResponseWriter, r *http.Request, serve
 			Fail(w, http.StatusNotFound, 404, "定时任务不存在")
 			return
 		}
-		Fail(w, http.StatusBadRequest, 400, err.Error())
+		FailErr(w, http.StatusBadRequest, "定时任务参数不合法", err)
 		return
 	}
 	if err := h.writeCrontab(r.Context(), srv, mode, doc.Render()); err != nil {
 		h.log.Errorw("write crontab failed", "server", srv.ID, "error", err)
-		Fail(w, http.StatusBadGateway, 502, "写回 crontab 失败: "+err.Error())
+		FailErr(w, http.StatusBadGateway, "写回 crontab 失败", err)
 		return
 	}
 	h.log.Infow("cron job deleted", "server", srv.ID, "id", id)
@@ -243,14 +243,14 @@ func (h *CronHandler) handleDelete(w http.ResponseWriter, r *http.Request, serve
 // handlePreview: POST /api/v1/cron/preview {"expr"} 计算后续 5 次执行时间。
 func (h *CronHandler) handlePreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		Fail(w, http.StatusMethodNotAllowed, 405, "method not allowed")
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
 		return
 	}
 	var req struct {
 		Expr string `json:"expr"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		FailErr(w, http.StatusBadRequest, "请求体解析失败", err)
 		return
 	}
 	if err := cron.ValidateExpr(req.Expr); err != nil {

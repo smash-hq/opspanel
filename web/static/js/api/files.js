@@ -2,13 +2,12 @@
  * files.js — 文件管理 API
  */
 
-import { request, API_PREFIX, notifyUnauthorized } from './http.js';
+import { request, API_PREFIX, notifyUnauthorized, ApiError } from './http.js';
 
 /** 列出目录内容。 */
 export async function fetchFiles(serverId, path) {
     const params = new URLSearchParams({ server: serverId, path: path || '/' });
     const json = await request(`/files?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '加载文件列表失败');
     // 新格式: { files: [...], sudo_used: bool }
     if (json.data && Array.isArray(json.data.files)) {
         return json.data;
@@ -21,7 +20,6 @@ export async function fetchFiles(serverId, path) {
 export async function fetchFileInfo(serverId, path) {
     const params = new URLSearchParams({ server: serverId, path });
     const json = await request(`/files/info?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '获取文件详情失败');
     return json.data;
 }
 
@@ -29,19 +27,35 @@ export async function fetchFileInfo(serverId, path) {
 export async function fetchFilePreview(serverId, path, lines) {
     const params = new URLSearchParams({ server: serverId, path, lines: lines || 100 });
     const json = await request(`/files/preview?${params}`);
-    if (json.code !== 0) throw new Error(json.message || '预览文件失败');
     return json.data;
 }
 
 /** 下载文件。 */
 export async function downloadFile(serverId, path) {
     const params = new URLSearchParams({ server: serverId, path });
-    const response = await fetch(`${API_PREFIX}/files/download?${params}`);
+    let response;
+    try {
+        response = await fetch(`${API_PREFIX}/files/download?${params}`);
+    } catch {
+        throw new ApiError('网络连接失败，文件下载中断');
+    }
     if (response.status === 401) {
         notifyUnauthorized();
-        throw new Error('未登录或会话已过期');
+        throw new ApiError('未登录或会话已过期');
     }
-    if (!response.ok) throw new Error('下载失败');
+    if (!response.ok) {
+        // 失败时后端返回 JSON 错误信封，透出 message + detail
+        let text = '';
+        try { text = await response.text(); } catch { /* 忽略读取失败 */ }
+        let msg = '文件下载失败';
+        let detail = '';
+        try {
+            const json = JSON.parse(text);
+            if (json && json.message) { msg = json.message; detail = json.detail || ''; }
+            else detail = text;
+        } catch { detail = text; }
+        throw new ApiError(msg, detail, response.status);
+    }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
