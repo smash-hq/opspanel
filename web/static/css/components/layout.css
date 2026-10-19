@@ -36,6 +36,100 @@
     animation: fadeIn 0.2s ease;
 }
 
+/* ─── 固定页头 + 列表内滚（进程/systemd/文件/Docker）─── */
+/* 节点详情改为纵向 flex：Tab 标签栏（面包屑）固定，不随列表滚动 */
+.node-detail {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.node-detail > .node-breadcrumb {
+    flex-shrink: 0;
+}
+
+/* 长列表 Tab：页头固定，仅列表区域滚动 */
+.node-tab-content.tab-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 各页头部：概览卡/工具栏/筛选栏/文件路径面包屑/Docker 信息栏 */
+.tab-scroll .process-overview,
+.tab-scroll .process-toolbar,
+.tab-scroll .file-sudo-warning,
+.tab-scroll .file-breadcrumb,
+.tab-scroll .file-toolbar,
+.tab-scroll .docker-header,
+.tab-scroll .docker-tabs,
+.tab-scroll .loading-state,
+.tab-scroll .list-empty {
+    flex-shrink: 0;
+}
+
+/* 进程/systemd：表格内滚，表头吸顶 */
+.tab-scroll .process-table {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.tab-scroll .process-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+/* 文件管理：分组标题固定，表格内滚，表头吸顶 */
+.tab-scroll .file-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tab-scroll .file-section-title {
+    flex-shrink: 0;
+}
+
+.tab-scroll .file-table {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.tab-scroll .file-table-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+/* Docker：子页纵向 flex，工具栏固定、列表内滚 */
+.tab-scroll .docker-sub-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.docker-sub-pane > * {
+    flex-shrink: 0;
+}
+
+.docker-sub-pane .docker-image-list,
+.docker-sub-pane .docker-container-list,
+.docker-sub-pane .mirror-sources-table {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 /* ─── 空状态 ─── */
 .empty-state-view {
     display: flex;

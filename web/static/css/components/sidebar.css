@@ -386,8 +386,8 @@
 /* 面包屑与内容分割线 */
 .node-tab-content {
     border-top: 2px solid var(--card-border, #e2e8f0);
-    padding-top: 20px;
-    margin-top: 16px;
+    padding-top: 12px;
+    margin-top: 10px;
 }
 
 @media (max-width: 768px) {

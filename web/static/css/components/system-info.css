@@ -2,8 +2,8 @@
 .info-cards {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    margin-top: 20px;
+    gap: 12px;
+    margin-top: 12px;
 }
 
 .info-card {
@@ -22,7 +22,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 18px;
+    padding: 10px 14px;
     background: var(--content-bg, #f1f5f9);
     border-bottom: 1px solid var(--card-border, #e2e8f0);
 }
@@ -39,14 +39,14 @@
 }
 
 .info-card-body {
-    padding: 12px 18px;
+    padding: 6px 14px 10px;
 }
 
 .info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 6px 0;
     border-bottom: 1px solid var(--card-border, #e2e8f0);
     font-size: 0.85rem;
 }
@@ -77,7 +77,7 @@
 
 /* 磁盘卡片 */
 .disk-card-row {
-    padding: 10px 0;
+    padding: 8px 0;
     border-bottom: 1px solid var(--card-border, #e2e8f0);
 }
 

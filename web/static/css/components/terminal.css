@@ -80,6 +80,187 @@
     box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
 }
 
+/* 终端 + 常用命令面板横向布局：高度锚定在布局容器，面板内部滚动 */
+.terminal-layout {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    height: calc(100vh - 260px);
+    min-height: 420px;
+    max-height: 760px;
+}
+
+.terminal-layout .terminal-wrap {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    max-height: none;
+}
+
+/* ─── 常用命令面板（右侧分类菜单）─── */
+.cmd-panel {
+    width: 256px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.cmd-panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--card-border, #e2e8f0);
+}
+
+.cmd-search {
+    margin: 10px 10px 6px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    color: var(--text-primary, #0f172a);
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cmd-search:focus {
+    border-color: var(--color-blue, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.cmd-search::placeholder {
+    color: var(--text-muted, #94a3b8);
+}
+
+.cmd-groups {
+    flex: 1;
+    min-height: 0;      /* 允许 flex 子项收缩，命令多时在面板内滚动 */
+    overflow-y: auto;
+    padding: 4px 6px 10px;
+    scrollbar-width: thin;
+}
+
+.cmd-groups::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cmd-groups::-webkit-scrollbar-thumb {
+    background: var(--card-border, #cbd5e1);
+    border-radius: 3px;
+}
+
+.cmd-group + .cmd-group {
+    margin-top: 2px;
+}
+
+.cmd-group-head {
+    position: sticky;       /* 滚动时当前分类标题吸顶，滚出该组才被下一组顶走 */
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    background: var(--card-bg, #ffffff);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.cmd-group-head:hover {
+    background: var(--bg-secondary, #f1f5f9);
+    color: var(--text-primary, #0f172a);
+}
+
+.cmd-group-arrow {
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+    transition: transform 0.15s;
+}
+
+.cmd-group-arrow.open {
+    transform: rotate(90deg);
+}
+
+.cmd-group-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0 4px 4px 6px;
+}
+
+.cmd-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 6px 8px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.cmd-item:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+.cmd-item code {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 0.74rem;
+    color: var(--color-blue, #2563eb);
+    word-break: break-all;
+    white-space: normal;
+    line-height: 1.4;
+}
+
+.cmd-item-desc {
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+    line-height: 1.3;
+}
+
+.cmd-empty {
+    padding: 20px 10px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+/* 窄屏时命令面板移到终端下方 */
+@media (max-width: 1100px) {
+    .terminal-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: 0;
+    }
+
+    .terminal-layout .terminal-wrap {
+        height: 60vh;
+        max-height: none;
+    }
+
+    .cmd-panel {
+        width: auto;
+        height: 300px;
+    }
+}
+
 .terminal-wrap .xterm {
     height: 100%;
     padding: 8px 4px 8px 10px;

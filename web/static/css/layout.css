@@ -686,8 +686,8 @@
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 12px;
 }
 
 /* ─── 仪表板三列网格 ─── */

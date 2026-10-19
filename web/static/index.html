@@ -547,7 +547,7 @@
                     <button class="bc-tab" :class="{ active: activeTab === 'software' }" @click="activeTab = 'software'">软件管理</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'apps' }" @click="onAppsTabClick()">服务部署</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'docker', disabled: !dockerTabEnabled }" @click="onDockerTabClick()" :title="dockerTabEnabled ? '' : '未检测到 Docker 环境，点击重新检测'">Docker</button>
-                    <button class="bc-tab" :class="{ active: activeTab === 'terminal', disabled: selectedServer === 'srv_local' || !selectedServer }" @click="openTerminalTab()" :title="selectedServer === 'srv_local' ? '本地节点暂不支持终端' : ''">终端</button>
+                    <button class="bc-tab" :class="{ active: activeTab === 'terminal', disabled: selectedServer === 'srv_local' || !selectedServer }" @click="openTerminalTab()" :title="selectedServer === 'srv_local' ? '本地节点暂不支持终端' : ''">Terminal</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'cron' }" @click="activeTab = 'cron'; loadCronJobs()">定时任务</button>
                     <button class="bc-tab" :class="{ active: activeTab === 'gpu' }" @click="activeTab = 'gpu'; loadGpu()">GPU</button>
                     <button class="bc-tab disabled" title="即将推出">集群管理</button>
@@ -831,7 +831,7 @@
                 </div>
 
                 <!-- 进程管理 Tab -->
-                <div v-if="activeTab === 'process'" class="node-tab-content">
+                <div v-if="activeTab === 'process'" class="node-tab-content tab-scroll">
                     <!-- 系统概览 -->
                     <div class="process-overview" v-if="hasInfo">
                         <div class="overview-card">
@@ -888,7 +888,7 @@
                 </div>
 
                 <!-- 服务管理 Tab（systemd） -->
-                <div v-if="activeTab === 'services'" class="node-tab-content">
+                <div v-if="activeTab === 'services'" class="node-tab-content tab-scroll">
                     <div class="process-toolbar">
                         <div class="service-toolbar-left">
                             <h3>systemd 服务</h3>
@@ -939,7 +939,7 @@
                 </div>
 
                 <!-- 文件管理 Tab -->
-                <div v-if="activeTab === 'files'" class="node-tab-content">
+                <div v-if="activeTab === 'files'" class="node-tab-content tab-scroll">
                     <!-- 权限警告 -->
                     <div v-if="fileSudoWarning" class="file-sudo-warning">
                         <span class="warning-icon">⚠</span>
@@ -1060,7 +1060,7 @@
                 </div>
 
                 <!-- Docker 管理 Tab -->
-                <div v-if="activeTab === 'docker'" class="node-tab-content">
+                <div v-if="activeTab === 'docker'" class="node-tab-content tab-scroll">
                     <!-- Docker 信息栏 -->
                     <div class="docker-header">
                         <div class="docker-info">
@@ -1080,7 +1080,7 @@
                         <button class="docker-tab" :class="{ active: dockerSubTab === 'mirror' }" @click="dockerSubTab = 'mirror'; loadServerMirror(); loadDockerSources()">镜像源管理</button>
                     </div>
                     <!-- 镜像管理 -->
-                    <div v-if="dockerSubTab === 'images'">
+                    <div v-if="dockerSubTab === 'images'" class="docker-sub-pane">
                         <div class="docker-toolbar">
                             <input v-model="dockerPullInput" placeholder="输入镜像名，如：nginx:latest" @keyup.enter="dockerPullImage(dockerPullInput); dockerPullInput = ''">
                             <button class="primary-button small" @click="dockerPullImage(dockerPullInput); dockerPullInput = ''">⬇ 拉取</button>
@@ -1110,7 +1110,7 @@
                         </div>
                     </div>
                     <!-- 容器管理 -->
-                    <div v-if="dockerSubTab === 'containers'">
+                    <div v-if="dockerSubTab === 'containers'" class="docker-sub-pane">
                         <div class="docker-toolbar">
                             <label class="show-all-label">
                                 <input type="checkbox" v-model="dockerShowAll" @change="loadDockerContainers(dockerShowAll)"> 显示已停止
@@ -1159,7 +1159,7 @@
                         </div>
                     </div>
                     <!-- 镜像源管理 -->
-                    <div v-if="dockerSubTab === 'mirror'">
+                    <div v-if="dockerSubTab === 'mirror'" class="docker-sub-pane">
                         <!-- 服务器当前镜像源 -->
                         <div class="mirror-server-panel" v-if="selectedServer !== 'srv_local'">
                             <div class="mirror-section-header">
@@ -1255,7 +1255,28 @@
                         <button class="toolbar-button" v-if="terminalStatus === 'connected'" @click="disconnectTerminal">⏻ 断开</button>
                         <button class="toolbar-button" v-else @click="reconnectTerminal">↻ 重新连接</button>
                     </div>
-                    <div class="terminal-wrap" ref="terminalMount"></div>
+                    <div class="terminal-layout">
+                        <div class="terminal-wrap" ref="terminalMount"></div>
+                        <aside class="cmd-panel">
+                            <div class="cmd-panel-title">常用命令</div>
+                            <input class="cmd-search" v-model="cmdSearch" placeholder="搜索命令或说明..." />
+                            <div class="cmd-groups">
+                                <div class="cmd-group" v-for="g in visibleCmdGroups" :key="g.id">
+                                    <button class="cmd-group-head" @click="toggleCmdGroup(g.id)">
+                                        <span>{{ g.name }}</span>
+                                        <span class="cmd-group-arrow" :class="{ open: g.open }">▸</span>
+                                    </button>
+                                    <div class="cmd-group-body" v-show="g.open">
+                                        <button class="cmd-item" v-for="item in g.commands" :key="item.c" @click="sendCommand(item.c)" :title="item.c">
+                                            <code>{{ item.c }}</code>
+                                            <span class="cmd-item-desc">{{ item.d }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="cmd-empty" v-if="!visibleCmdGroups.length">无匹配命令</div>
+                            </div>
+                        </aside>
+                    </div>
                 </div>
 
                 <!-- 定时任务 Tab -->
