@@ -75,6 +75,7 @@ export function setupAuth(ctx) {
         ctx.loadServers();
         ctx.loadSoftwareCatalog();
         ctx.loadSources();
+        ctx.loadDockerSources();
         ctx.loadSettings();
         ctx.loadLanguages();
     }

@@ -269,7 +269,7 @@
                         <span class="config-menu-label">软件源</span>
                         <span class="config-menu-badge">{{ sources.length }}</span>
                     </div>
-                    <div class="config-menu-item" :class="{ active: configTab === 'docker-sources' }" @click="configTab = 'docker-sources'; loadDockerSources()">
+                    <div class="config-menu-item" :class="{ active: configTab === 'docker-sources' }" @click="configTab = 'docker-sources'">
                         <span class="config-menu-label">Docker 镜像源</span>
                         <span class="config-menu-badge">{{ dockerSources.length }}</span>
                     </div>
@@ -1267,10 +1267,26 @@
                                         <span class="cmd-group-arrow" :class="{ open: g.open }">▸</span>
                                     </button>
                                     <div class="cmd-group-body" v-show="g.open">
-                                        <button class="cmd-item" v-for="item in g.commands" :key="item.c" @click="sendCommand(item.c)" :title="item.c">
-                                            <code>{{ item.c }}</code>
-                                            <span class="cmd-item-desc">{{ item.d }}</span>
-                                        </button>
+                                        <template v-if="g.subgroups">
+                                            <div class="cmd-group cmd-subgroup" v-for="s in g.subgroups" :key="s.id">
+                                                <button class="cmd-group-head" @click="toggleCmdGroup(s.id)">
+                                                    <span>{{ s.name }}</span>
+                                                    <span class="cmd-group-arrow" :class="{ open: s.open }">▸</span>
+                                                </button>
+                                                <div class="cmd-group-body" v-show="s.open">
+                                                    <button class="cmd-item" v-for="item in s.commands" :key="item.c" @click="sendCommand(item.c)" :title="item.c">
+                                                        <code>{{ item.c }}</code>
+                                                        <span class="cmd-item-desc">{{ item.d }}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <button class="cmd-item" v-for="item in g.commands" :key="item.c" @click="sendCommand(item.c)" :title="item.c">
+                                                <code>{{ item.c }}</code>
+                                                <span class="cmd-item-desc">{{ item.d }}</span>
+                                            </button>
+                                        </template>
                                     </div>
                                 </div>
                                 <div class="cmd-empty" v-if="!visibleCmdGroups.length">无匹配命令</div>

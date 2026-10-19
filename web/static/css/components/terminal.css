@@ -200,6 +200,18 @@
     padding: 0 4px 4px 6px;
 }
 
+/* 命令面板二级分组（GPU/NPU 下属厂家）：左缩进 + 竖线标识层级 */
+.cmd-subgroup {
+    margin: 2px 0 2px 8px;
+    padding-left: 6px;
+    border-left: 2px solid var(--card-border, #cbd5e1);
+}
+
+.cmd-subgroup .cmd-group-head {
+    position: static;   /* 二级组头不吸顶，避免滚动时叠在一级组头之上 */
+    font-size: 0.74rem;
+}
+
 .cmd-item {
     display: flex;
     flex-direction: column;

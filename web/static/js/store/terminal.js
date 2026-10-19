@@ -34,7 +34,47 @@ export function setupTerminal(ctx) {
                 { c: 'cat /etc/os-release', d: '系统发行版' },
                 { c: 'w', d: '当前登录用户' },
                 { c: 'last | head -20', d: '最近登录记录' },
+            ],
+        },
+        {
+            id: 'time', name: '时间与时区',
+            commands: [
                 { c: 'date', d: '系统时间' },
+                { c: "date '+%Y-%m-%d %H:%M:%S %Z'", d: '格式化时间与时区' },
+                { c: 'date +%s', d: 'Unix 时间戳' },
+                { c: 'date -d @<timestamp>', d: '时间戳转日期' },
+                { c: 'timedatectl', d: '时间/时区/NTP 同步状态' },
+                { c: 'timedatectl list-timezones', d: '可用时区列表' },
+                { c: 'timedatectl set-timezone Asia/Shanghai', d: '设置时区为上海' },
+                { c: 'hwclock --show', d: '硬件时钟 (RTC)' },
+                { c: 'chronyc sources -v', d: 'NTP 同步源 (chrony)' },
+                { c: 'ntpq -p', d: 'NTP 对端状态 (经典)' },
+                { c: 'cal', d: '本月日历' },
+            ],
+        },
+        {
+            id: 'cpu', name: 'CPU',
+            commands: [
+                { c: 'lscpu', d: 'CPU 架构与核心信息' },
+                { c: 'grep "model name" /proc/cpuinfo | head -1', d: 'CPU 型号' },
+                { c: 'lscpu -e', d: 'CPU 拓扑明细 (核心/插槽/NUMA)' },
+                { c: 'grep MHz /proc/cpuinfo', d: '各核心当前频率' },
+                { c: 'mpstat -P ALL 1 3', d: '各核心利用率 (sysstat)' },
+                { c: 'pidstat -u 1 3', d: '进程级 CPU 占用统计' },
+                { c: 'numactl --hardware', d: 'NUMA 拓扑' },
+                { c: 'taskset -pc <pid>', d: '进程 CPU 亲和性' },
+                { c: 'sensors', d: 'CPU 温度传感器' },
+            ],
+        },
+        {
+            id: 'hardware', name: '硬件信息',
+            commands: [
+                { c: 'lsusb', d: 'USB 设备' },
+                { c: 'lspci | grep -iE "vga|3d|npu|co-processor"', d: '显卡/NPU 设备' },
+                { c: 'lspci -tv', d: 'PCI 拓扑树' },
+                { c: 'dmidecode -t memory | grep -E "Size|Speed"', d: '内存条规格' },
+                { c: 'dmidecode -t bios', d: 'BIOS 信息' },
+                { c: 'dmesg | tail -50', d: '内核最近消息' },
             ],
         },
         {
@@ -143,20 +183,6 @@ export function setupTerminal(ctx) {
             ],
         },
         {
-            id: 'hardware', name: '硬件与 GPU',
-            commands: [
-                { c: 'lscpu', d: 'CPU 信息' },
-                { c: 'lsusb', d: 'USB 设备' },
-                { c: 'lspci | grep -iE "vga|3d"', d: '显卡设备' },
-                { c: 'nvidia-smi', d: 'GPU 状态' },
-                { c: 'watch -n 1 nvidia-smi', d: 'GPU 状态持续刷新' },
-                { c: 'nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv', d: 'GPU 显存 CSV' },
-                { c: 'dmesg | tail -50', d: '内核最近消息' },
-                { c: 'sensors', d: '温度传感器' },
-                { c: 'dmidecode -t memory | grep -E "Size|Speed"', d: '内存条规格' },
-            ],
-        },
-        {
             id: 'pkg', name: '软件包',
             commands: [
                 { c: 'yum install <pkg>', d: 'yum 安装' },
@@ -170,22 +196,125 @@ export function setupTerminal(ctx) {
                 { c: 'dpkg -l | grep <kw>', d: 'deb 包搜索' },
             ],
         },
+        {
+            id: 'gpu', name: 'GPU', subgroups: [
+                {
+                    id: 'gpu-probe', name: '通用探测',
+                    commands: [
+                        { c: 'for c in nvidia-smi npu-smi cnmon rocm-smi mthreads-gmi ixsmi mx-smi amd-smi xpu-smi; do command -v $c >/dev/null && echo "$c 已安装"; done', d: '探测已装 GPU/NPU 管理工具' },
+                        { c: 'lspci | grep -iE "nvidia|vga|3d|display|accel|co-processor"', d: 'PCI 显卡/加速设备' },
+                        { c: 'ls /dev | grep -iE "nvidia|davinci|mlu|musa|maca"', d: 'GPU 设备节点' },
+                        { c: 'fuser -v /dev/nvidia*', d: '查看 GPU 占用进程' },
+                    ],
+                },
+                {
+                    id: 'gpu-nvidia', name: 'NVIDIA',
+                    commands: [
+                        { c: 'nvidia-smi', d: 'GPU 总览(利用率/显存/温度)' },
+                        { c: 'nvidia-smi -l 1', d: '每秒刷新实时监控' },
+                        { c: 'nvidia-smi -q -d TEMPERATURE', d: '温度详情' },
+                        { c: 'nvidia-smi -q -d POWER', d: '功耗详情' },
+                        { c: 'nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total --format=csv', d: '自定义字段汇总' },
+                    ],
+                },
+                {
+                    id: 'gpu-hygon', name: '海光 DCU',
+                    commands: [
+                        { c: 'rocm-smi', d: 'DCU 总览' },
+                        { c: 'hy-smi', d: '海光自研工具总览' },
+                        { c: 'rocm-smi --showtemp', d: 'DCU 温度' },
+                        { c: 'rocm-smi --showuse --showmemuse', d: '利用率与显存占用' },
+                    ],
+                },
+                {
+                    id: 'gpu-moore', name: '摩尔线程',
+                    commands: [
+                        { c: 'mthreads-gmi', d: 'GPU 总览' },
+                        { c: 'mthreads-gmi -q', d: '详细信息(含温度功耗)' },
+                        { c: 'watch -n1 mthreads-gmi', d: '实时监控' },
+                    ],
+                },
+                {
+                    id: 'gpu-iluvatar', name: '天数智芯',
+                    commands: [
+                        { c: 'ixsmi', d: 'GPU 总览' },
+                        { c: 'ixsmi -q', d: '详细信息(含温度功耗)' },
+                        { c: 'watch -n1 ixsmi', d: '实时监控' },
+                    ],
+                },
+                {
+                    id: 'gpu-metax', name: '沐曦',
+                    commands: [
+                        { c: 'mx-smi', d: 'GPU 总览' },
+                        { c: 'watch -n1 mx-smi', d: '实时监控' },
+                    ],
+                },
+                {
+                    id: 'gpu-amd', name: 'AMD',
+                    commands: [
+                        { c: 'amd-smi', d: 'GPU 总览' },
+                        { c: 'amd-smi metric', d: '实时指标(温度/功耗/利用率)' },
+                    ],
+                },
+                {
+                    id: 'gpu-intel', name: 'Intel',
+                    commands: [
+                        { c: 'xpu-smi discovery', d: 'GPU 设备发现' },
+                        { c: 'xpu-smi stats -d 0', d: '设备 0 实时统计' },
+                    ],
+                },
+            ],
+        },
+        {
+            id: 'npu', name: 'NPU', subgroups: [
+                {
+                    id: 'npu-ascend', name: '华为昇腾',
+                    commands: [
+                        { c: 'npu-smi info', d: 'NPU 总览' },
+                        { c: 'npu-smi info -l', d: 'NPU 设备列表' },
+                        { c: 'npu-smi info -t board -i 0', d: '卡板信息' },
+                        { c: 'npu-smi info -t usages -i 0', d: '利用率与显存' },
+                        { c: 'npu-smi info -t temp -i 0', d: 'NPU 温度' },
+                        { c: 'npu-smi info -t power -i 0', d: 'NPU 功耗' },
+                        { c: 'watch -n1 npu-smi info', d: '实时监控' },
+                    ],
+                },
+                {
+                    id: 'npu-cambricon', name: '寒武纪 MLU',
+                    commands: [
+                        { c: 'cnmon', d: 'NPU 总览' },
+                        { c: 'cnmon info', d: '详细信息(含温度功耗)' },
+                        { c: 'cnmon info -c 0', d: '指定卡详情' },
+                        { c: 'watch -n1 cnmon', d: '实时监控' },
+                    ],
+                },
+            ],
+        },
     ]);
     const cmdSearch = ref('');
     const cmdGroupOpen = ref({});          // 分组折叠状态，默认全部收起
 
-    // 按关键字过滤（匹配命令或说明）；搜索时忽略折叠状态全部展开
+    // 按关键字过滤（匹配命令或说明），支持二级分组；搜索时父子全部展开
     const visibleCmdGroups = computed(() => {
         const kw = cmdSearch.value.trim().toLowerCase();
+        const match = x => x.c.toLowerCase().includes(kw) || x.d.toLowerCase().includes(kw);
+        const filterCmds = list => (kw ? list.filter(match) : list);
         return commandGroups.value
             .map(g => {
-                const commands = kw
-                    ? g.commands.filter(x => x.c.toLowerCase().includes(kw) || x.d.toLowerCase().includes(kw))
-                    : g.commands;
                 const open = kw ? true : cmdGroupOpen.value[g.id] === true;
-                return { ...g, commands, open };
+                if (g.subgroups) {
+                    const subgroups = g.subgroups
+                        .map(s => ({
+                            ...s,
+                            commands: filterCmds(s.commands),
+                            open: kw ? true : cmdGroupOpen.value[s.id] === true,
+                        }))
+                        .filter(s => s.commands.length);
+                    return { ...g, commands: [], subgroups, open };
+                }
+                return { ...g, commands: filterCmds(g.commands), open };
             })
-            .filter(g => g.commands.length);
+            .filter(g => (g.subgroups ? g.subgroups.length : g.commands.length));
     });
 
     function toggleCmdGroup(id) {
