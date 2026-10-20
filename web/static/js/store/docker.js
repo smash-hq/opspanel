@@ -8,7 +8,7 @@ import { t } from '../i18n/index.js';
 
 
 import {
-    checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage,
+    checkDocker, fetchDockerImages, pullDockerImage, fetchDockerPullJob, removeDockerImage,
     runDockerContainer,
     fetchDockerContainers, dockerContainerAction as apiDockerContainerAction,
     removeDockerContainer, fetchDockerLogs,
@@ -16,7 +16,7 @@ import {
     batchDeleteDockerImages, batchDockerContainerAction,
 } from '../api/docker.js';
 
-const { ref, reactive, computed } = window.Vue;
+const { ref, reactive, computed, nextTick } = window.Vue;
 
 export function setupDocker(ctx) {
     // ─── Docker 管理 ───
@@ -107,6 +107,81 @@ export function setupDocker(ctx) {
     // Docker 镜像 reference 格式：[host[:port]/]repo[/repo...][:tag][@digest]
     const imageRefPattern = /^(?:(?:localhost|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+)(?::\d{1,5})?\/)?[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*(?::[\w][\w.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:[0-9a-fA-F]{32,})?$/;
 
+    // ─── 镜像拉取进度：任务在服务端异步执行，前端轮询任务日志实时展示 ───
+    const dockerPullLogVisible = ref(false);
+    const dockerPullLog = ref('');
+    const dockerPullImageName = ref('');
+    const dockerPullStatus = ref(''); // pulling | ok | error
+    const dockerPullLogViewer = ref(null); // 弹窗日志容器，用于自动滚动
+    let pullJobTimer = null;
+    let pullJobOffset = 0; // 已展示的日志长度（增量追加）
+    let pullJobTarget = null; // { serverId, image }
+
+    const dockerPullStatusText = computed(() => {
+        if (dockerPullStatus.value === 'pulling') return t('拉取中...');
+        if (dockerPullStatus.value === 'ok') return t('拉取完成');
+        if (dockerPullStatus.value === 'error') return t('拉取失败');
+        return '';
+    });
+
+    function appendPullLog(text) {
+        dockerPullLog.value += text;
+        nextTick(() => {
+            const el = dockerPullLogViewer.value;
+            if (el) el.scrollTop = el.scrollHeight;
+        });
+    }
+
+    function stopPullJobPoll() {
+        if (pullJobTimer) {
+            clearInterval(pullJobTimer);
+            pullJobTimer = null;
+        }
+    }
+
+    /** 轮询一次拉取任务；结束时刷新镜像列表并弹 toast（通知中心另有站内/邮件通知）。 */
+    async function pollPullJob() {
+        if (!pullJobTarget) return;
+        const { serverId, image } = pullJobTarget;
+        try {
+            const data = await fetchDockerPullJob(serverId, image);
+            if (typeof data.log === 'string' && data.log.length > pullJobOffset) {
+                appendPullLog(data.log.slice(pullJobOffset));
+                pullJobOffset = data.log.length;
+            }
+            if (data.status === 'success') {
+                dockerPullStatus.value = 'ok';
+                stopPullJobPoll();
+                ctx.toastNotify(t('镜像拉取成功: ') + image);
+                loadDockerImages();
+            } else if (data.status === 'error') {
+                dockerPullStatus.value = 'error';
+                stopPullJobPoll();
+                ctx.toastNotify(t('拉取失败: ') + (data.error || ''), true);
+                loadDockerImages();
+            } else if (data.status === 'none') {
+                appendPullLog('\n==> ' + t('任务不存在（面板可能已重启），请重试') + '\n');
+                dockerPullStatus.value = 'error';
+                stopPullJobPoll();
+            }
+        } catch {
+            // 单次查询失败不打断轮询
+        }
+    }
+
+    function startPullJobPoll(serverId, image) {
+        stopPullJobPoll();
+        pullJobOffset = 0;
+        pullJobTarget = { serverId, image };
+        pollPullJob();
+        pullJobTimer = setInterval(pollPullJob, 1500);
+    }
+
+    /** 手动立即刷新一次任务日志（弹窗工具栏按钮）。 */
+    function refreshPullLog() {
+        pollPullJob();
+    }
+
     async function dockerPullImage() {
         if (!ctx.selectedServer.value) return;
         const image = dockerPullInput.value.trim();
@@ -119,10 +194,15 @@ export function setupDocker(ctx) {
             return;
         }
         try {
-            await pullDockerImage(ctx.selectedServer.value, image);
+            const serverId = ctx.selectedServer.value;
+            await pullDockerImage(serverId, image);
             dockerPullInput.value = '';
-            ctx.toastNotify(t('正在拉取镜像: ') + image);
-            setTimeout(() => loadDockerImages(), 5000);
+            // 打开进度弹窗并开始轮询；弹窗可关闭，任务与轮询在后台继续
+            dockerPullImageName.value = image;
+            dockerPullStatus.value = 'pulling';
+            dockerPullLog.value = '';
+            dockerPullLogVisible.value = true;
+            startPullJobPoll(serverId, image);
         } catch (err) {
             ctx.toastNotify(t('拉取失败: ') + err.message, true);
         }
@@ -378,6 +458,8 @@ export function setupDocker(ctx) {
         dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror, mirrorSelectMode,
         selectedImages, selectedContainers, batchActionLoading,
         dockerRunVisible, dockerRunLoading, dockerRunData,
+        dockerPullLogVisible, dockerPullLog, dockerPullImageName,
+        dockerPullStatus, dockerPullStatusText, dockerPullLogViewer, refreshPullLog,
         dockerFilesVisible, dockerFilesLoading, dockerFilesData,
         dockerPreviewVisible, dockerPreviewLoading, dockerPreviewData,
         openDockerFiles, loadDockerFiles, sortedDockerFiles, dockerFileCrumbs,

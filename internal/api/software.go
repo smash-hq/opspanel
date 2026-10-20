@@ -10,6 +10,7 @@ import (
 
 	"github.com/smash-hq/opspanel/internal/host"
 	"github.com/smash-hq/opspanel/internal/logger"
+	"github.com/smash-hq/opspanel/internal/notify"
 	"github.com/smash-hq/opspanel/internal/remote"
 	"github.com/smash-hq/opspanel/internal/software"
 	"github.com/smash-hq/opspanel/internal/storage"
@@ -26,6 +27,7 @@ type SoftwareHandler struct {
 	manager         *software.Manager
 	remoteCollector *remote.RemoteCollector
 	db              *storage.DB
+	notifications   *notify.Notifier
 }
 
 // NewSoftwareHandler 创建软件管理处理器。
@@ -37,6 +39,7 @@ func NewSoftwareHandler(log *logger.Logger, store *host.Store, swStore *storage.
 		manager:         software.NewManager(log),
 		remoteCollector: remote.NewRemoteCollector(log),
 		db:              db,
+		notifications:   notify.New(db, log),
 	}
 }
 
@@ -83,6 +86,7 @@ func (h *SoftwareHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/docker", h.handleDockerCheck)                           // GET ?server= Docker 环境检测
 	mux.HandleFunc("/api/v1/docker/images", h.handleDockerImages)                   // GET ?server= 镜像列表
 	mux.HandleFunc("/api/v1/docker/images/pull", h.handleDockerPull)                // POST 拉取镜像
+	mux.HandleFunc("/api/v1/docker/images/pull/job", h.handleDockerPullJob)         // GET ?server=&image= 拉取任务进度
 	mux.HandleFunc("/api/v1/docker/images/", h.handleDockerImageDetail)             // DELETE 删除镜像
 	mux.HandleFunc("/api/v1/docker/images/batch-delete", h.handleBatchDeleteImages) // POST 批量删除镜像
 	mux.HandleFunc("/api/v1/docker/run", h.handleDockerRun)                         // POST 一键启动容器
@@ -483,6 +487,8 @@ func (h *SoftwareHandler) handleDockerImages(w http.ResponseWriter, r *http.Requ
 }
 
 // handleDockerPull: POST {"server_id": "...", "image": "..."} 拉取镜像。
+// 任务在服务端异步执行，输出实时写入任务日志（GET /docker/images/pull/job 轮询展示进度），
+// 结束后无论成功失败均写入站内通知（启用邮件通知时会同步发邮件）。
 func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
@@ -501,13 +507,51 @@ func (h *SoftwareHandler) handleDockerPull(w http.ResponseWriter, r *http.Reques
 		Fail(w, http.StatusNotFound, 404, "目标服务器不存在")
 		return
 	}
+	job := pullJobs.start(req.ServerID, req.Image, "docker pull "+req.Image)
 	// 异步拉取：理由同 handleInstall。
 	go func() {
-		if err := h.remoteCollector.PullImage(context.Background(), toRemoteServer(srv), req.Image); err != nil {
+		err := h.remoteCollector.PullImageStream(context.Background(), toRemoteServer(srv), req.Image, job.append)
+		job.finish(err)
+		// 成败都通知：失败为 error 级，成功为 info 级
+		node := srv.Name
+		if node == "" {
+			node = srv.Host
+		}
+		if err != nil {
 			h.log.Errorw("docker pull failed", "image", req.Image, "error", err)
+			if nerr := h.notifications.Add(context.Background(), "error", "docker",
+				fmt.Sprintf("镜像拉取失败：%s（节点 %s）", req.Image, node), err.Error()); nerr != nil {
+				h.log.Errorw("add notification", "image", req.Image, "error", nerr)
+			}
+			return
+		}
+		if nerr := h.notifications.Add(context.Background(), "info", "docker",
+			fmt.Sprintf("镜像拉取成功：%s（节点 %s）", req.Image, node), "镜像已可用，可刷新镜像列表查看"); nerr != nil {
+			h.log.Errorw("add notification", "image", req.Image, "error", nerr)
 		}
 	}()
 	OK(w, map[string]string{"status": "pulling", "image": req.Image})
+}
+
+// handleDockerPullJob: GET ?server=&image= 查询镜像拉取任务的状态与实时输出。
+func (h *SoftwareHandler) handleDockerPullJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		Fail(w, http.StatusMethodNotAllowed, 405, "请求方法不支持")
+		return
+	}
+	serverID := r.URL.Query().Get("server")
+	image := r.URL.Query().Get("image")
+	if serverID == "" || image == "" {
+		Fail(w, http.StatusBadRequest, 400, "缺少必填参数：server、image")
+		return
+	}
+	job, err := pullJobs.get(serverID, image)
+	if err != nil {
+		// 任务不存在（服务重启或从未发起）：返回 none，前端据此提示
+		OK(w, map[string]any{"action": "pull", "status": "none", "log": "", "error": ""})
+		return
+	}
+	OK(w, job.snapshot())
 }
 
 // handleDockerRun: POST {"server_id": "...", "image": "...", ...} 基于已有镜像一键启动容器。

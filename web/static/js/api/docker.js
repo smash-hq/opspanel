@@ -28,6 +28,13 @@ export async function pullDockerImage(serverId, image) {
     return json.data;
 }
 
+/** 查询镜像拉取任务进度（状态 + 实时输出日志）。 */
+export async function fetchDockerPullJob(serverId, image) {
+    const params = new URLSearchParams({ server: serverId, image });
+    const json = await request(`/docker/images/pull/job?${params}`);
+    return json.data;
+}
+
 /** 删除镜像（危险操作，需用户确认后携带 confirm 标记）。 */
 export async function removeDockerImage(serverId, id) {
     await request(`/docker/images/${encodeURIComponent(id)}?server=${encodeURIComponent(serverId)}&confirm=true`, { method: 'DELETE' });

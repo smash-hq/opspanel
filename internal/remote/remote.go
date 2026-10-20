@@ -1196,8 +1196,11 @@ func (rc *RemoteCollector) ListContainers(ctx context.Context, srv *Server, all 
 	return containers, nil
 }
 
-// PullImage 拉取 Docker 镜像。
-func (rc *RemoteCollector) PullImage(ctx context.Context, srv *Server, image string) error {
+// PullImageStream 拉取 Docker 镜像，输出通过 sink 增量回调。
+// 默认以 sudo -n 执行（多数节点运行用户无 docker 组权限）；仅当 sudo 本身不可用
+// （未配置免密、无 sudo 权限等）时才回退直接执行，sudo 下 docker 已真实执行的
+// 失败（网络不通、镜像不存在等）不再回退。供前端实时展示各层下载进度。
+func (rc *RemoteCollector) PullImageStream(ctx context.Context, srv *Server, image string, sink func(chunk string)) error {
 	// 拉取镜像是长操作，套 30 分钟超时
 	ctx, cancel := context.WithTimeout(ctx, LongOpTimeout)
 	defer cancel()
@@ -1209,12 +1212,53 @@ func (rc *RemoteCollector) PullImage(ctx context.Context, srv *Server, image str
 	defer rc.Release(srv.ID)
 
 	cmd := fmt.Sprintf("docker pull %q 2>&1", image)
-	out, err := rc.RunWithSudoErr(ctx, conn, cmd)
-	if err != nil {
-		return fmt.Errorf("拉取镜像 %s 失败: %w", image, err)
+	rc.log.Infow("docker pull", "image", image)
+
+	// docker pull 用 \r 原地刷新分层进度条，转为换行后进度变化才会在轮询日志中可见；
+	// 同时留存原始输出用于判断失败是否出在 sudo 本身
+	var rawOut strings.Builder
+	progress := func(chunk string) {
+		rawOut.WriteString(chunk)
+		sink(strings.ReplaceAll(chunk, "\r", "\n"))
 	}
-	rc.log.Infow("docker pull", "image", image, "output", appSnippet(out))
+
+	if err := conn.RunStream(ctx, sudoWrap(cmd), progress); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// docker 已在 sudo 下执行但失败：错误是业务原因，直接返回
+		if !looksLikeSudoFailure(rawOut.String()) {
+			return fmt.Errorf("拉取镜像 %s 失败: %w", image, err)
+		}
+		// sudo 不可用（免密未配置等）且运行用户可能在 docker 组内：回退直接执行
+		rc.log.Debugw("docker pull sudo unavailable, fallback to direct", "image", image, "error", err.Error())
+		sink("\n==> sudo 不可用（未配置免密？），尝试直接拉取...\n")
+		rawOut.Reset()
+		if err := conn.RunStream(ctx, cmd, progress); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("拉取镜像 %s 失败: %w", image, err)
+		}
+	}
 	return nil
+}
+
+// looksLikeSudoFailure 判断输出是否表明 sudo 本身不可用（免密未配置、无 sudo 权限、
+// sudo 不存在等），与「sudo 下命令已执行但失败」区分开。
+func looksLikeSudoFailure(out string) bool {
+	for _, marker := range []string{
+		"a password is required",  // sudo: a password is required
+		"no tty present",          // sudo: no tty present and no askpass program specified
+		"not in the sudoers file", // ... is not in the sudoers file.
+		"incorrect password",      // sudo: N incorrect password attempts
+		"sudo: command not found", // sudo 二进制不存在
+	} {
+		if strings.Contains(out, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveImage 删除 Docker 镜像。

@@ -19,6 +19,31 @@ export const DockerTermModal = {
 `,
 };
 
+export const DockerPullLogModal = {
+    name: 'DockerPullLogModal',
+    setup: () => appCtx(),
+    template: `
+    <div class="modal-overlay" @click.self="dockerPullLogVisible = false">
+        <div class="modal log-modal">
+            <div class="modal-header">
+                <div><span class="eyebrow">DOCKER PULL</span><h3>{{ dockerPullImageName }} · {{ t('拉取进度') }}</h3></div>
+                <button class="icon-button" @click="dockerPullLogVisible = false" :title="t('关闭')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-toolbar">
+                    <span class="log-status" :class="dockerPullStatus">{{ dockerPullStatusText || t('等待任务开始...') }}</span>
+                    <span class="log-hint" v-if="dockerPullStatus === 'pulling'">{{ t('日志每 1.5 秒自动刷新，可直接关闭弹窗，任务在后台继续') }}</span>
+                    <button class="toolbar-button small" @click="refreshPullLog()">{{ t('↻ 立即刷新') }}</button>
+                </div>
+                <div class="log-viewer" ref="dockerPullLogViewer">
+                    <pre>{{ dockerPullLog || t('等待任务开始...') }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+`,
+};
+
 export const DockerLogsModal = {
     name: 'DockerLogsModal',
     setup: () => appCtx(),
