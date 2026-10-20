@@ -20,33 +20,45 @@ cd opspanel && make run
 
 ## 界面一览
 
-**系统信息 · 实时监控** —— CPU / 内存 / 磁盘 / 网络一目了然
+**登录页** —— 中英双语界面，登录页与顶栏均可切换语言
 
-![系统信息](docs/images/system-info.png)
+![登录页](docs/images/zh/login.png)
+
+**系统信息 · 实时监控** —— CPU / 内存 / 磁盘 / 运行时间一目了然
+
+![系统信息](docs/images/zh/system-info.png)
+
+**systemd 服务** —— 全量服务检索、启停重启、编辑 unit 文件、查看日志
+
+![systemd 服务](docs/images/zh/services.png)
 
 **语言环境** —— 自动检测已装语言，一键安装卸载
 
-![语言环境](docs/images/language.png)
+![语言环境](docs/images/zh/language.png)
+
+**软件包管理** —— 软件商店一键安装卸载，支持服务启停
+
+![软件包管理](docs/images/zh/config-software.png)
 
 **Docker** —— 镜像与容器管理、容器终端
 
-![Docker](docs/images/docker-container.png)
+![Docker](docs/images/zh/docker-container.png)
 
-**Web 终端** —— 浏览器直连服务器 Shell
+**应用部署** —— 上传 jar / 二进制 / 脚本，远程启停重启、二次部署，日志查看
 
-![Web 终端](docs/images/terminal.png)
+![应用部署](docs/images/zh/apps.png)
 
-**GPU / NPU** —— 显卡信息与利用率监控
+**Web 终端** —— 浏览器直连服务器 Shell，内置常用命令面板（含 GPU / NPU 分组）
 
-![GPU](docs/images/gpu.png)
+![Web 终端](docs/images/zh/terminal.png)
 
-**软件包管理** —— 软件商店一键安装卸载
+**GPU / NPU** —— 昇腾 / 寒武纪设备信息，经 SSH 按需拉取
 
-![软件包管理](docs/images/config-software.png)
+![GPU](docs/images/zh/gpu.png)
 
 **软件源管理** —— apt / yum / apk 源可视化管理
 
-![软件源管理](docs/images/config-repo.png)
+![软件源管理](docs/images/zh/config-repo.png)
 
 ## 能做什么
 
@@ -54,15 +66,18 @@ cd opspanel && make run
 |------|------|
 | 🖥️ 实时监控 | CPU / 内存 / 磁盘 / 网络，WebSocket 3 秒推送 |
 | 📦 软件商店 | MySQL / Redis / Nginx 等一键安装卸载、服务启停、自定义包与源 |
-| 🌐 语言环境 | Go / Java / Python 等 8 种语言自动检测、多版本管理 |
-| 🐳 Docker | 镜像 / 容器管理、容器终端与日志、批量操作 |
+| 🌐 语言环境 | Go / Java / Python 等 8 种语言自动检测、多版本管理，安装卸载实时日志 |
+| 🐳 Docker | 镜像 / 容器管理、容器终端与日志、批量操作、镜像源切换 |
+| 🧭 systemd 服务 | 全量服务检索、启停重启、编辑 unit 文件、查看日志、开机自启状态一览 |
 | 📁 文件管理 | 目录浏览、文本预览、下载 |
 | ⚙️ 进程管理 | 进程列表、终止进程、日志查看 |
 | 🚀 应用部署 | 分片上传部署、远程启停重启、日志查看 |
 | ⏰ 定时任务 | crontab 可视化、表达式校验与执行预览 |
 | 🔔 通知中心 | 站内通知 + SMTP 邮件、应用异常自动告警 |
 | 🎮 GPU/NPU | 昇腾 / 寒武纪设备信息（功耗 / 温度 / 利用率 / 显存） |
-| ⌨️ Web 终端 | 浏览器交互式 SSH 终端 |
+| ⌨️ Web 终端 | 浏览器交互式 SSH 终端，内置可搜索的常用命令面板（含 GPU / NPU 分组） |
+| 🌍 双语界面 | 中文 / English 界面，登录页与顶栏均可切换 |
+| 🛡️ 安全操作 | 删除 / 卸载 / 服务控制等危险操作二次确认，后端强制校验 |
 | 🔐 登录认证 | 单管理员、bcrypt、Cookie 会话 |
 
 适合个人开发机、小团队内网服务器的轻量运维，Linux arm64 开箱即用（鲲鹏 / 飞腾等国产平台）。

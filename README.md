@@ -20,33 +20,45 @@ cd opspanel && make run
 
 ## Screenshots
 
-**System dashboard** — CPU / memory / disk / network at a glance
+**Login** — bilingual UI, switchable on the login page and in the top bar
 
-![System](docs/images/system-info.png)
+![Login](docs/images/en/login.png)
+
+**System dashboard** — CPU / memory / disk / uptime at a glance
+
+![System](docs/images/en/system-info.png)
+
+**systemd services** — search all units, start / stop / restart, edit unit files, view logs
+
+![Services](docs/images/en/services.png)
 
 **Language environments** — auto-detection with one-click install / uninstall
 
-![Languages](docs/images/language.png)
+![Languages](docs/images/en/language.png)
+
+**Software packages** — one-click install / uninstall from the store, with service control
+
+![Packages](docs/images/en/config-software.png)
 
 **Docker** — image and container management, container terminal
 
-![Docker](docs/images/docker-container.png)
+![Docker](docs/images/en/docker-container.png)
 
-**Web terminal** — server shell right in the browser
+**App deployment** — upload jars / binaries / scripts, remote start / stop / restart, live logs
 
-![Terminal](docs/images/terminal.png)
+![Apps](docs/images/en/apps.png)
 
-**GPU / NPU** — GPU info and utilization monitoring
+**Web terminal** — interactive SSH shell with a built-in common-commands palette (incl. GPU / NPU groups)
 
-![GPU](docs/images/gpu.png)
+![Terminal](docs/images/en/terminal.png)
 
-**Software packages** — one-click install / uninstall from the store
+**GPU / NPU** — Ascend / Cambricon device info, pulled on demand via SSH
 
-![Packages](docs/images/config-software.png)
+![GPU](docs/images/en/gpu.png)
 
 **Software repositories** — visual management for apt / yum / apk sources
 
-![Repositories](docs/images/config-repo.png)
+![Repositories](docs/images/en/config-repo.png)
 
 ## What it does
 
@@ -54,15 +66,18 @@ cd opspanel && make run
 |--------|--------------|
 | 🖥️ Real-time monitoring | CPU / memory / disk / network, WebSocket push every 3s |
 | 📦 Software store | One-click install/uninstall (MySQL / Redis / Nginx etc.), service control, custom packages and sources |
-| 🌐 Language environments | Auto-detection and multi-version management for 8 languages (Go / Java / Python etc.) |
-| 🐳 Docker | Image / container management, container terminal and logs, batch operations |
+| 🌐 Language environments | Auto-detection and multi-version management for 8 languages (Go / Java / Python etc.), live install / uninstall logs |
+| 🐳 Docker | Image / container management, container terminal and logs, batch operations, registry mirror switching |
+| 🧭 systemd services | Search all units, start / stop / restart, edit unit files, view logs, boot state at a glance |
 | 📁 File management | Directory browsing, text preview, download |
 | ⚙️ Process management | Process list, kill, logs |
 | 🚀 App deployment | Chunked-upload deploy, remote start/stop/restart, log viewer |
 | ⏰ Scheduled tasks | Visual crontab, expression validation with next-run preview |
 | 🔔 Notification center | In-app + SMTP email, automatic app-failure alerts |
 | 🎮 GPU/NPU | Ascend / Cambricon device info (power / temp / utilization / memory) |
-| ⌨️ Web terminal | Interactive SSH terminal in the browser |
+| ⌨️ Web terminal | Interactive SSH terminal with a searchable common-commands palette (incl. GPU / NPU groups) |
+| 🌍 Bilingual UI | 中文 / English interface, switchable on the login page and in the top bar |
+| 🛡️ Safe operations | Destructive actions (delete / uninstall / service control) require a second confirmation, enforced server-side |
 | 🔐 Login auth | Single admin, bcrypt, cookie sessions |
 
 Ideal for lightweight ops on personal dev machines and small-team intranet servers; Linux arm64 works out of the box (Kunpeng, Phytium, and other domestic platforms).
