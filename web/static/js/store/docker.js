@@ -16,7 +16,7 @@ import {
     batchDeleteDockerImages, batchDockerContainerAction,
 } from '../api/docker.js';
 
-const { ref, reactive } = window.Vue;
+const { ref, reactive, computed } = window.Vue;
 
 export function setupDocker(ctx) {
     // ─── Docker 管理 ───
@@ -104,10 +104,23 @@ export function setupDocker(ctx) {
         }
     }
 
-    async function dockerPullImage(image) {
+    // Docker 镜像 reference 格式：[host[:port]/]repo[/repo...][:tag][@digest]
+    const imageRefPattern = /^(?:(?:localhost|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+)(?::\d{1,5})?\/)?[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*(?::[\w][\w.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:[0-9a-fA-F]{32,})?$/;
+
+    async function dockerPullImage() {
         if (!ctx.selectedServer.value) return;
+        const image = dockerPullInput.value.trim();
+        if (!image) {
+            ctx.toastNotify(t('请输入镜像名'), true);
+            return;
+        }
+        if (!imageRefPattern.test(image)) {
+            ctx.toastNotify(t('镜像名格式不正确，如：nginx:latest'), true);
+            return;
+        }
         try {
             await pullDockerImage(ctx.selectedServer.value, image);
+            dockerPullInput.value = '';
             ctx.toastNotify(t('正在拉取镜像: ') + image);
             setTimeout(() => loadDockerImages(), 5000);
         } catch (err) {
@@ -311,6 +324,20 @@ export function setupDocker(ctx) {
         else selectedContainers.value.push(id);
     }
 
+    const allImagesSelected = computed(() =>
+        dockerImages.value.length > 0 && selectedImages.value.length === dockerImages.value.length);
+
+    function toggleAllImages() {
+        selectedImages.value = allImagesSelected.value ? [] : dockerImages.value.map(img => img.id);
+    }
+
+    const allContainersSelected = computed(() =>
+        dockerContainers.value.length > 0 && selectedContainers.value.length === dockerContainers.value.length);
+
+    function toggleAllContainers() {
+        selectedContainers.value = allContainersSelected.value ? [] : dockerContainers.value.map(c => c.id);
+    }
+
     async function batchDeleteImages() {
         if (!selectedImages.value.length) { ctx.toastNotify(t('请选择要删除的镜像'), true); return; }
         if (!await ctx.confirmDialog(t('确定删除选中的 {p1} 个镜像吗？', { p1: selectedImages.value.length }), { title: t('批量删除镜像'), confirmText: t('删除') })) return;
@@ -360,5 +387,6 @@ export function setupDocker(ctx) {
         dockerPullImage, dockerRemoveImage, dockerContainerAction,
         dockerRemoveContainer, dockerViewLogs,
         toggleImageSelection, toggleContainerSelection, batchDeleteImages, batchContainerAction,
+        allImagesSelected, toggleAllImages, allContainersSelected, toggleAllContainers,
     });
 }

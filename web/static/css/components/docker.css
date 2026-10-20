@@ -127,6 +127,42 @@
        这样各行（独立 grid）的列分割点始终一致 */
     overflow-x: auto;
     overflow-y: hidden;
+    /* 内滚容器滚动条细化，与 .content 一致 */
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
+}
+
+.docker-image-list::-webkit-scrollbar,
+.docker-container-list::-webkit-scrollbar { width: 6px; height: 6px; }
+
+.docker-image-list::-webkit-scrollbar-thumb,
+.docker-container-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+/* 列表表头：与数据行共用同一 grid 模板，逐列对齐 */
+.docker-list-header {
+    display: grid;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: var(--content-bg, #f8fafc);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    min-width: fit-content;
+}
+
+.docker-list-header.image {
+    grid-template-columns: 24px minmax(160px, 2fr) 110px 80px 150px;
+}
+
+.docker-list-header.container {
+    grid-template-columns: 24px minmax(140px, 2fr) minmax(200px, 1fr) 90px 80px 70px 400px;
+}
+
+/* 表头中复用的行内对齐类去掉装饰性 padding */
+.docker-list-header .docker-ctr-status {
+    padding: 0;
+    border-radius: 0;
 }
 
 .docker-image-row,
@@ -186,18 +222,21 @@
     gap: 8px;
 }
 
-/* 镜像行内中文操作按钮（部署 / 删除） */
+/* 镜像行内中文操作按钮（部署 / 删除）：ghost 风格，与容器行 .ctr-btn 同语言，
+   避免长列表中大量实心蓝按钮造成的视觉噪音 */
 .docker-row-btn {
-    padding: 4px 12px;
+    height: 24px;
+    padding: 0 10px;
     border-radius: 6px;
-    border: 1px solid var(--card-border, #cbd5e1);
-    background: var(--card-bg, #fff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    background: transparent;
     color: var(--text-secondary, #475569);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s;
+    line-height: 1;
 }
 
 .docker-row-btn:hover {
@@ -207,15 +246,7 @@
 }
 
 .docker-row-btn.primary {
-    border-color: var(--color-blue, #3b82f6);
-    background: var(--color-blue, #3b82f6);
-    color: #fff;
-}
-
-.docker-row-btn.primary:hover {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #fff;
+    color: var(--color-blue, #3b82f6);
 }
 
 .docker-row-btn.danger:hover {

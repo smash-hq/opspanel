@@ -26,8 +26,8 @@ export const TabDocker = {
                     <!-- 镜像管理 -->
                     <div v-if="dockerSubTab === 'images'" class="docker-sub-pane">
                         <div class="docker-toolbar">
-                            <input v-model="dockerPullInput" :placeholder="t('输入镜像名，如：nginx:latest')" @keyup.enter="dockerPullImage(dockerPullInput); dockerPullInput = ''">
-                            <button class="primary-button small" @click="dockerPullImage(dockerPullInput); dockerPullInput = ''">{{ t('⬇ 拉取') }}</button>
+                            <input v-model="dockerPullInput" :placeholder="t('输入镜像名，如：nginx:latest')" @keyup.enter="dockerPullImage()">
+                            <button class="primary-button small" @click="dockerPullImage()">{{ t('⬇ 拉取') }}</button>
                             <button class="toolbar-button" @click="loadDockerImages()" :disabled="dockerLoading">{{ t('↻ 刷新') }}</button>
                         </div>
                         <!-- 批量操作栏 -->
@@ -41,6 +41,13 @@ export const TabDocker = {
                             <span class="empty-icon">⌁</span><strong>{{ t('暂无镜像') }}</strong>
                         </div>
                         <div v-else class="docker-image-list">
+                            <div class="docker-list-header image">
+                                <input type="checkbox" class="batch-check" :checked="allImagesSelected" @change="toggleAllImages()" :title="t('全选')">
+                                <span>{{ t('名称') }}</span>
+                                <span>{{ t('ID') }}</span>
+                                <span class="docker-img-size">{{ t('大小') }}</span>
+                                <span class="docker-img-actions">{{ t('操作') }}</span>
+                            </div>
                             <div v-for="img in dockerImages" :key="img.id" class="docker-image-row" :class="{ selected: selectedImages.includes(img.id) }">
                                 <input type="checkbox" class="batch-check" :checked="selectedImages.includes(img.id)" @change="toggleImageSelection(img.id)">
                                 <span class="docker-img-repo">{{ img.repository }}:{{ img.tag }}</span>
@@ -75,6 +82,15 @@ export const TabDocker = {
                             <span class="empty-icon">⌁</span><strong>{{ t('暂无容器') }}</strong>
                         </div>
                         <div v-else class="docker-container-list">
+                            <div class="docker-list-header container">
+                                <input type="checkbox" class="batch-check" :checked="allContainersSelected" @change="toggleAllContainers()" :title="t('全选')">
+                                <span>{{ t('名称') }}</span>
+                                <span>{{ t('镜像') }}</span>
+                                <span class="docker-ctr-status">{{ t('状态') }}</span>
+                                <span class="docker-ctr-time">{{ t('运行时长') }}</span>
+                                <span class="docker-ctr-ports">{{ t('端口') }}</span>
+                                <span class="docker-ctr-actions">{{ t('操作') }}</span>
+                            </div>
                             <div v-for="c in dockerContainers" :key="c.id" class="docker-container-row" :class="{ selected: selectedContainers.includes(c.id) }">
                                 <input type="checkbox" class="batch-check" :checked="selectedContainers.includes(c.id)" @change="toggleContainerSelection(c.id)">
                                 <span class="docker-ctr-name">{{ c.names || c.id.substring(0, 12) }}</span>
@@ -104,7 +120,7 @@ export const TabDocker = {
                         </div>
                     </div>
                     <!-- 镜像源管理 -->
-                    <div v-if="dockerSubTab === 'mirror'" class="docker-sub-pane">
+                    <div v-if="dockerSubTab === 'mirror'" class="docker-sub-pane docker-sub-pane-scroll">
                         <!-- 服务器当前镜像源 -->
                         <div class="mirror-server-panel" v-if="selectedServer !== 'srv_local'">
                             <div class="mirror-section-header">

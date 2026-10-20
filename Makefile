@@ -91,31 +91,49 @@ start: build
 	@-$(MAKE) --no-print-directory stop
 	@nohup ./$(BINARY_NAME) > /tmp/$(BINARY_NAME).log 2>&1 & \
 	echo $$! > $(PID_FILE)
-	@echo "==> Service started: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE)))"
+	@sleep 1; \
+	if kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
+		echo "==> Service started: http://localhost:$(PORT) (PID: $$(cat $(PID_FILE)))"; \
+	else \
+		echo "==> Service failed to start, check /tmp/$(BINARY_NAME).log:"; \
+		tail -20 /tmp/$(BINARY_NAME).log; \
+		rm -f $(PID_FILE); \
+		exit 1; \
+	fi
 
-## stop: Graceful stop by PID file, wait for exit, kill -9 on timeout | 优雅停止服务（按 PID 文件停止，等待退出，超时 kill -9 兜底）
+## stop: Graceful stop (PID file + port fallback), wait for exit, kill -9 on timeout | 优雅停止服务（按 PID 文件 + 端口兜底查找，等待退出，超时 kill -9 兜底）
 stop:
-	@if [ ! -f $(PID_FILE) ]; then \
-		echo "==> PID file not found ($(PID_FILE)), service not running"; \
+	@PIDS=""; \
+	if [ -f $(PID_FILE) ]; then \
+		PIDS=$$(cat $(PID_FILE) 2>/dev/null); \
+		rm -f $(PID_FILE); \
+	fi; \
+	for p in $$(lsof -ti:$(PORT) 2>/dev/null); do \
+		PIDS="$$PIDS $$p"; \
+	done; \
+	TARGETS=""; \
+	for p in $$PIDS; do \
+		case " $$TARGETS " in *" $$p "*) continue;; esac; \
+		if ps -p $$p -o command= 2>/dev/null | grep -qE "$(BINARY_NAME)|/go-build/"; then \
+			TARGETS="$$TARGETS $$p"; \
+		fi; \
+	done; \
+	if [ -z "$$TARGETS" ]; then \
+		echo "==> Service not running"; \
 		exit 0; \
 	fi; \
-	PID=$$(cat $(PID_FILE) 2>/dev/null); rm -f $(PID_FILE); \
-	if [ -z "$$PID" ] || ! kill -0 $$PID 2>/dev/null; then \
-		echo "==> Process not found or already exited (PID file cleaned)"; \
-		exit 0; \
-	fi; \
-	if ! ps -p $$PID -o comm= 2>/dev/null | grep -q "$(BINARY_NAME)"; then \
-		echo "==> PID $$PID occupied by another process, skip stopping (PID file cleaned)"; \
-		exit 0; \
-	fi; \
-	echo "==> Gracefully stopping service (PID: $$PID)..."; \
-	kill $$PID 2>/dev/null; \
+	echo "==> Gracefully stopping service ($${TARGETS# })..."; \
+	kill $${TARGETS# } 2>/dev/null; \
 	for i in $$(seq 1 50); do \
-		kill -0 $$PID 2>/dev/null || { echo "==> Stopped"; exit 0; }; \
+		ALIVE=0; \
+		for p in $$TARGETS; do \
+			kill -0 $$p 2>/dev/null && ALIVE=1; \
+		done; \
+		[ $$ALIVE -eq 0 ] && { echo "==> Stopped"; exit 0; }; \
 		sleep 0.2; \
 	done; \
 	echo "==> Graceful shutdown timeout (10s), force killing..."; \
-	kill -9 $$PID 2>/dev/null; \
+	kill -9 $${TARGETS# } 2>/dev/null; \
 	echo "==> Force stopped"
 
 ## status: Show service status | 查看服务运行状态

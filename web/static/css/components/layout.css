@@ -130,6 +130,12 @@
     overflow-y: auto;
 }
 
+/* 镜像源管理：多卡片堆叠，子页整体滚动，避免底部面板被裁剪 */
+.tab-scroll .docker-sub-pane.docker-sub-pane-scroll {
+    display: block;
+    overflow-y: auto;
+}
+
 /* ─── 空状态 ─── */
 .empty-state-view {
     display: flex;
