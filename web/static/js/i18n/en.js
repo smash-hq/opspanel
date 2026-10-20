@@ -790,7 +790,6 @@ export const en = {
     '支持查看 systemd 服务日志和 Docker 容器日志。': 'View systemd service logs and Docker container logs.',
     '日志每 1.5 秒自动刷新，可直接关闭弹窗，任务在后台继续': 'Logs refresh every 1.5s; you can close the dialog — the task continues in the background',
     '等待任务开始...': 'Waiting for task to start...',
-    '等待执行...': 'Pending...',
     '开机自启': 'Start at Boot',
     '设置开机自启': 'Enable Start at Boot',
     '取消开机自启': 'Disable Start at Boot',
@@ -813,7 +812,6 @@ export const en = {
     '进程 {pid} 已终止': 'Process {pid} killed',
     '确定要终止进程 PID: {pid} 吗？{p1}': 'Kill process PID: {pid}? {p1}',
     '跟踪进程系统调用': 'Trace Process Syscalls (strace)',
-    '{p1} · 执行命令': '{p1} · Run Command',
 
     // ─── GPU / NPU ───
     'GPU / NPU 设备': 'GPU / NPU Devices',
@@ -885,7 +883,6 @@ export const en = {
     '控制台': 'Console',
     '常用命令': 'Common Commands',
     '搜索命令或说明...': 'Search commands or description...',
-    '输入命令...': 'Type a command...',
     '终端未连接': 'Terminal not connected',
     '本地节点暂不支持终端': 'Terminal is not supported on the local node',
     '本地节点暂不支持终端接入': 'Terminal access is not supported on the local node',

@@ -11,7 +11,7 @@ import {
     checkDocker, fetchDockerImages, pullDockerImage, removeDockerImage,
     runDockerContainer,
     fetchDockerContainers, dockerContainerAction as apiDockerContainerAction,
-    removeDockerContainer, dockerExec, fetchDockerLogs,
+    removeDockerContainer, fetchDockerLogs,
     fetchDockerContainerFiles, fetchDockerFilePreview, downloadDockerFile,
     batchDeleteDockerImages, batchDockerContainerAction,
 } from '../api/docker.js';
@@ -26,8 +26,6 @@ export function setupDocker(ctx) {
     const dockerImages = ref([]);
     const dockerContainers = ref([]);
     const dockerLoading = ref(false);
-    const dockerExecVisible = ref(false);
-    const dockerExecData = reactive({ containerId: '', command: '', output: '' });
     const dockerLogsVisible = ref(false);
     const dockerLogsData = reactive({ containerId: '', logs: '' });
     const dockerSubTab = ref('images');
@@ -198,20 +196,6 @@ export function setupDocker(ctx) {
         }
     }
 
-    async function dockerExecCommand(containerId, command) {
-        if (!ctx.selectedServer.value) return;
-        dockerExecVisible.value = true;
-        dockerExecData.containerId = containerId;
-        dockerExecData.command = command;
-        dockerExecData.output = t('执行中...');
-        try {
-            const data = await dockerExec(ctx.selectedServer.value, containerId, command);
-            dockerExecData.output = data.output || t('无输出');
-        } catch (err) {
-            dockerExecData.output = t('执行失败: ') + err.message;
-        }
-    }
-
     async function dockerViewLogs(containerId) {
         if (!ctx.selectedServer.value) return;
         dockerLogsVisible.value = true;
@@ -363,7 +347,7 @@ export function setupDocker(ctx) {
     Object.assign(ctx, {
         dockerAvailable, dockerVersion, dockerTabEnabled,
         dockerImages, dockerContainers, dockerLoading,
-        dockerExecVisible, dockerExecData, dockerLogsVisible, dockerLogsData,
+        dockerLogsVisible, dockerLogsData,
         dockerSubTab, dockerPullInput, dockerShowAll, selectedMirror, mirrorSelectMode,
         selectedImages, selectedContainers, batchActionLoading,
         dockerRunVisible, dockerRunLoading, dockerRunData,
@@ -374,7 +358,7 @@ export function setupDocker(ctx) {
         openRunForm, dockerRunContainer,
         checkDockerEnv, onDockerTabClick, loadDockerImages, loadDockerContainers,
         dockerPullImage, dockerRemoveImage, dockerContainerAction,
-        dockerRemoveContainer, dockerExecCommand, dockerViewLogs,
+        dockerRemoveContainer, dockerViewLogs,
         toggleImageSelection, toggleContainerSelection, batchDeleteImages, batchContainerAction,
     });
 }

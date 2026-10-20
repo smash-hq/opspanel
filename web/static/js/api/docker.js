@@ -62,16 +62,6 @@ export async function removeDockerContainer(serverId, id) {
     await request(`/docker/containers/${encodeURIComponent(id)}?server=${encodeURIComponent(serverId)}&confirm=true`, { method: 'DELETE' });
 }
 
-/** 在容器内执行命令。 */
-export async function dockerExec(serverId, containerId, command) {
-    const json = await request('/docker/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, container_id: containerId, command }),
-    });
-    return json.data;
-}
-
 /** 获取容器日志。 */
 export async function fetchDockerLogs(serverId, id, lines) {
     const params = new URLSearchParams({ server: serverId, id, lines: lines || 100 });

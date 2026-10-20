@@ -1,28 +1,5 @@
 import { appCtx } from '../../store/index.js';
 
-export const DockerExecModal = {
-    name: 'DockerExecModal',
-    setup: () => appCtx(),
-    template: `
-    <div class="modal-overlay" @click.self="dockerExecVisible = false">
-        <div class="modal file-preview-modal">
-            <div class="modal-header">
-                <div><span class="eyebrow">DOCKER EXEC</span><h3>{{ t('{p1} · 执行命令', { p1: dockerExecData.containerId.substring(0, 12) }) }}</h3></div>
-                <button class="icon-button" @click="dockerExecVisible = false" :title="t('关闭')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-grid">
-                    <label class="field full"><span>{{ t('命令') }}</span><input v-model="dockerExecData.command" :placeholder="t('输入命令...')" @keyup.enter="dockerExecCommand(dockerExecData.containerId, dockerExecData.command)"></label>
-                </div>
-                <div class="log-viewer" style="margin-top: 12px;">
-                    <pre>{{ dockerExecData.output || t('等待执行...') }}</pre>
-                </div>
-            </div>
-        </div>
-    </div>
-`,
-};
-
 export const DockerTermModal = {
     name: 'DockerTermModal',
     setup: () => appCtx(),

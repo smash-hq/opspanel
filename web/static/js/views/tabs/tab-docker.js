@@ -87,7 +87,6 @@ export const TabDocker = {
                                         <button class="ctr-btn" @click="openContainerTerminal(c.id)" :title="t('进入容器 (docker exec -it)')">{{ t('进入容器') }}</button>
                                         <button class="ctr-btn" @click="dockerContainerAction(c.id, 'stop')" :title="t('停止')">{{ t('停止') }}</button>
                                         <button class="ctr-btn" @click="dockerContainerAction(c.id, 'restart')" :title="t('重启')">{{ t('重启') }}</button>
-                                        <button class="ctr-btn" @click="dockerExecCommand(c.id, 'sh')" :title="t('执行命令')">{{ t('命令') }}</button>
                                         <button class="ctr-btn" @click="openDockerFiles(c.id)" :title="t('文件')">{{ t('文件') }}</button>
                                         <button class="ctr-btn" @click="dockerViewLogs(c.id)" :title="t('日志')">{{ t('日志') }}</button>
                                     </template>

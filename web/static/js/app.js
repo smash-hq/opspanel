@@ -58,7 +58,6 @@ const rootTemplate = `
     <lang-install-log-modal v-if="langInstallLogVisible"></lang-install-log-modal>
     <file-preview-modal v-if="filePreviewVisible"></file-preview-modal>
     <file-detail-modal v-if="fileDetailVisible"></file-detail-modal>
-    <docker-exec-modal v-if="dockerExecVisible"></docker-exec-modal>
     <docker-term-modal v-if="dockerTermVisible"></docker-term-modal>
     <docker-logs-modal v-if="dockerLogsVisible"></docker-logs-modal>
     <docker-files-modal v-if="dockerFilesVisible"></docker-files-modal>
