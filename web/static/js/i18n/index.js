@@ -19,10 +19,17 @@ const STORE_KEY = 'opspanel_lang';
 
 function initLocale() {
     const saved = localStorage.getItem(STORE_KEY);
-    return saved === 'en' || saved === 'zh' ? saved : 'zh';
+    // 默认英文：本机无显式选择时使用 en（登录后若后端设置有语言且本机未选择过，则跟随后端）
+    return saved === 'zh' || saved === 'en' ? saved : 'en';
 }
 
 export const locale = ref(initLocale());
+
+/** 用户是否在本机显式选择过语言（localStorage 有合法记录）。 */
+export function hasLocalePreference() {
+    const saved = localStorage.getItem(STORE_KEY);
+    return saved === 'zh' || saved === 'en';
+}
 
 document.documentElement.lang = locale.value === 'en' ? 'en' : 'zh-CN';
 

@@ -6,6 +6,12 @@ export const LoginView = {
     template: `
     <div class="auth-screen">
         <div class="auth-card">
+            <div class="auth-lang-row">
+                <select class="theme-select auth-lang" :value="lang" @change="setLang($event.target.value)" :title="t('切换语言')" aria-label="Language">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
             <div class="brand auth-brand">
                 <span class="brand-mark"><img :src="'/api/v1/settings/favicon?' + faviconTs" :alt="t('站点图标')"></span>
                 <div class="brand-copy">

@@ -59,6 +59,21 @@
     }
 }
 
+/* 登录卡片右上角语言切换：流式占位一行，任何卡片宽度下都不与品牌区重叠 */
+.auth-lang-row {
+    display: flex;
+    justify-content: flex-end;
+    margin: -22px -14px 10px;
+}
+
+.auth-lang {
+    height: 28px;
+    padding: 0 24px 0 10px;
+    font-size: 12px;
+    background-position: right 8px center;
+    border-radius: 7px;
+}
+
 .auth-brand {
     justify-content: center;
     margin-bottom: 22px;

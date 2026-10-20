@@ -4,7 +4,7 @@
  * 布局状态（侧栏/菜单/Tab）、系统设置、品牌信息、全局确认框、
  * 配置详情弹窗与 Toast 通知。
  */
-import { t, setLocale } from '../i18n/index.js';
+import { t, setLocale, hasLocalePreference } from '../i18n/index.js';
 
 
 import { showToast } from '../utils.js';
@@ -42,7 +42,9 @@ export function setupUi(ctx) {
                 settingsForm.defaultSSHPort = parseInt(json.data.default_ssh_port) || 22;
                 settingsForm.welcomeMessage = json.data.welcome_message || '';
                 hasCustomFavicon.value = json.data.has_custom_favicon === '1';
-                if (json.data.language) setLocale(json.data.language, { persist: false });
+                // 后端语言设置仅在本机未显式选择过语言时生效：
+                // 本机选择（含登录页切换）优先，避免登录后被后端旧值覆盖
+                if (json.data.language && !hasLocalePreference()) setLocale(json.data.language, { persist: false });
             }
         } catch (err) {
             // 使用默认值
@@ -191,8 +193,10 @@ export function setupUi(ctx) {
         { value: 'online', label: t('在线') },
     ]);
 
-    // 切换语言时刷新浏览器标签页标题
+    // 切换语言时刷新浏览器标签页标题；启动时先应用一次，
+    // 让登录页（尚未 loadSettings）的标签页标题也跟随当前语言
     window.addEventListener('opspanel:langchange', applyBrand);
+    applyBrand();
 
     Object.assign(ctx, {
         sidebarCollapsed, activeMenu, activeTab, configTab, showDoc, searchQuery, activeFilter, filters,

@@ -135,7 +135,7 @@
     /* fr 列必须 minmax(下限, …)：镜像名为 nowrap 文本，fr 列隐式 min-content 会把每行的
        列分割点撑得各不相同，导致镜像名一行一行错位（容器行各行是独立 grid）。
        下限保证窄屏时列不会被压没，而是整行溢出交给列表横向滚动。 */
-    grid-template-columns: 24px minmax(140px, 2fr) minmax(200px, 1fr) 90px 80px 70px minmax(330px, auto);
+    grid-template-columns: 24px minmax(140px, 2fr) minmax(200px, 1fr) 90px 80px 70px 400px;
     /* 低于列宽下限时行不再收缩、整体溢出，保证各行仍逐列对齐 */
     min-width: fit-content;
     align-items: center;
@@ -326,8 +326,9 @@
     gap: 3px;
     justify-content: flex-end;
     flex-wrap: nowrap;
-    /* 动作区列宽由 grid 的 minmax(330px, auto) 固定（按最宽的运行中按钮组），
-       右对齐下各状态行（运行中 7 个按钮 / 已停止 3 个按钮）的按钮区左右边缘都对齐 */
+    /* 动作区列宽在 grid 里固定为 400px（容纳最宽的运行中按钮组，如英文 Enter Container 等 7 个按钮）。
+       不能用 minmax(…, auto)：各行是独立 grid，auto 会按每行自己的按钮数解析宽度
+       （运行中 7 个按钮 / 已停止 3 个按钮），导致各行中间列错位；固定宽度下按钮右对齐，各状态/语言均逐列对齐 */
 }
 
 .ctr-btn {
